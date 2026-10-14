@@ -1,0 +1,107 @@
+# Admin, keamanan, multi-instance dan native — 15 Oktober 2026
+
+## Kesimpulan saat ini
+
+**Peningkatan admin dan hardening kode selesai untuk cakupan di bawah; verifikasi produksi eksternal, pentest menyeluruh, dan uji perangkat asli belum selesai.** Tidak ada akun, kredensial, migrasi live, transaksi, atau deployment publik yang dibuat oleh pemeriksaan ini. Preview pengembangan tetap port **3001**.
+
+### Hasil terakhir
+
+| Pemeriksaan                      | Hasil                                                                    | Batas bukti                                                                                                                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit/integrasi                   | **84/84 lulus**, 66 kelompok top-level                                   | Termasuk migration 001–008 di PGlite, otorisasi, kuota, rate limit, ekspor dan validasi admin. Bukan Supabase live.                                                                                                       |
+| Browser lengkap                  | **57/57 lulus**, 3,2 menit                                               | Kontrak auth/provider memakai fixture. Setelah pembaruan Expo, subset project-kinds/tema **8/8 lulus**, bukan 8 tes unik tambahan.                                                                                        |
+| Build PiwuApp                    | **Lulus**, Vite 39,96 detik                                              | Warning ukuran chunk Monaco tetap ada.                                                                                                                                                                                    |
+| HTTP mode produksi lokal         | **11/11 pemeriksaan lulus**                                              | Aplikasi dijalankan dengan `NODE_ENV=production`; layanan eksternal tidak dikonfigurasi. Respons 503 pada API privat membuktikan tidak ada data diberikan, bukan auth live sudah berfungsi.                               |
+| Chromium terhadap build produksi | **1/1 lulus**                                                            | Tanpa fixture auth/provider: landing, redirect admin ke login, editor tidak dimuat di landing, Monaco built, worker TypeScript, find, diff, undo, Lua. Editor dipasang di DOM uji, bukan login bypass/workspace produksi. |
+| Expo nyata                       | **Metro/Hermes export Android dan iOS lulus**, TypeScript lulus          | SDK 57, bundle `.hbc` sekitar 1,4 MB per platform. Ini bukan APK/IPA, signing, install atau menjalankan aplikasi pada perangkat asli.                                                                                     |
+| Roblox                           | Plugin dan scaffold lulus kompilasi Luau; kontrak bridge/scene lulus tes | Belum menjalankan Roblox Studio, Play Test, physics atau API plugin pada perangkat asli.                                                                                                                                  |
+| Audit dependency PiwuApp         | **0 kerentanan diketahui**                                               | Hanya dependency utama, bukan semua project hasil ekspor.                                                                                                                                                                 |
+| Audit dependency scaffold Expo   | **15 paket terdampak severity high**, 0 moderate/critical                | Dua advisory transitif masih terbuka. Jangan menyebut seluruh produk/scaffold bebas kerentanan.                                                                                                                           |
+
+## Admin yang ditambahkan/diperbaiki
+
+- **Pencarian di server**, bukan hanya filter 25 baris saat ini. Direktori akun mencari nama/email/UUID melalui RPC service-only, memeriksa peran admin dan suspension. Hanya kolom yang diperlukan dikembalikan—bukan credential/token atau seluruh metadata Auth.
+- Daftar project, transaksi, marketplace, broadcast, administrator dan audit mendapat pencarian teks/UUID, filter status yang relevan, rentang tanggal UTC, serta UUID pemilik/pelaku. Pencarian literal tidak menyisipkan operator PostgREST; filter invalid ditolak. Pagination memakai urutan waktu dan ID yang stabil, bukan jaminan snapshot konsisten jika data terus berubah.
+- **Ekspor halaman CSV**, maksimal baris yang sedang dimuat/diizinkan, dengan quoting dan perlindungan formula spreadsheet. Bukan dump semua data. File ekspor dapat mengandung data pribadi; simpan dan hapus sesuai kebijakan operator.
+- **Diagnostik admin** menampilkan readiness layanan, waktu probe, mode pembatas permintaan, marker skema koordinasi dan batas routing sandbox. Bisa diunduh sebagai JSON yang tidak memuat environment/key. Status konfigurasi tidak diterjemahkan menjadi sukses live.
+- Form filter tetap tersedia ketika permintaan gagal, sehingga query invalid bisa diperbaiki/reset. Tabel mobile yang dapat digulir kini dapat menerima fokus keyboard; pemeriksaan Axe lulus pada halaman yang diuji.
+- Cabang pratinjau admin lama di komponen dihapus. Gate autentikasi/peran tetap wajib. Role tidak dikenal tidak diberi tombol tulis. Pembacaan admin dibatasi, mutasi tetap reasoned/idempotent/audited sesuai migration 005.
+
+**Batas fitur:** ini masih panel platform, bukan CMS untuk seluruh copy/pricing dan bukan admin aplikasi hasil buatan pengguna. Refund/payout/KYC otomatis serta broadcast email/WhatsApp massal belum ditambahkan. Broadcast yang ada tetap in-app, dengan jadwal, segmen, revisi, dan read receipt.
+
+## Kontrol multi-instance
+
+Migration **007_runtime_coordination.sql** menambahkan:
+
+1. Rate bucket PostgreSQL dengan atomic upsert, window/reset, sisa kuota dan `Retry-After`. Scope memakai metode/pola route serta identitas terverifikasi/IP, bukan URL ID yang bisa diganti untuk melewati limit. IP mentah tidak disimpan di tabel; digest bukan anonimisasi yang kuat.
+2. Admission sandbox interaktif dengan lock transaksi bersama: maksimal **2 sesi per akun dan 50 sesi secara keseluruhan** pada database yang sama. Pending creation ikut dihitung. Ini **tidak mencakup** sandbox build/audit sekali pakai—tetapkan pula kuota akun E2B dan batas worker deployment.
+3. Ownership per proses, release hanya oleh pemilik, serta expiry. Server lain mendapat 409, bukan diam-diam membuat sesi kedua atau melaporkan stop berhasil. ID owner dibuat acak setiap restart.
+4. Mode produksi default/wajib `database`; konfigurasi `memory` pada produksi ditolak. Bila database/RPC/migration koordinasi gagal, operasi diblokir dengan 503, tidak jatuh kembali ke kuota lokal.
+5. Kontrol suspension, project lock dan maintenance pada produksi menolak skema admin yang hilang, bukan memakai default permisif.
+
+### Batas operasional yang tetap penting
+
+- Sandbox SDK handle tetap lokal: **load balancer perlu sticky routing ke proses pemilik**. Tidak ada transfer sesi transparan, reconnect lintas node atau HA penuh. Restart/crash dapat menahan slot hingga lease 20 menit kedaluwarsa; E2B memiliki hard timeout 10 menit dan request pembuatan berbatas 60 detik.
+- Pengujian memakai **dua server HTTP/konteks koordinasi dalam satu proses**, berbagi PostgreSQL embedded PGlite. Itu menguji kontrak dan state bersama, tetapi PGlite menserialkan query; belum stress test koneksi PostgreSQL independen atau chaos test beberapa mesin.
+- Antrean publish/kredit/pembayaran sudah memakai RPC transaksi. Penghapusan hosting oleh beberapa worker, provider side effects, lease recovery, failover database, split-brain dan kapasitas perlu diuji pada staging. Tidak mengklaim exactly-once atau fencing semua operasi provider.
+- Migration 007 tidak mengaktifkan provider dan **belum diterapkan ke database live**. Migration **008_admin_directory.sql** diperlukan untuk pencarian direktori akun.
+
+## Optimasi Monaco yang benar-benar diukur
+
+| Metrik                               |      Sebelum |              Sesudah |
+| ------------------------------------ | -----------: | -------------------: |
+| Chunk CodeEditor, minified           |  3.350,19 kB |          3.201,51 kB |
+| Chunk CodeEditor, gzip               |    862,64 kB |            822,64 kB |
+| Jumlah aset JavaScript seluruh build |          112 |                   38 |
+| Total JavaScript termasuk worker     | 14.332,39 kB | sekitar 13.766,36 kB |
+
+Core editor turun sekitar **4,4%**, bukan klaim penurunan puluhan persen pada editor utama. Bahasa dibatasi ke TS/JS, JSON, CSS, HTML, Markdown, Lua; kontribusi inline AI yang tidak digunakan dikeluarkan. Fitur standar editor/diff tetap dipertahankan. Worker TypeScript sekitar 6 MB tetap ada dan dimuat sesuai kebutuhan. Ini ukuran seluruh build, bukan transfer landing.
+
+Prebundling Vite juga diperbaiki agar pemuatan pertama editor tidak menyebabkan reload optimizer di tengah sesi. `npm run check:bundle` menegakkan anggaran ukuran terukur, bukan menyembunyikan warning dengan menaikkan limit.
+
+## Temuan Expo dan risiko dependency yang belum tertutup
+
+Pemeriksaan pertama SDK 54 menemukan command web tanpa dependency web dan **35 paket terdampak** (23 high/12 moderate). Scaffold baru sekarang eksplisit Android/iOS, tanpa command web yang rusak, dan memakai kombinasi resmi template Expo SDK 57: Expo `~57.0.29`, React `19.2.3`, React Native `0.86.3`, TypeScript `~6.0.3`.
+
+Upgrade mengurangi dependency terdampak; override `uuid` ke `11.1.1` menutup advisory buffer-bounds sambil mempertahankan CommonJS untuk `xcode`. Pembuatan UUID lewat API `xcode` dengan fixture project terinisialisasi, export dua platform, dan tsc diuji. Ini bukan uji Xcode/native signing.
+
+**Masih terbuka: 15 paket dalam dependency graph terkena propagasi dua advisory berikut:**
+
+- `braces` 3.0.3 — stack-exhaustion denial of service, [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+- `node-forge` 1.4.0 — verifikasi signature RSA PKCS#1 v1.5 menerima struktur DigestAlgorithm ekstra, [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv).
+
+Versi stabil terbaru yang diperiksa masih termasuk rentang terdampak. Tidak dilakukan `npm audit fix --force` yang menyarankan downgrade SDK tidak kompatibel, tidak menonaktifkan audit, dan tidak membuat patch kriptografi sendiri untuk mengklaim aman. Dependency ini berada pada graph toolchain CLI; penilaian exploitability deployment nyata belum dilakukan. Jangan jalankan input/project tidak tepercaya atau aktifkan alur signing sensitif sebelum mitigasi ditinjau/pembaruan upstream tersedia. Jalur API PiwuApp tetap menolak native project dari sandbox web.
+
+Project pengguna yang sudah ada **tidak diubah otomatis** oleh pembaruan scaffold ini.
+
+## Reproduksi dan aktivasi
+
+```sh
+npm test
+UI_TEST_FIXTURES=1 npm run test:e2e:sandbox
+npm run build
+npm run check:bundle
+npm run test:security
+# Di proses terpisah, untuk server produksi lokal sementara:
+NODE_ENV=production PORT=3201 node server/index.mjs
+# Setelah server siap:
+npm run verify:production
+npm run test:e2e:sandbox -- --config playwright.production.config.ts
+```
+
+`PIWU_VERIFY_URL` dapat diarahkan ke target milik sendiri yang diizinkan. Tes production-bundle memerlukan folder `dist` yang cocok dengan aset server. Pemeriksaan ini bukan pengganti pentest berotorisasi pada staging/produksi, audit arsitektur, logging, WAF/TLS/CSP, pemulihan backup, atau pengujian kapasitas.
+
+Uji native dijalankan pada scaffold yang diekspor ke folder scratch, bukan di aplikasi pengguna:
+
+```sh
+npm install --ignore-scripts
+EXPO_OFFLINE=1 CI=1 NODE_ENV=production npx expo export --platform all --max-workers 2
+npx tsc --noEmit
+npm audit
+```
+
+`npm audit` scaffold Expo **masih nonzero** untuk risiko di atas. Hasil perangkat asli dan acceptance produksi yang belum dijalankan dicatat pada [NATIVE_PRODUCTION_ACCEPTANCE.md](NATIVE_PRODUCTION_ACCEPTANCE.md).
+
+### Bukti lokal
+
+`.artifacts/` diabaikan Git: `admin-hardening-unit-final.log`, `admin-hardening-browser-final.log`, `native-final-browser.log`, `admin-hardening-build.log`, `monaco-bundle-budget.json`, `production-http-smoke.json`, `production-bundle-browser.log`, `admin-hardening-dependencies.json`, `expo-final-export.log`, `expo-final-dependencies.json`. Tidak ada secret dalam laporan.

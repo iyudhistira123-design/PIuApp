@@ -1,0 +1,749 @@
+.rb-workbench {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--ide-text, #d4dddd);
+  background: var(--ide-bg, #1b2226);
+  font-size: 12px;
+}
+.rb-workbench button,
+.rb-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: var(--ide-surface, #283238);
+  color: var(--ide-text, #d4dddd);
+  font-size: 12px;
+}
+.rb-workbench button:hover {
+  background: var(--ide-accent-bg, #34454d);
+}
+.rb-workbench button:disabled {
+  opacity: 0.45;
+}
+.rb-workbench button:focus-visible,
+.rb-workbench input:focus-visible,
+.rb-workbench textarea:focus-visible {
+  outline: 2px solid var(--ide-accent, #79c1d8);
+  outline-offset: 2px;
+}
+.rb-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ide-border, #354146);
+}
+.rb-top strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+}
+.rb-top button[aria-pressed="true"] {
+  background: var(--ide-success-bg, #326c69);
+  color: var(--ide-text, #fff);
+}
+.rb-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--ide-bg, #202a2f);
+}
+.rb-file {
+  position: relative;
+  cursor: pointer;
+}
+.rb-file input {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.rb-layout {
+  display: grid;
+  grid-template-columns: 160px minmax(180px, 1fr) 230px;
+  flex: 1;
+  min-height: 250px;
+  overflow: hidden;
+}
+.rb-explorer,
+.rb-properties {
+  padding: 10px;
+  overflow: auto;
+  background: var(--ide-bg, #20282d);
+  min-width: 0;
+}
+.rb-explorer h3,
+.rb-properties h3 {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--ide-success, #a2b7bb);
+  margin-bottom: 12px;
+}
+.rb-explorer button {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  gap: 6px;
+}
+.rb-explorer button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.rb-explorer button small {
+  font-size: 9px;
+  color: var(--ide-muted, #a9baba);
+}
+.rb-explorer button.selected {
+  background: var(--ide-accent-bg, #304c56);
+}
+.rb-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 260px;
+  overflow: hidden;
+}
+.rb-viewport canvas {
+  display: block;
+  touch-action: none;
+}
+.rb-viewport-label {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  pointer-events: none;
+  font-size: 10px;
+  color: var(--ide-success, #b2c8ce);
+  line-height: 1.7;
+}
+.rb-viewport > p {
+  padding: 70px 20px;
+  color: var(--ide-text, #d4dddd);
+  line-height: 1.7;
+}
+.rb-properties fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.rb-properties label {
+  display: block;
+  color: var(--ide-text, #b4c6c9);
+  margin-bottom: 12px;
+  font-size: 11px;
+}
+.rb-properties input:not([type="checkbox"]),
+.rb-properties select,
+.rb-properties textarea,
+.rb-bridge input,
+.rb-bridge textarea {
+  display: block;
+  width: 100%;
+  background: var(--ide-input, #151c21);
+  color: var(--ide-text, #e3ecee);
+  border: 1px solid var(--ide-border, #405058);
+  border-radius: 4px;
+  padding: 7px;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.rb-vector {
+  display: flex;
+  gap: 4px;
+}
+.rb-vector input {
+  min-width: 0;
+}
+.rb-properties textarea {
+  font-family: monospace;
+}
+.rb-properties button {
+  margin: 4px 0;
+  width: 100%;
+  justify-content: center;
+}
+.rb-properties p {
+  line-height: 1.6;
+  margin-block: 8px;
+}
+.rb-workbench .rb-primary {
+  background: var(--ide-success-bg, #2b7069);
+  color: var(--ide-text, #fff);
+}
+.rb-note {
+  padding: 8px 12px;
+  font-size: 10px;
+  color: var(--ide-muted, #b2c4c5);
+  background: var(--ide-bg, #202a2f);
+  line-height: 1.6;
+}
+.rb-error {
+  color: var(--ide-danger, #ffc0b5);
+  background: var(--ide-danger-bg, #492d2a);
+  padding: 10px;
+  margin: 8px;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.rb-bridge {
+  padding: 24px;
+  overflow: auto;
+  max-width: 1000px;
+  width: 100%;
+  margin: auto;
+}
+.rb-bridge h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.rb-bridge p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ide-text, #c2d0d3);
+  margin: 10px 0;
+}
+.rb-bridge label {
+  display: block;
+  margin: 18px 0;
+}
+.rb-bridge button,
+.rb-bridge a {
+  margin: 4px;
+}
+.rb-bridge pre {
+  padding: 12px;
+  background: var(--ide-input, #12191e);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rb-studio-tree {
+  border: 1px solid var(--ide-border, #34454d);
+  margin-top: 20px;
+  max-height: 300px;
+  overflow: auto;
+}
+.rb-studio-tree button {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  border-radius: 0;
+}
+.rb-studio-tree button span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.rb-studio-tree small {
+  color: var(--ide-success, #a9bfc4);
+}
+.native-preview {
+  padding: 32px;
+  overflow: auto;
+  height: 100%;
+  background: var(--ide-bg, #20272b);
+  color: var(--ide-text, #d6e0e0);
+  line-height: 1.8;
+}
+.native-preview h2 {
+  font-size: 24px;
+}
+.native-preview pre {
+  padding: 16px;
+  background: var(--ide-input, #151b1e);
+  margin: 20px 0;
+  white-space: pre-wrap;
+}
+.native-preview p {
+  max-width: 680px;
+}
+.native-preview code {
+  color: var(--ide-success, #b1ded3);
+}
+@media (max-width: 1150px) {
+  .rb-layout {
+    grid-template-columns: 130px minmax(160px, 1fr);
+  }
+  .rb-properties {
+    grid-column: 1/-1;
+    max-height: 240px;
+    border-top: 1px solid var(--ide-border, #34454d);
+  }
+  .rb-properties form > fieldset {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .rb-properties details {
+    grid-column: 1/-1;
+  }
+  .rb-layout {
+    overflow: auto;
+  }
+  .rb-viewport {
+    min-height: 320px;
+  }
+}
+@media (max-width: 600px) {
+  .rb-tools button,
+  .rb-top button {
+    min-height: 40px;
+  }
+  .rb-layout {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+  .rb-properties form > fieldset {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rb-bridge {
+    padding: 16px;
+  }
+  .rb-top {
+    gap: 5px;
+    padding: 8px;
+  }
+  .rb-explorer {
+    padding: 6px;
+  }
+  .rb-explorer button {
+    min-height: 38px;
+    padding: 6px !important;
+  }
+  .rb-explorer button small {
+    display: none;
+  }
+  .native-preview {
+    padding: 20px;
+  }
+}
+.rb-scene-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: var(--ide-bg, #17252a);
+  color: var(--ide-success, #afc5c9);
+  font-size: 11px;
+  border-bottom: 1px solid var(--ide-border, #34454d);
+  flex-wrap: wrap;
+}
+.rb-scene-status code {
+  margin-left: auto;
+  color: var(--ide-success, #7fa2ac);
+  font-size: 10px;
+}
+.rb-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ide-success-bg, #8cd3bf);
+  flex-shrink: 0;
+}
+.rb-map-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ide-border, #34454d);
+}
+.rb-map-tools [role="group"] {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.rb-map-tools button[aria-pressed="true"] {
+  background: var(--ide-success-bg, #326c69);
+  color: var(--ide-text, #fff);
+}
+.rb-map-tools label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rb-map-tools select {
+  background: var(--ide-input, #151c21);
+  color: var(--ide-text, #d4dddd);
+  padding: 6px;
+  border: 1px solid var(--ide-border, #405058);
+  border-radius: 4px;
+}
+.rb-viewport .rb-empty-scene {
+  position: absolute;
+  top: 45%;
+  padding: 20px;
+  pointer-events: none;
+}
+.rb-viewport .rb-graphics-error {
+  position: absolute;
+  inset: 50px 0 auto;
+  z-index: 2;
+  background: var(--ide-bg, #1b2226e8);
+  padding: 24px;
+}
+.rb-map-tools select:focus-visible {
+  outline: 2px solid var(--ide-accent, #79c1d8);
+}
+@media (max-width: 600px) {
+  .rb-map-tools button {
+    min-height: 40px;
+  }
+  .rb-scene-status code {
+    display: none;
+  }
+}
+@media (max-width: 600px) {
+  .rb-top .rb-mode-button {
+    display: none;
+  }
+  .rb-tools {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .rb-tools > * {
+    flex-shrink: 0;
+  }
+  .rb-scene-status {
+    font-size: 10px;
+    line-height: 1.5;
+    padding: 8px;
+  }
+  .rb-workbench {
+    min-height: 0;
+    flex: 1;
+  }
+}
+/* Scene workbench: one navigation level, compact tools, neutral surfaces. */
+.rb-workbench {
+  container-type: inline-size;
+  container-name: roblox;
+  flex: 1;
+  height: auto;
+  --rb-line: var(--ide-border, #363e49);
+  background: var(--ide-bg, #181b20);
+  color: var(--ide-text, #e2e7ef);
+}
+.rb-top {
+  min-height: 54px;
+  padding: 9px 14px;
+  gap: 8px;
+  flex-wrap: nowrap;
+  background: var(--ide-surface, #20242b);
+  border-color: var(--rb-line);
+}
+.rb-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.rb-heading > svg {
+  color: var(--ide-subtle, #9aa8ba);
+  flex-shrink: 0;
+}
+.rb-heading strong {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.4;
+}
+.rb-heading span {
+  display: block;
+  color: var(--ide-subtle, #9aa8ba);
+  font-size: 10px;
+  margin-top: 2px;
+}
+.rb-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-left: auto;
+}
+.rb-panel-switches {
+  display: flex;
+  gap: 2px;
+  padding-right: 10px;
+  border-right: 1px solid var(--rb-line);
+}
+.rb-panel-switches button {
+  padding: 6px;
+}
+.rb-workbench button {
+  border-radius: 4px;
+  min-height: 29px;
+  background: transparent;
+  color: var(--ide-muted, #b2bdcb);
+  font-weight: 450;
+}
+.rb-workbench button:hover:not(:disabled) {
+  background: var(--ide-hover, #2c3541);
+  color: var(--ide-text, #e2e7ef);
+}
+.rb-header-actions > button {
+  border: 1px solid var(--rb-line);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.rb-workbench button[aria-pressed="true"] {
+  background: var(--ide-accent-bg, #243b55);
+  color: var(--ide-accent, #82baff);
+}
+.rb-scene-status {
+  min-height: 28px;
+  padding: 5px 14px;
+  font-size: 10px;
+  border-color: var(--rb-line);
+  background: var(--ide-bg, #181b20);
+  color: var(--ide-muted, #b2bdcb);
+}
+.rb-live-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--ide-success, #9ad7b3);
+}
+.rb-tools {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  gap: 3px;
+  background: var(--ide-surface, #20242b);
+  border-bottom: 1px solid var(--rb-line);
+}
+.rb-tools > * {
+  flex-shrink: 0;
+}
+.rb-tools > span {
+  font-size: 10px;
+  color: var(--ide-subtle, #9aa8ba);
+  padding: 0 5px;
+}
+.rb-tools button,
+.rb-file {
+  font-size: 11px;
+  min-height: 28px;
+  padding: 5px 7px;
+}
+.rb-file {
+  background: transparent;
+  color: var(--ide-muted, #b2bdcb);
+  border-left: 1px solid var(--rb-line);
+  border-radius: 0;
+  margin-left: 4px;
+}
+.rb-file:focus-within {
+  outline: 2px solid var(--ide-accent, #82baff);
+  outline-offset: -2px;
+}
+.rb-map-tools {
+  padding: 6px 10px;
+  gap: 8px;
+  background: var(--ide-surface, #20242b);
+  border-color: var(--rb-line);
+}
+.rb-map-tools button,
+.rb-map-tools label {
+  font-size: 11px;
+}
+.rb-map-tools select {
+  font-size: 11px;
+  padding: 4px;
+  border-color: var(--rb-line);
+}
+.rb-map-tools [aria-label="Manipulasi objek"] {
+  border-right: 1px solid var(--rb-line);
+  padding-right: 8px;
+}
+.rb-map-tools [aria-label="Geser di map"] {
+  margin-left: auto;
+}
+.rb-layout {
+  grid-template-columns: 165px minmax(0, 1fr) 210px;
+  min-height: 260px;
+}
+.rb-layout.is-explorer-hidden {
+  grid-template-columns: minmax(0, 1fr) 210px;
+}
+.rb-layout.is-properties-hidden {
+  grid-template-columns: 165px minmax(0, 1fr);
+}
+.rb-layout.is-explorer-hidden.is-properties-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rb-explorer,
+.rb-properties {
+  background: var(--ide-surface, #20242b);
+  padding: 12px 10px;
+}
+.rb-explorer {
+  border-right: 1px solid var(--rb-line);
+}
+.rb-properties {
+  border-left: 1px solid var(--rb-line);
+  grid-column: auto;
+  max-height: none;
+}
+.rb-properties form > fieldset {
+  display: block;
+}
+.rb-explorer h3,
+.rb-properties h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.9px;
+  margin-bottom: 12px;
+  color: var(--ide-subtle, #9aa8ba);
+}
+.rb-explorer h3 span:last-child {
+  font-size: 10px;
+  letter-spacing: 0;
+  background: var(--ide-raised, #282e36);
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+.rb-explorer button {
+  font-size: 11px;
+  padding-block: 6px;
+  gap: 5px;
+}
+.rb-explorer button small {
+  font-size: 9px;
+}
+.rb-explorer button.selected {
+  background: var(--ide-accent-bg, #243b55);
+  color: var(--ide-accent, #82baff);
+}
+.rb-explorer button.selected small {
+  color: inherit;
+}
+.rb-properties label {
+  font-size: 10px;
+  margin-bottom: 11px;
+}
+.rb-properties input:not([type="checkbox"]),
+.rb-properties select,
+.rb-properties textarea {
+  font-size: 11px;
+  padding: 6px;
+  border-color: var(--rb-line);
+}
+.rb-properties button {
+  font-size: 11px;
+}
+.rb-viewport {
+  background: var(--ide-viewport, #1c222b);
+}
+.rb-viewport-label {
+  top: 10px;
+  left: 12px;
+  font-size: 9px;
+  color: var(--ide-muted, #b2bdcb);
+  text-shadow: none;
+}
+.rb-note {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 5px 12px;
+  border-top: 1px solid var(--rb-line);
+  background: var(--ide-surface, #20242b);
+  font-size: 9px;
+  color: var(--ide-subtle, #9aa8ba);
+}
+.rb-error {
+  max-height: 130px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+@container roblox (max-width:720px) {
+  .rb-layout,
+  .rb-layout.is-properties-hidden {
+    grid-template-columns: 140px minmax(0, 1fr);
+    overflow: auto;
+  }
+  .rb-layout.is-explorer-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rb-properties {
+    grid-column: 1/-1;
+    border-top: 1px solid var(--rb-line);
+    border-left: 0;
+    max-height: 240px;
+  }
+  .rb-properties form > fieldset {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .rb-properties details {
+    grid-column: 1/-1;
+  }
+  .rb-viewport {
+    min-height: 320px;
+  }
+}
+@container roblox (max-width:450px) {
+  .rb-top {
+    padding: 8px;
+  }
+  .rb-heading span {
+    display: none;
+  }
+  .rb-panel-switches {
+    padding-right: 0;
+    border: 0;
+  }
+  .rb-header-actions {
+    gap: 4px;
+  }
+  .rb-header-actions > button {
+    font-size: 10px;
+    padding: 5px;
+  }
+  .rb-header-actions > button > svg {
+    display: none;
+  }
+  .rb-layout,
+  .rb-layout.is-properties-hidden {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+  .rb-layout.is-explorer-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rb-explorer {
+    padding: 10px 5px;
+  }
+  .rb-explorer button small {
+    display: none;
+  }
+  .rb-properties form > fieldset {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rb-tools button,
+  .rb-panel-switches button,
+  .rb-map-tools button {
+    min-height: 34px;
+  }
+  .rb-scene-status code {
+    display: none;
+  }
+  .rb-note span:last-child {
+    display: none;
+  }
+}

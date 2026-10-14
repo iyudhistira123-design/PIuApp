@@ -1,0 +1,210 @@
+.service-panel {
+  --svc-line: var(--ide-surface, #e4e6e8);
+  color: var(--ide-text, #242831);
+  font-size: 13px;
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.service-panel p {
+  margin: 0;
+  color: var(--ide-subtle, #646b75);
+}
+.service-panel button,
+.service-panel input,
+.service-panel select,
+.service-panel textarea {
+  font: inherit;
+}
+.service-panel input,
+.service-panel select,
+.service-panel textarea {
+  border: 1px solid var(--svc-line);
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: var(--ide-surface, #fff);
+  color: var(--ide-text, #222);
+  width: 100%;
+  box-sizing: border-box;
+}
+.service-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 500;
+}
+.service-panel label.check {
+  flex-direction: row;
+  align-items: flex-start;
+}
+.service-panel label.check input {
+  width: auto;
+  margin-top: 5px;
+}
+.service-panel form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.service-panel button {
+  cursor: pointer;
+  border: 1px solid var(--ide-border, #dce0e4);
+  border-radius: 7px;
+  padding: 9px 13px;
+  background: var(--ide-surface, #fff);
+  color: var(--ide-text, #242831);
+  font-weight: 500;
+}
+.service-panel button.primary {
+  background: var(--ide-accent-bg, #1c293b);
+  color: var(--ide-text, #fff);
+  border-color: var(--ide-border, #1c293b);
+}
+.service-panel button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.service-panel button:focus-visible,
+.service-panel input:focus-visible {
+  outline: 2px solid var(--ide-border, #3174c8);
+  outline-offset: 2px;
+}
+.service-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.service-notice,
+.service-error {
+  padding: 12px 14px;
+  border: 1px solid var(--ide-border, #dce5ef);
+  background: var(--ide-surface, #f4f8fc);
+  border-radius: 8px;
+  color: var(--ide-accent, #354b68);
+  overflow-wrap: anywhere;
+}
+.service-error {
+  border-color: var(--ide-danger, #f0c8c5);
+  background: var(--ide-surface, #fff5f4);
+  color: var(--ide-danger, #8e2d26);
+}
+.service-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--svc-line);
+}
+.service-row > div {
+  min-width: 0;
+}
+.service-row small {
+  display: block;
+  color: var(--ide-subtle, #737b86);
+}
+.service-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow: auto;
+  background: var(--ide-input, #11161e);
+  color: var(--ide-text, #d5dce6);
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.service-card {
+  border: 1px solid var(--svc-line);
+  border-radius: 10px;
+  padding: 16px;
+}
+.service-card h3 {
+  font-size: 15px;
+  margin: 0 0 7px;
+}
+.service-card strong.metric {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -1px;
+}
+.service-page {
+  min-height: 100vh;
+  background: var(--ide-surface, #faf9f6);
+  padding: 32px max(20px, calc((100vw - 1040px) / 2));
+}
+.service-page header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--ide-border, #dedfe1);
+  padding-bottom: 22px;
+  margin-bottom: 36px;
+  gap: 16px;
+}
+.service-page h1 {
+  font-size: 34px;
+  letter-spacing: -1.3px;
+  margin: 10px 0;
+}
+.service-page nav {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.service-page .service-panel {
+  background: white;
+  border: 1px solid var(--ide-border, #e3e4e7);
+  border-radius: 12px;
+  padding: 24px;
+}
+.replay-frame {
+  border: 1px solid var(--ide-border, #dce0e5);
+  border-radius: 8px;
+  width: 100%;
+  height: 330px;
+  background: white;
+}
+.presence-status {
+  font-size: 10px;
+  color: var(--ide-success, #8aa68c);
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.service-bar {
+  height: 5px;
+  background: var(--ide-surface, #e5e9ee);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.service-bar i {
+  display: block;
+  background: var(--ide-accent-bg, #477296);
+  height: 100%;
+}
+.service-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.service-tabs button.active {
+  background: var(--ide-accent-bg, #1c293b);
+  color: var(--ide-text, #fff);
+}
+.service-page a {
+  color: inherit;
+}
+.service-page .eyebrow-label {
+  color: var(--ide-subtle, #6e7680);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+}

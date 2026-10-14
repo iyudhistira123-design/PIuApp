@@ -1,0 +1,53 @@
+.platform-announcements {
+  padding: 18px 24px;
+  background: #eef3ea;
+  border: 1px solid #dbe6d3;
+  border-radius: 8px;
+  margin: 18px auto;
+  max-width: 1150px;
+  color: #446139;
+  font-size: 12px;
+}
+.platform-announcements summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.platform-announcements article {
+  padding: 15px 0;
+  border-top: 1px solid #dbe6d3;
+  margin-top: 12px;
+}
+.platform-announcements article h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.platform-announcements article p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.platform-announcements button {
+  font-size: 11px;
+  border: 1px solid #ccd9c2;
+  border-radius: 4px;
+  background: #fff;
+  padding: 6px 10px;
+  margin-top: 10px;
+}
+.platform-announcements .ad-error {
+  margin-top: 10px;
+}
+.platform-maintenance {
+  padding: 16px 25px;
+  text-align: center;
+  background: #f7edcf;
+  color: #796430;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.platform-support {
+  font-size: 12px;
+  text-align: center;
+  padding: 15px;
+  color: #657954;
+}

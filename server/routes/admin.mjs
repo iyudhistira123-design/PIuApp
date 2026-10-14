@@ -1,0 +1,432 @@
+import { adminFilters, applyAdminFilters } from "../lib/admin-query.mjs";
+import { createReadinessReader } from "../lib/readiness.mjs";
+import { createPublicSiteReader } from "../lib/public-site.mjs";
+import { z } from "zod";
+import {
+  HttpError,
+  wrap,
+  assertNoSecrets,
+  capabilities,
+} from "../lib/core.mjs";
+import { rateLimit } from "../lib/context.mjs";
+import {
+  platformResult,
+  platformAdmin,
+  siteSettings,
+} from "../lib/platform.mjs";
+import { paymentProvider } from "../providers/payments.mjs";
+export const siteSchema = z
+  .object({
+    maintenance: z.boolean(),
+    maintenance_message: z.string().trim().min(1).max(300),
+    hero_title: z.string().max(100),
+    hero_subtitle: z.string().max(500),
+    support_email: z.union([z.email(), z.literal("")]),
+    enabled_services: z
+      .object({
+        ai: z.boolean(),
+        sandbox: z.boolean(),
+        publish: z.boolean(),
+        payments: z.boolean(),
+        marketplace: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+const broadcast = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(4000),
+    audience: z.enum(["public", "members", "pro", "team"]),
+    status: z.enum(["draft", "published", "archived"]),
+    starts_at: z.iso.datetime(),
+    ends_at: z.iso.datetime().nullable(),
+    revision: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine(
+    (v) => !v.ends_at || Date.parse(v.ends_at) > Date.parse(v.starts_at),
+    "Waktu berakhir harus setelah mulai.",
+  );
+const schemas = {
+  admin_role: z
+    .object({ role: z.enum(["superadmin", "operator", "auditor", "remove"]) })
+    .strict(),
+  user_suspend: z.object({ suspended: z.boolean() }).strict(),
+  credits: z
+    .object({
+      delta: z
+        .number()
+        .int()
+        .min(-10000)
+        .max(10000)
+        .refine((v) => v !== 0),
+    })
+    .strict(),
+  project_lock: z.object({ locked: z.boolean() }).strict(),
+  project_delete: z.object({ confirmation: z.uuid() }).strict(),
+  template_status: z
+    .object({ status: z.enum(["published", "archived"]) })
+    .strict(),
+  recording_revoke: z.object({}).strict(),
+  publish_cancel: z.object({}).strict(),
+  hosting_retry: z.object({}).strict(),
+  unpublish: z.object({}).strict(),
+  payment_reconcile: z.object({}).strict(),
+  broadcast_save: broadcast,
+  settings: z
+    .object({ revision: z.number().int().positive(), value: siteSchema })
+    .strict(),
+};
+export function adminCommand(body) {
+  const command = z
+    .object({
+      requestId: z.uuid(),
+      action: z.string(),
+      target: z.uuid().nullable(),
+      payload: z.unknown(),
+      reason: z.string().trim().min(8).max(500),
+    })
+    .strict()
+    .parse(body);
+  if (!Object.hasOwn(schemas, command.action))
+    throw new HttpError(400, "Tindakan admin tidak dikenali.");
+  command.payload = schemas[command.action].parse(command.payload);
+  if (command.action !== "settings" && !command.target)
+    throw new HttpError(400, "Pilih data tujuan terlebih dahulu.");
+  assertNoSecrets(command);
+  return command;
+}
+const pageOf = (req) =>
+  z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(10000)
+    .parse(req.query.page || 1);
+export function registerAdmin(app, ctx) {
+  const auth = [ctx.auth, platformAdmin(ctx), rateLimit({ max: 60 })];
+  app.get(
+    "/api/admin/session",
+    ...auth,
+    wrap(async (req, res) =>
+      res.json({
+        role: req.adminRole,
+        userId: req.user.id,
+        email: req.user.email || "",
+        capabilities: capabilities(ctx.env),
+      }),
+    ),
+  );
+  app.get(
+    "/api/admin/overview",
+    ...auth,
+    wrap(async (req, res) => {
+      const count = async (table, filter) => {
+        let q = ctx.admin
+          .from(table)
+          .select("*", { count: "exact", head: true });
+        if (filter) q = filter(q);
+        const r = await q;
+        platformResult(r);
+        return r.count || 0;
+      };
+      const [projects, pending, templates, broadcasts, cleanup] =
+        await Promise.all([
+          count("projects"),
+          count("payment_orders", (q) =>
+            q.in("status", ["created", "pending", "checkout_error", "review"]),
+          ),
+          count("templates", (q) => q.eq("status", "published")),
+          count("platform_broadcasts", (q) => q.eq("status", "published")),
+          count("hosting_cleanup_jobs"),
+        ]);
+      res.json({
+        metrics: { projects, pending, templates, broadcasts, cleanup },
+        recent: platformResult(
+          await ctx.admin
+            .from("platform_audit")
+            .select("id,actor_id,action,target_id,reason,created_at")
+            .order("created_at", { ascending: false })
+            .limit(8),
+        ),
+      });
+    }),
+  );
+  app.get(
+    "/api/admin/users",
+    ...auth,
+    wrap(async (req, res) => {
+      const filters = adminFilters(req.query, "users");
+      res.json(
+        platformResult(
+          await ctx.admin.rpc("piwu_admin_users", {
+            p_actor: req.user.id,
+            p_query: filters.q,
+            p_page: filters.page,
+          }),
+        ),
+      );
+    }),
+  );
+  const lists = {
+    projects: [
+      "projects",
+      "id,name,owner_id,created_at,updated_at",
+      "updated_at",
+    ],
+    payments: [
+      "payment_orders",
+      "id,user_id,provider,kind,sku,amount,status,created_at",
+      "created_at",
+    ],
+    marketplace: [
+      "templates",
+      "id,owner_id,title,category,price,status,created_at",
+      "created_at",
+    ],
+    broadcasts: [
+      "platform_broadcasts",
+      "id,title,body,audience,status,starts_at,ends_at,revision,updated_at",
+      "updated_at",
+    ],
+    audit: [
+      "platform_audit",
+      "id,actor_id,action,target_id,reason,result,created_at",
+      "created_at",
+    ],
+    roles: [
+      "platform_admins",
+      "user_id,role,granted_by,created_at",
+      "created_at",
+    ],
+  };
+  for (const [path, [table, columns, order]] of Object.entries(lists))
+    app.get(
+      "/api/admin/" + path,
+      ...auth,
+      wrap(async (req, res) => {
+        const filters = adminFilters(req.query, path),
+          page = filters.page;
+        const query = applyAdminFilters(
+          ctx.admin.from(table).select(columns),
+          path,
+          filters,
+          order,
+        );
+        const rows = platformResult(
+          await query
+            .order(order, { ascending: false })
+            .order(path === "roles" ? "user_id" : "id", { ascending: false })
+            .range((page - 1) * 25, page * 25),
+        );
+        const hasMore = rows.length > 25,
+          items = rows.slice(0, 25);
+        if (path === "projects") {
+          const ids = items.map((r) => r.id);
+          const controls = ids.length
+            ? platformResult(
+                await ctx.admin
+                  .from("platform_project_controls")
+                  .select("project_id,locked")
+                  .in("project_id", ids),
+              )
+            : [];
+          for (const row of items)
+            row.locked =
+              controls.find((c) => c.project_id === row.id)?.locked || false;
+        }
+        if (path === "broadcasts") {
+          for (const row of items) {
+            const result = await ctx.admin
+              .from("broadcast_reads")
+              .select("*", { count: "exact", head: true })
+              .eq("broadcast_id", row.id);
+            platformResult(result);
+            row.read_count = result.count || 0;
+          }
+        }
+        res.json({ page, hasMore, items });
+      }),
+    );
+  app.get(
+    "/api/admin/operations",
+    ...auth,
+    wrap(async (req, res) =>
+      res.json({
+        jobs: platformResult(
+          await ctx.admin
+            .from("publish_jobs")
+            .select("id,project_id,user_id,status,error,attempts,created_at")
+            .order("created_at", { ascending: false })
+            .limit(30),
+        ),
+        cleanup: platformResult(
+          await ctx.admin
+            .from("hosting_cleanup_jobs")
+            .select("id,provider_site_id,attempts,error,created_at")
+            .order("created_at", { ascending: false })
+            .limit(30),
+        ),
+        recordings: platformResult(
+          await ctx.admin
+            .from("recording_shares")
+            .select(
+              "id,recording_id,created_by,expires_at,revoked_at,created_at",
+            )
+            .order("created_at", { ascending: false })
+            .limit(30),
+        ),
+        capabilities: capabilities(ctx.env),
+      }),
+    ),
+  );
+  const readiness = createReadinessReader(ctx);
+  app.get(
+    "/api/admin/diagnostics",
+    ...auth,
+    rateLimit({ max: 10 }),
+    wrap(async (req, res) => {
+      let schema = "not_configured";
+      if (ctx.admin) {
+        try {
+          const r = await ctx.admin
+            .from("runtime_sandbox_slots")
+            .select("project_id")
+            .limit(0)
+            .abortSignal(AbortSignal.timeout(5000));
+          schema = r.error
+            ? ["42P01", "PGRST205"].includes(r.error.code)
+              ? "schema_missing"
+              : "unreachable"
+            : "reachable";
+        } catch {
+          schema = "unreachable";
+        }
+      }
+      res.json({
+        readiness: await readiness(),
+        runtime: {
+          rateLimitMode: app.locals.coordination.mode,
+          coordinationSchema: schema,
+          sandboxRouting:
+            app.locals.coordination.mode === "database"
+              ? "sticky-owner-lease"
+              : "process-local",
+        },
+        liveVerified: false,
+        notice:
+          "Probe read-only: bukan bukti transaksi, inference, deployment, uji perangkat, atau kelulusan pentest.",
+      });
+    }),
+  );
+  app.get(
+    "/api/admin/settings",
+    ...auth,
+    wrap(async (req, res) => res.json(await siteSettings(ctx))),
+  );
+  app.post(
+    "/api/admin/actions",
+    ctx.auth,
+    platformAdmin(ctx, "operator"),
+    rateLimit({ max: 20 }),
+    wrap(async (req, res) => {
+      const command = adminCommand(req.body);
+      if (
+        [
+          "admin_role",
+          "credits",
+          "user_suspend",
+          "settings",
+          "project_delete",
+        ].includes(command.action) &&
+        req.adminRole !== "superadmin"
+      )
+        throw new HttpError(403, "Tindakan ini hanya untuk superadmin.");
+      if (command.action === "payment_reconcile") {
+        const previous = platformResult(
+          await ctx.admin
+            .from("platform_audit")
+            .select("actor_id,action,target_id,reason,result")
+            .eq("id", command.requestId)
+            .maybeSingle(),
+        );
+        if (previous) {
+          if (
+            previous.actor_id !== req.user.id ||
+            previous.action !== command.action ||
+            previous.target_id !== command.target ||
+            previous.reason !== command.reason
+          )
+            throw new HttpError(409, "ID permintaan sudah digunakan.");
+          return res.json({
+            result: previous.result,
+            notice: "Hasil rekonsiliasi sebelumnya; tidak dijalankan ulang.",
+          });
+        }
+        const order = platformResult(
+          await ctx.admin
+            .from("payment_orders")
+            .select("*")
+            .eq("id", command.target)
+            .single(),
+        );
+        const provider = paymentProvider(
+          { ...ctx.env, PAYMENT_PROVIDER: order.provider },
+          ctx.fetcher,
+        );
+        const status = await provider.status(order);
+        command.payload = status;
+      }
+      const result = platformResult(
+        await ctx.admin.rpc("piwu_admin_action", {
+          p_actor: req.user.id,
+          p_request: command.requestId,
+          p_action: command.action,
+          p_target: command.target,
+          p_payload: command.payload,
+          p_reason: command.reason,
+        }),
+      );
+      res.json({
+        result,
+        notice:
+          command.action === "unpublish"
+            ? "Penghapusan hosting masuk antrean; periksa status cleanup, bukan langsung dianggap offline."
+            : "Perubahan dikonfirmasi dan dicatat dalam audit log.",
+      });
+    }),
+  );
+  const publicSite = createPublicSiteReader(ctx);
+  app.get(
+    "/api/public/site",
+    wrap(async (req, res) => res.json(await publicSite())),
+  );
+  app.get(
+    "/api/announcements",
+    ctx.auth,
+    wrap(async (req, res) =>
+      res.json({
+        broadcasts: platformResult(
+          await ctx
+            .needAdmin()
+            .rpc("piwu_broadcast_feed", { p_user: req.user.id }),
+        ),
+      }),
+    ),
+  );
+  app.post(
+    "/api/announcements/:id/read",
+    ctx.auth,
+    rateLimit({ max: 30 }),
+    wrap(async (req, res) => {
+      const id = z.uuid().parse(req.params.id);
+      platformResult(
+        await ctx
+          .needAdmin()
+          .rpc("piwu_broadcast_read", { p_user: req.user.id, p_id: id }),
+      );
+      res.json({ read: true });
+    }),
+  );
+}
