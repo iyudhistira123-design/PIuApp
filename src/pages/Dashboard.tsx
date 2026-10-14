@@ -1,0 +1,798 @@
+import ProjectKindPicker from "../components/projects/ProjectKindPicker";
+import type { ProjectKind } from "../lib/project-kinds";
+import { PlatformNotices, AdminLink } from "../components/admin/Platform";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Plus,
+  Search,
+  LayoutGrid,
+  Clock,
+  Users,
+  Bookmark,
+  Settings,
+  ArrowUpRight,
+  ChevronDown,
+  MoreHorizontal,
+  Copy,
+  Pencil,
+  Trash2,
+  FolderOpen,
+  ArrowRight,
+  LogOut,
+  Sparkles,
+  Zap,
+  PanelLeftClose,
+  X,
+  Download,
+} from "lucide-react";
+import { Logo, Modal, EmptyState } from "../components/ui";
+import TemplatePreview from "../components/TemplatePreview";
+import { templates } from "../lib/templates";
+import { useStore } from "../lib/store";
+import { supabase } from "../lib/supabase";
+import {
+  StorageStatus,
+  StorageDialog,
+  CloudSyncBanner,
+} from "../components/storage/StorageStatus";
+import { scopeFor } from "../lib/cloud/types";
+export default function Dashboard() {
+  const store = useStore();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") || "projects";
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState("latest");
+  const [filter, setFilter] = useState("all");
+  const [dialog, setDialog] = useState("");
+  const [selected, setSelected] = useState("");
+  const [newName, setNewName] = useState("");
+  const [menu, setMenu] = useState("");
+  const [projectKind, setProjectKind] = useState<ProjectKind>("webapp");
+  const [newPrompt, setNewPrompt] = useState("");
+  const [mobile, setMobile] = useState(false);
+  const [promptTitle, setPromptTitle] = useState("");
+  const [promptContent, setPromptContent] = useState("");
+  const continued = useRef(false);
+  const isCloud = scopeFor(store.user) !== "demo";
+  useEffect(() => {
+    if (
+      store.user &&
+      !store.user.demo &&
+      store.pendingPrompt &&
+      !continued.current &&
+      !store.pendingProjectId
+    ) {
+      continued.current = true;
+      const id = store.createProject(store.pendingPrompt);
+      navigate("/project/" + id);
+    }
+  }, [store.user]);
+  const projects = store.projects
+    .filter(
+      (p) =>
+        (p.name + " " + p.description)
+          .toLowerCase()
+          .includes(search.toLowerCase()) &&
+        (filter === "all" || p.template === filter) &&
+        (tab !== "shared" ||
+          (store.sync[p.id] && store.sync[p.id].role !== "Owner")),
+    )
+    .sort((a, b) =>
+      sort === "name"
+        ? a.name.localeCompare(b.name)
+        : sort === "oldest"
+          ? a.updatedAt - b.updatedAt
+          : b.updatedAt - a.updatedAt,
+    );
+  function create() {
+    if (!newPrompt.trim()) return;
+    if (!store.user) {
+      store.setPending(newPrompt, "Builder", projectKind);
+      navigate("/login");
+      return;
+    }
+    store.setPending(newPrompt, "Builder", projectKind);
+    const id = store.createProject(newPrompt, undefined, projectKind);
+    navigate("/project/" + id);
+  }
+  function template(id: string) {
+    if (!store.user) {
+      store.setPending(templates.find((t) => t.id === id)!.prompt);
+      navigate("/login");
+      return;
+    }
+    const p = store.createProject(
+      templates.find((t) => t.id === id)!.prompt,
+      id,
+    );
+    navigate("/project/" + p);
+  }
+  const changeTab = (s: string) => {
+    setParams(s === "projects" ? {} : { tab: s });
+    setMobile(false);
+    setSearch("");
+  };
+  return (
+    <div className="dashboard-page">
+      <aside className={"dashboard-sidebar " + (mobile ? "mobile-open" : "")}>
+        <Logo />
+        <div className="workspace-switch">
+          <span className="workspace-avatar">P</span>
+          <div>
+            <b>Workspace pribadi</b>
+            <small>{isCloud ? "Workspace cloud" : "Mode demo lokal"}</small>
+          </div>
+          <ChevronDown size={13} />
+        </div>
+        <button
+          className="button button-dark new-project-side"
+          onClick={() => setDialog("new")}
+        >
+          <Plus size={16} />
+          Project baru<span>⌘ N</span>
+        </button>
+        <div className="sidebar-label">WORKSPACE</div>
+        <nav>
+          {[
+            {
+              id: "projects",
+              icon: LayoutGrid,
+              label: "Semua project",
+              count: store.projects.length,
+            },
+            { id: "templates", icon: LayersIcon, label: "Template" },
+            { id: "shared", icon: Users, label: "Dibagikan ke saya" },
+            { id: "prompts", icon: Bookmark, label: "Prompt saya" },
+          ].map(({ id, icon: Icon, label, count }) => (
+            <button
+              className={tab === id ? "active" : ""}
+              onClick={() => changeTab(id)}
+              key={id}
+            >
+              <Icon size={17} />
+              {label}
+              {count !== undefined && <span>{count}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="upgrade-card">
+            <span>
+              <Sparkles size={15} />
+              Lebih banyak kemungkinan
+            </span>
+            <p>
+              Ruang yang lebih besar
+              <br />
+              untuk ide-ide berikutnya.
+            </p>
+            <Link to="/#pricing">
+              Jelajahi PiwuApp Pro <ArrowUpRight size={13} />
+            </Link>
+          </div>
+          <button
+            className="sidebar-settings"
+            onClick={() => setDialog("settings")}
+          >
+            <Settings size={17} /> Pengaturan
+          </button>
+          <AdminLink />
+          <Link className="sidebar-settings" to="/account">
+            Akun & kredit
+          </Link>
+          <Link className="sidebar-settings" to="/marketplace">
+            Marketplace komunitas
+          </Link>
+          <div className="sidebar-user">
+            <span className="avatar">
+              {store.user?.name?.[0]?.toUpperCase() || "P"}
+            </span>
+            <div>
+              <b>{store.user?.name || "Pengunjung"}</b>
+              <small>{store.user ? "Workspace pribadi" : "Belum masuk"}</small>
+            </div>
+            <button
+              className="icon-button"
+              aria-label="Keluar"
+              onClick={async () => {
+                if (supabase) {
+                  const { error } = await supabase.auth.signOut({
+                    scope: "local",
+                  });
+                  if (error) {
+                    store.notify("Tidak dapat menutup sesi. Coba lagi.");
+                    return;
+                  }
+                }
+                store.setUser(null);
+                navigate("/");
+              }}
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      </aside>
+      <main className="dashboard-main">
+        <PlatformNotices showErrors />
+        <header className="dashboard-header">
+          <div>
+            <button
+              className="icon-button dashboard-mobile-toggle"
+              onClick={() => setMobile(!mobile)}
+              aria-label="Buka navigasi"
+            >
+              <LayoutGrid size={20} />
+            </button>
+            <span>Workspace</span>
+            <span>/</span>
+            <b>
+              {{
+                projects: "Semua project",
+                templates: "Template",
+                shared: "Dibagikan ke saya",
+                prompts: "Prompt saya",
+              }[tab] || "Project"}
+            </b>
+          </div>
+          <div>
+            <StorageStatus />
+            <Link to="/" className="icon-button" aria-label="Beranda">
+              <ArrowUpRight size={18} />
+            </Link>
+          </div>
+        </header>
+        <div className="dashboard-content">
+          <div className="dashboard-title">
+            <div>
+              <span className="eyebrow-label">RUANG KREATIF ANDA</span>
+              <h1>
+                {tab === "templates"
+                  ? "Titik awal yang tepat."
+                  : tab === "shared"
+                    ? "Lebih baik bersama."
+                    : tab === "prompts"
+                      ? "Ide bagus, simpan dulu."
+                      : `Mari buat sesuatu${store.user?.name && store.user.name !== "Pembuat" ? ", " + store.user.name.split(" ")[0] : ""}.`}
+              </h1>
+              <p>
+                {tab === "templates"
+                  ? "Pilih template, beri sentuhan Anda, dan buat jadi milik sendiri."
+                  : tab === "shared"
+                    ? "Semua project yang dibagikan tim kepada Anda."
+                    : tab === "prompts"
+                      ? "Kumpulan prompt pilihan untuk karya Anda berikutnya."
+                      : "Semua ide, eksperimen, dan karya Anda. Dalam satu tempat."}
+              </p>
+            </div>
+            <button
+              className="button button-dark"
+              onClick={() => setDialog(tab === "prompts" ? "prompt" : "new")}
+            >
+              <Plus size={16} />
+              {tab === "prompts" ? "Simpan prompt" : "Project baru"}
+            </button>
+          </div>
+          <CloudSyncBanner />
+          {(tab === "projects" || tab === "shared") && (
+            <>
+              <div className="dashboard-banner">
+                <div>
+                  <span className="banner-label">
+                    <Sparkles size={13} /> DARI SATU PERCAKAPAN
+                  </span>
+                  <h2>Ide berikutnya dimulai dari Anda.</h2>
+                  <p>
+                    Ceritakan yang ingin Anda bangun. Kami siapkan ruangnya.
+                  </p>
+                  <button onClick={() => setDialog("new")}>
+                    Mulai membangun <ArrowRight size={15} />
+                  </button>
+                </div>
+                <div className="banner-shapes">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <span className="banner-watermark">p.</span>
+              </div>
+              <div className="project-toolbar">
+                <h2>
+                  Project Anda <span>{store.projects.length}</span>
+                </h2>
+                <div>
+                  <div className="search-input">
+                    <Search size={15} />
+                    <input
+                      aria-label="Cari project"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Cari project…"
+                    />
+                  </div>
+                  <select
+                    aria-label="Filter jenis project"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  >
+                    <option value="all">Semua jenis</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.category}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Urutkan project"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
+                  >
+                    <option value="latest">Terbaru</option>
+                    <option value="oldest">Terlama</option>
+                    <option value="name">Nama A–Z</option>
+                  </select>
+                </div>
+              </div>
+              {projects.length ? (
+                <div className="dashboard-project-grid">
+                  {projects.map((p) => (
+                    <article className="project-card" key={p.id}>
+                      <Link to={"/project/" + p.id}>
+                        <TemplatePreview type={p.template} />
+                      </Link>
+                      <div className="project-card-footer">
+                        <Link to={"/project/" + p.id}>
+                          <h3>{p.name}</h3>
+                          <span>
+                            <Clock size={11} />{" "}
+                            {new Date(p.updatedAt).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                            })}{" "}
+                            ·{" "}
+                            {isCloud
+                              ? store.sync[p.id]?.role || "Cloud"
+                              : "Project lokal"}
+                          </span>
+                        </Link>
+                        <div className="project-menu">
+                          <button
+                            className="icon-button"
+                            aria-label={"Menu " + p.name}
+                            onClick={() => setMenu(menu === p.id ? "" : p.id)}
+                          >
+                            <MoreHorizontal size={18} />
+                          </button>
+                          {menu === p.id && (
+                            <div className="dropdown">
+                              <button
+                                disabled={store.sync[p.id]?.role === "Viewer"}
+                                onClick={() => {
+                                  setSelected(p.id);
+                                  setNewName(p.name);
+                                  setDialog("rename");
+                                  setMenu("");
+                                }}
+                              >
+                                <Pencil size={14} />
+                                Ganti nama
+                              </button>
+                              <button
+                                onClick={() => {
+                                  store.duplicateProject(p.id);
+                                  setMenu("");
+                                  store.notify("Project berhasil diduplikasi");
+                                }}
+                              >
+                                <Copy size={14} />
+                                Duplikasi
+                              </button>
+                              <button
+                                className="danger"
+                                disabled={
+                                  isCloud && store.sync[p.id]?.role !== "Owner"
+                                }
+                                title={
+                                  isCloud && store.sync[p.id]?.role !== "Owner"
+                                    ? "Hanya pemilik yang dapat menghapus"
+                                    : undefined
+                                }
+                                onClick={() => {
+                                  setSelected(p.id);
+                                  setDialog("delete");
+                                  setMenu("");
+                                }}
+                              >
+                                <Trash2 size={14} />
+                                Hapus project
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                  <button
+                    className="new-project-card"
+                    onClick={() => setDialog("new")}
+                  >
+                    <span>
+                      <Plus size={24} />
+                    </span>
+                    <b>Ide baru?</b>
+                    <p>Beri ruang untuk tumbuh.</p>
+                  </button>
+                </div>
+              ) : search || filter !== "all" ? (
+                <EmptyState icon={Search} title="Tidak ada project yang cocok">
+                  Coba kata kunci atau filter lainnya.
+                </EmptyState>
+              ) : tab === "shared" ? (
+                <EmptyState icon={Users} title="Belum ada project bersama">
+                  Project yang dibagikan melalui membership Supabase muncul di
+                  sini. Undangan email dan presence real-time belum diaktifkan.
+                </EmptyState>
+              ) : (
+                <div className="project-empty">
+                  <span className="empty-graphic">
+                    <FolderOpen size={32} />
+                    <Plus size={14} />
+                  </span>
+                  <h3>Hal-hal besar dimulai dari project pertama.</h3>
+                  <p>
+                    Mulai dari ide Anda, atau ambil sedikit inspirasi dari
+                    template.
+                  </p>
+                  <button
+                    className="button button-dark"
+                    onClick={() => setDialog("new")}
+                  >
+                    <Plus size={15} />
+                    Buat project pertama
+                  </button>
+                  <button
+                    className="text-link"
+                    onClick={() => changeTab("templates")}
+                  >
+                    Lihat template <ArrowUpRight size={14} />
+                  </button>
+                </div>
+              )}
+              <div className="dashboard-mini-heading">
+                <h2>Sedikit inspirasi untuk Anda</h2>
+                <button
+                  className="text-link"
+                  onClick={() => changeTab("templates")}
+                >
+                  Semua template <ArrowUpRight size={14} />
+                </button>
+              </div>
+              <div className="dashboard-template-grid">
+                {templates.slice(0, 3).map((t) => (
+                  <button
+                    className="template-card"
+                    key={t.id}
+                    onClick={() => template(t.id)}
+                  >
+                    <TemplatePreview type={t.id} />
+                    <div className="template-card-label">
+                      <div>
+                        <h3>{t.name}</h3>
+                        <span>{t.category}</span>
+                      </div>
+                      <ArrowUpRight size={17} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {tab === "templates" && (
+            <>
+              <div className="search-input template-search">
+                <Search size={17} />
+                <input
+                  placeholder="Cari template…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="dashboard-template-grid">
+                {templates
+                  .filter((t) =>
+                    (t.name + " " + t.category)
+                      .toLowerCase()
+                      .includes(search.toLowerCase()),
+                  )
+                  .map((t) => (
+                    <button
+                      className="template-card"
+                      key={t.id}
+                      onClick={() => template(t.id)}
+                    >
+                      <TemplatePreview type={t.id} />
+                      <div className="template-card-label">
+                        <div>
+                          <h3>{t.name}</h3>
+                          <span>{t.category}</span>
+                        </div>
+                        <ArrowUpRight size={16} />
+                      </div>
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
+          {tab === "prompts" &&
+            (store.prompts.length ? (
+              <div className="saved-prompt-grid">
+                {store.prompts.map((p) => (
+                  <article className="saved-prompt" key={p.id}>
+                    <Bookmark size={19} />
+                    <h3>{p.title}</h3>
+                    <p>{p.content}</p>
+                    <small>{p.tags}</small>
+                    <div>
+                      <button
+                        className="button button-outline"
+                        onClick={() => {
+                          setNewPrompt(p.content);
+                          setDialog("new");
+                        }}
+                      >
+                        Gunakan <ArrowRight size={13} />
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        aria-label="Hapus prompt"
+                        onClick={() => store.removePrompt(p.id)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Bookmark}
+                title="Rumah untuk ide-ide bagus Anda"
+              >
+                Simpan prompt favorit dan gunakan kembali saat inspirasi datang.
+              </EmptyState>
+            ))}
+        </div>
+        <footer className="dashboard-footer">
+          <span>PiwuApp · Sedikit demi sedikit, jadi sesuatu.</span>
+          <span>Versi pengembangan</span>
+        </footer>
+      </main>
+      {dialog === "storage" && <StorageDialog onClose={() => setDialog("")} />}
+      {dialog && dialog !== "storage" && (
+        <Modal
+          title={
+            {
+              new: "Apa yang ingin Anda bangun?",
+              rename: "Ganti nama project",
+              delete: "Hapus project?",
+              settings: "Pengaturan workspace",
+              prompt: "Simpan prompt",
+            }[dialog] || ""
+          }
+          onClose={() => setDialog("")}
+        >
+          <div className="modal-content">
+            {dialog === "new" && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  create();
+                }}
+              >
+                <p>
+                  Mulai dengan satu kalimat. Detailnya bisa kita sempurnakan
+                  nanti.
+                </p>
+                <ProjectKindPicker
+                  value={projectKind}
+                  onChange={setProjectKind}
+                />
+                <label>
+                  Ide Anda
+                  <textarea
+                    rows={4}
+                    value={newPrompt}
+                    onChange={(e) => setNewPrompt(e.target.value)}
+                    placeholder={
+                      projectKind === "webapp"
+                        ? "Buat website portfolio untuk studio desain saya…"
+                        : projectKind === "mobile"
+                          ? "Buat aplikasi mobile untuk…"
+                          : "Buat game Roblox tentang…"
+                    }
+                    required
+                    autoFocus
+                  />
+                </label>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="button button-outline"
+                    onClick={() => setDialog("")}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    className="button button-dark"
+                    disabled={!newPrompt.trim()}
+                  >
+                    Buat project <ArrowUpRight size={15} />
+                  </button>
+                </div>
+              </form>
+            )}
+            {dialog === "rename" && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newName.trim()) {
+                    store.updateProject(selected, { name: newName.trim() });
+                    setDialog("");
+                  }
+                }}
+              >
+                <label>
+                  Nama project
+                  <input
+                    value={newName}
+                    required
+                    maxLength={80}
+                    onChange={(e) => setNewName(e.target.value)}
+                  />
+                </label>
+                <button className="button button-dark full-width">
+                  Simpan perubahan
+                </button>
+              </form>
+            )}
+            {dialog === "delete" && (
+              <>
+                <p>
+                  Project beserta riwayatnya akan dihapus. Untuk project cloud,
+                  penghapusan memerlukan konfirmasi server dan hanya diizinkan
+                  bagi pemilik. Tindakan ini tidak bisa dibatalkan. Ekspor
+                  project terlebih dahulu jika ingin menyimpannya.
+                </p>
+                <div className="modal-actions">
+                  <button
+                    className="button button-outline"
+                    onClick={() => setDialog("")}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    className="button button-danger"
+                    onClick={() => {
+                      store.deleteProject(selected);
+                      setDialog("");
+                      store.notify(
+                        isCloud
+                          ? "Penghapusan menunggu konfirmasi cloud."
+                          : "Project dihapus",
+                      );
+                    }}
+                  >
+                    Hapus project
+                  </button>
+                </div>
+              </>
+            )}
+            {dialog === "settings" && (
+              <>
+                <div className="settings-row">
+                  <span>Penyimpanan</span>
+                  <b>{isCloud ? "Cloud + cache akun" : "Browser lokal"}</b>
+                </div>
+                <div className="settings-row">
+                  <span>Autentikasi cloud</span>
+                  <b>{supabase ? "Terkonfigurasi" : "Belum terhubung"}</b>
+                </div>
+                <div className="settings-row">
+                  <span>Bahasa</span>
+                  <b>Bahasa Indonesia</b>
+                </div>
+                <div className="settings-row">
+                  <span>Paket</span>
+                  <b>Demo · Tanpa tagihan</b>
+                </div>
+                <p>
+                  {isCloud
+                    ? "Project akun ini disinkronkan ke Supabase setelah server mengonfirmasi penyimpanan. Prompt pribadi masih tersimpan lokal."
+                    : "Project demo hanya tersimpan di browser ini. Impor ke akun cloud dilakukan secara eksplisit, bukan otomatis."}
+                </p>
+                <button
+                  className="button button-dark full-width"
+                  style={{ marginBottom: 12 }}
+                  onClick={() => setDialog("storage")}
+                >
+                  Kelola penyimpanan & impor
+                </button>
+                <button
+                  className="button button-outline full-width"
+                  onClick={() => {
+                    const blob = new Blob(
+                      [JSON.stringify(store.projects, null, 2)],
+                      { type: "application/json" },
+                    );
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = "piwuapp-backup.json";
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >
+                  <Download size={16} />
+                  Unduh cadangan semua project
+                </button>
+              </>
+            )}
+            {dialog === "prompt" && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  store.savePrompt({
+                    title: promptTitle,
+                    content: promptContent,
+                    tags: "Pribadi",
+                  });
+                  setDialog("");
+                  setPromptTitle("");
+                  setPromptContent("");
+                }}
+              >
+                <label>
+                  Judul
+                  <input
+                    required
+                    value={promptTitle}
+                    onChange={(e) => setPromptTitle(e.target.value)}
+                    placeholder="Landing page minimal"
+                  />
+                </label>
+                <label>
+                  Prompt
+                  <textarea
+                    required
+                    rows={5}
+                    value={promptContent}
+                    onChange={(e) => setPromptContent(e.target.value)}
+                    placeholder="Buat sebuah…"
+                  />
+                </label>
+                <button className="button button-dark full-width">
+                  Simpan prompt
+                </button>
+              </form>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+function LayersIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5" />
+    </svg>
+  );
+}

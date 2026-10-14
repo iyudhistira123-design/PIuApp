@@ -1,0 +1,50 @@
+.readiness-panel {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid var(--ide-border, #dbe2d5);
+  border-radius: 10px;
+  background: var(--ide-surface, #f4f6f0);
+  color: var(--ide-subtle, #37442f);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.readiness-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.readiness-heading strong {
+  font-size: 13px;
+}
+.readiness-heading button {
+  padding: 8px 10px;
+  min-height: 40px;
+  border: 1px solid var(--ide-accent, #bbc8b1);
+  border-radius: 6px;
+  background: var(--ide-surface, #fff);
+}
+.readiness-panel p {
+  margin-top: 10px;
+}
+.readiness-panel summary {
+  cursor: pointer;
+  padding-block: 12px;
+  font-weight: 600;
+}
+.readiness-panel dl > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding-block: 8px;
+  border-top: 1px solid var(--ide-border, #dde4d8);
+}
+.readiness-panel dd {
+  margin: 0;
+  color: var(--ide-subtle, #59644f);
+}
+.readiness-panel [role="alert"] {
+  color: var(--ide-danger, #943d32);
+}

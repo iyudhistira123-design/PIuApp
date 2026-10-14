@@ -1,0 +1,194 @@
+.project-kind-picker {
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+  min-width: 0;
+  text-align: left;
+}
+.project-kind-picker legend {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #43544a;
+}
+.project-kind-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.project-kind-options label {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 12px !important;
+  margin: 0 !important;
+  border: 1px solid #dbe2df;
+  border-radius: 10px;
+  background: #fff;
+  color: #57685f;
+  cursor: pointer;
+  min-height: 90px;
+  transition:
+    border-color 0.16s,
+    background-color 0.16s;
+}
+.project-kind-options label.selected {
+  border-color: #628276;
+  background: #f2f7f4;
+  color: #2e5748;
+}
+.project-kind-options label:hover {
+  background: #f3f7f5;
+}
+.project-kind-options input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.project-kind-options label:has(input:focus-visible) {
+  outline: 2px solid #36788f;
+  outline-offset: 3px;
+}
+.project-kind-options svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.project-kind-options strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.project-kind-options small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.65;
+  margin-top: 5px;
+  color: #64736c;
+}
+.project-kind-check {
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  opacity: 0;
+}
+.selected .project-kind-check {
+  opacity: 1;
+}
+/* A quiet mode selector inside the hero composer, not another card grid. */
+.landing .hero-prompt.with-project-kind {
+  border: 1px solid #cddce0;
+  border-radius: 18px;
+  background: #fffffff2;
+  box-shadow: 0 12px 40px #304e6212;
+  overflow: visible;
+}
+.landing .hero-prompt.with-project-kind:focus-within {
+  box-shadow:
+    0 12px 40px #304e6217,
+    0 0 0 2px #709caf;
+}
+.landing .hero-with-video .hero-prompt.with-project-kind .prompt-box {
+  border: 0;
+  border-radius: 0 0 18px 18px;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+.landing .project-kind-picker.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  max-width: none;
+  padding: 13px 16px;
+  margin: 0;
+  border-bottom: 1px solid #e5ecee;
+  border-radius: 18px 18px 0 0;
+  background: #f7fafad9;
+}
+.is-compact .project-kind-options {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eaf0f1;
+}
+.landing .is-compact .project-kind-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 12px !important;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #52666f;
+}
+.landing .is-compact .project-kind-options label.selected {
+  background: #fff;
+  color: #244653;
+  border-color: #dbe5e7;
+  box-shadow: 0 1px 3px #253e4810;
+}
+.landing .is-compact .project-kind-options label:hover {
+  color: #244653;
+  background: #ffffff8c;
+}
+.is-compact .project-kind-options svg {
+  margin: 0;
+}
+.landing .is-compact .project-kind-options strong {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.project-kind-hint {
+  margin-left: auto;
+  color: #596e77;
+  font-size: 10px;
+  line-height: 1.6;
+}
+@media (max-width: 700px) {
+  .project-kind-hint {
+    display: none;
+  }
+  .is-compact .project-kind-options {
+    width: 100%;
+  }
+  .landing .is-compact .project-kind-options label {
+    flex: 1;
+  }
+}
+@media (max-width: 560px) {
+  .project-kind-options {
+    grid-template-columns: 1fr;
+  }
+  .project-kind-options label {
+    min-height: 68px;
+  }
+  .landing .project-kind-picker.is-compact {
+    padding: 10px;
+  }
+  .landing .is-compact .project-kind-options label {
+    padding: 8px 5px !important;
+    min-height: 44px;
+    gap: 5px;
+  }
+  .landing .is-compact .project-kind-options strong {
+    font-size: 10px;
+  }
+  .landing .is-compact .project-kind-options svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-kind-options label {
+    transition: none;
+  }
+}
