@@ -335,6 +335,12 @@ button {
   max-width: 678px;
   margin: 28px auto 17px;
   text-align: left;
+  /* The composer is the only hero block with a popover. Both it and the rows
+     below it turn into stacking contexts (focus transform, entrance animation
+     fill), so the paint order has to be set explicitly or the "Bangun" menu
+     ends up underneath the suggestion chips. */
+  position: relative;
+  z-index: 2;
 }
 .prompt-box {
   background: #ffffffed;
