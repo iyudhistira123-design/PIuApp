@@ -3,6 +3,10 @@ import type { ProjectKind } from "../lib/project-kinds";
 import LandingNav from "../components/landing/LandingNav";
 import HeroVideo from "../components/landing/HeroVideo";
 import "../components/landing/landing-responsive.css";
+import "../components/landing/landing-motion.css";
+import useLandingMotion, {
+  revealDelay,
+} from "../components/landing/useLandingMotion";
 import { usePlatform, PlatformNotices } from "../components/admin/Platform";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -64,6 +68,7 @@ export default function Landing() {
   const navigate = useNavigate();
   const store = useStore();
   const hero = useRef<HTMLDivElement>(null);
+  useLandingMotion();
   const submit = () => {
     if (!prompt.trim()) return;
     store.setPending(prompt, mode, projectKind);
@@ -95,6 +100,7 @@ export default function Landing() {
         : templates.filter((t) => t.category === category);
   return (
     <div className="landing">
+      <div className="landing-progress" aria-hidden="true" />
       <LandingNav
         signedIn={!!store.user}
         onCategory={setCategory}
@@ -129,6 +135,7 @@ export default function Landing() {
                     <svg viewBox="0 0 325 15" preserveAspectRatio="none">
                       <path
                         d="M4 9Q163 -2 320 9M45 14Q190 5 298 12"
+                        pathLength={1}
                         stroke="currentColor"
                         strokeWidth="3"
                         fill="none"
@@ -278,7 +285,7 @@ export default function Landing() {
           </div>
         </section>
         <section className="templates-section section-container" id="templates">
-          <div className="section-heading">
+          <div className="section-heading" data-reveal="fade">
             <div>
               <div className="eyebrow-label">
                 <span /> SEBUAH TITIK AWAL
@@ -294,6 +301,8 @@ export default function Landing() {
             className="template-tabs"
             role="tablist"
             aria-label="Kategori template"
+            data-reveal="fade"
+            style={revealDelay(120)}
           >
             {categories.map((c) => (
               <button
@@ -307,7 +316,12 @@ export default function Landing() {
               </button>
             ))}
           </div>
-          <div className="template-grid">
+          <div
+            className="template-grid"
+            key={category}
+            data-reveal="fade"
+            data-stagger
+          >
             {filtered.map((t) => (
               <button
                 className="template-card"
@@ -332,7 +346,11 @@ export default function Landing() {
               </button>
             ))}
           </div>
-          <div className="template-note">
+          <div
+            className="template-note"
+            data-reveal="fade"
+            style={revealDelay(200)}
+          >
             <span>
               <Code2 size={14} /> Bukan sekadar mockup. Aplikasi sungguhan,
               dengan kode yang bisa Anda kembangkan.
@@ -343,7 +361,7 @@ export default function Landing() {
           </div>
         </section>
         <section className="how-section section-container" id="how-it-works">
-          <div className="section-heading">
+          <div className="section-heading" data-reveal="fade">
             <div>
               <div className="eyebrow-label">
                 <span /> DARI PIKIRAN KE LAYAR
@@ -356,7 +374,7 @@ export default function Landing() {
               Mulai dengan satu ide, hari ini.
             </p>
           </div>
-          <div className="steps-grid">
+          <div className="steps-grid" data-reveal data-stagger>
             <article>
               <div className="step-top">
                 <span>01</span>
@@ -408,7 +426,7 @@ export default function Landing() {
         </section>
         <section className="features-section" id="features">
           <div className="section-container">
-            <div className="section-heading">
+            <div className="section-heading" data-reveal="fade">
               <div>
                 <div className="eyebrow-label">
                   <span /> SATU RUANG. SEMUA KEMUNGKINAN.
@@ -425,7 +443,7 @@ export default function Landing() {
                 semuanya di satu tempat yang terasa familier.
               </p>
             </div>
-            <div className="feature-layout">
+            <div className="feature-layout" data-reveal>
               <div className="workspace-illustration" aria-hidden="true">
                 <div className="illustration-bar">
                   <div className="window-dots">
@@ -481,7 +499,7 @@ export default function Landing() {
                   </div>
                 </div>
               </div>
-              <div className="feature-list">
+              <div className="feature-list" data-reveal data-stagger>
                 {[
                   {
                     icon: MessageSquare,
@@ -519,7 +537,7 @@ export default function Landing() {
           </div>
         </section>
         <section className="pricing-section section-container" id="pricing">
-          <div className="pricing-heading">
+          <div className="pricing-heading" data-reveal="fade">
             <div className="eyebrow-label">
               <span /> RUANG UNTUK BERTUMBUH
             </div>
@@ -542,7 +560,7 @@ export default function Landing() {
               </button>
             </div>
           </div>
-          <div className="pricing-grid">
+          <div className="pricing-grid" data-reveal data-stagger>
             {[
               {
                 name: "Free",
@@ -594,7 +612,12 @@ export default function Landing() {
                 <p>{p.desc}</p>
                 <div className="price">
                   <small>Rp</small>
-                  {p.price}
+                  <span
+                    className="price-value"
+                    key={annual ? "annual" : "monthly"}
+                  >
+                    {p.price}
+                  </span>
                   <span>/ bulan</span>
                 </div>
                 <button
@@ -624,7 +647,11 @@ export default function Landing() {
             ))}
           </div>
         </section>
-        <section className="security-strip section-container" id="security">
+        <section
+          className="security-strip section-container"
+          id="security"
+          data-reveal="fade"
+        >
           <ShieldCheck size={29} />
           <div>
             <h3>Ide Anda berharga. Begitu juga data Anda.</h3>
@@ -641,7 +668,7 @@ export default function Landing() {
           </button>
         </section>
         <section className="faq-section section-container" id="faq">
-          <div>
+          <div data-reveal="fade">
             <div className="eyebrow-label">
               <span /> SEBELUM ANDA MULAI
             </div>
@@ -656,7 +683,7 @@ export default function Landing() {
               sedang Anda pikirkan.
             </p>
           </div>
-          <div className="faq-list">
+          <div className="faq-list" data-reveal="fade" data-stagger>
             {faqs.map(([q, a], i) => (
               <article key={q} className={faq === i ? "expanded" : ""}>
                 <button
@@ -684,7 +711,7 @@ export default function Landing() {
         </section>
       </main>
       <footer className="site-footer section-container">
-        <div className="footer-top">
+        <div className="footer-top" data-reveal="fade">
           <div>
             <Logo />
             <p>
@@ -720,7 +747,11 @@ export default function Landing() {
             </button>
           </div>
         </div>
-        <div className="footer-bottom">
+        <div
+          className="footer-bottom"
+          data-reveal="fade"
+          style={revealDelay(140)}
+        >
           <span>
             © {new Date().getFullYear()} PiwuApp. Dibuat untuk mewujudkan ide.
           </span>

@@ -8,7 +8,7 @@ Installer baru atomik 001–008, pemeriksaan read-only tabel/RLS/RPC/bucket, dan
 
 ## Pembaruan terbaru: admin dan hardening
 
-**84/84 unit/integrasi, 57/57 browser lengkap, 8/8 regresi native/tema, build produksi, 11/11 smoke HTTP dan 1/1 tes bundle produksi lulus.** Admin ditambah pencarian server, filter, ekspor CSV, diagnostik dan aksesibilitas tabel. Migration 007 menambahkan rate limit/kuota bersama; 008 menambahkan direktori akun service-only. Produksi fail-closed bila kontrol keamanan/koordinasi tidak tersedia. Routing sandbox tetap memerlukan affinity; belum HA/failover transparan.
+**87/87 unit/integrasi, 62/62 browser lengkap (lima di antaranya regresi motion landing baru), 8/8 regresi native/tema, build produksi, 11/11 smoke HTTP dan 1/1 tes bundle produksi lulus.** Admin ditambah pencarian server, filter, ekspor CSV, diagnostik dan aksesibilitas tabel. Migration 007 menambahkan rate limit/kuota bersama; 008 menambahkan direktori akun service-only. Produksi fail-closed bila kontrol keamanan/koordinasi tidak tersedia. Routing sandbox tetap memerlukan affinity; belum HA/failover transparan.
 
 Monaco utama turun **3.350,19 → 3.201,51 kB**, aset JS **112 → 38**. Scaffold Expo diperbarui ke SDK 57 dan berhasil diekspor oleh Metro/Hermes untuk Android/iOS. **Dependency utama 0 temuan, scaffold Expo masih 15 paket terdampak high (dua advisory upstream)**; perangkat asli, Studio asli, pentest menyeluruh dan cluster produksi belum diuji. Tidak ada konfigurasi provider atau migration live yang diaktifkan.
 
@@ -90,6 +90,14 @@ Verifikasi patch: seluruh 55 tes unit/integrasi lulus dan 9 tes browser terarah 
 - Ilustrasi template/workspace ditandai dekoratif untuk screen reader, label kartu nyata dipertahankan; heading footer diperbaiki dan pilihan periode menggunakan aria-pressed.
 - Validasi browser Chromium: 320×740, 390×844, 600×960, 768×1024, 834×1194, 844×390, 1024×768, 1440×1000, 1920×1080. Memeriksa batas layout tanpa horizontal overflow, kolom, ukuran kontrol, navigasi harga/FAQ/template hingga login, judul admin panjang, dan rotasi viewport tanpa kehilangan prompt. Axe seluruh landing lulus pada 320/834/1440 px. Ini emulasi viewport, bukan pengujian perangkat fisik atau Safari.
 - Production build dan TypeScript berhasil, **seluruh 42 tes browser lulus** (10 regresi responsif baru). Log `.artifacts/responsive-build.log` dan `.artifacts/responsive-full-browser.log`. Peringatan bundle Monaco yang besar tetap ada; tidak ada klaim optimasi bundle pada patch tampilan ini. Screenshot hero tetap memakai reduced-motion/static fallback, bukan verifikasi CDN asli.
+
+## Animasi landing — motion yang senada dengan desain
+
+- Lapisan motion terpisah (`src/components/landing/landing-motion.css`) plus pengendali kecil (`src/components/landing/useLandingMotion.ts`), sehingga header IDE, dashboard, auth dan admin tidak berubah. Palet, easing 220 ms ala navbar, dan skala tipografi landing tetap dipakai.
+- Yang bergerak: entrance hero bertahap dengan garis bawah yang tergambar, reveal saat scroll (template, langkah, fitur, harga, FAQ, footer) dengan stagger, aurora gradien hero dan bloom CTA yang berembus lambat, shimmer pada baris skeleton ilustrasi, sheen tombol/kartu, micro-interaction hover dan aktif, switch periode harga yang mengulang angka, popover navbar, dan indikator progres tipis di bawah navbar.
+- Hanya `transform`/`opacity` yang dianimasikan dan tidak ada elemen dekoratif tambahan yang menerima event pointer, jadi tidak ada layout shift atau area klik baru. Animasi reveal di-settle setelah selesai agar transform hover berikutnya tidak terblokir.
+- Komitmen aksesibilitas: konten hanya disembunyikan setelah JavaScript menambahkan `html.js-reveal`; tanpa JavaScript/IntersectionObserver semua blok tampil penuh, dan `prefers-reduced-motion: reduce` mematikan seluruh animasi (garis bawah tetap tergambar, indikator progres disembunyikan).
+- Verifikasi: spec baru `tests/landing-motion.spec.ts` (5 tes: reveal saat scroll, reduced motion, spotlight/progres, harga tahunan, fallback tanpa lapisan reveal) plus 15 tes landing lama; suite browser lengkap **62/62 lulus** dalam 3,5 menit. Gerakan dinilai dari hasil tangkapan layar Chromium, bukan pengujian perangkat asli atau Safari.
 
 ## Jalur layanan nyata — demo interaktif dinonaktifkan
 
