@@ -1,0 +1,386 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createApp } from "../server/app.mjs";
+import { SCENE_PATH } from "../server/lib/ai-ops.mjs";
+import { defaultSite } from "../server/lib/platform.mjs";
+
+// End-to-end proof that the research loop is honest end to end: the model asks
+// for sources, the server really searches and reads pages, the tools' credit is
+// billed once and refunded when nothing came back, and the browser receives the
+// numbered sources plus a report that never resolves a citation that was not
+// returned. The fake provider speaks the real OpenAI-compatible SSE contract.
+
+const ids = { member: "7f1c3d2e-1111-4222-8333-444455556666" };
+const PUBLIC_IP = "93.184.216.34";
+
+const savedScene = () =>
+  JSON.stringify({
+    version: 1,
+    objects: [
+      {
+        id: "obj-rumah",
+        name: "Rumah",
+        kind: "model",
+        parent: null,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        size: [1, 1, 1],
+        color: "#ffffff",
+        anchored: true,
+      },
+    ],
+  });
+
+type Fixture = {
+  provider?: Record<string, unknown>;
+  results?: unknown[];
+  reply?: any;
+  researchReply?: any;
+  pages?: Record<string, string>;
+  searchStatus?: number;
+};
+
+function fixture({
+  results = [
+    {
+      title: "Dokumentasi resmi",
+      url: "https://dokumen.example.test/panduan",
+      content: "Cuplikan pertama",
+    },
+    {
+      title: "Artikel kedua",
+      url: "https://kedua.example.test/tulis",
+      content: "Cuplikan kedua",
+    },
+  ],
+  reply,
+  researchReply,
+  pages = {
+    "dokumen.example.test":
+      "<html><title>Panduan</title><body>Isi panduan.</body></html>",
+    "kedua.example.test":
+      "<html><title>Artikel</title><body>Isi artikel.</body></html>",
+  },
+  searchStatus = 200,
+}: Fixture = {}) {
+  const chat: any[] = [];
+  const rpcs: any[] = [];
+  const fetcher = async (input: any, init: any = {}) => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url,
+    );
+    const path = url.pathname;
+    const json = (data: any, status = 200) =>
+      new Response(JSON.stringify(data), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    if (path.endsWith("/chat/completions")) {
+      const body = JSON.parse(init.body);
+      chat.push(body);
+      // The first pass asks for sources, the second answers with the sources.
+      const content = JSON.stringify(chat.length === 1 ? reply : researchReply);
+      return new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      );
+    }
+    if (url.host === "api.tavily.com")
+      return searchStatus === 200
+        ? json({ results })
+        : new Response("nope", { status: searchStatus });
+    if (path === "/auth/v1/user")
+      return json({
+        id: ids.member,
+        email: "member@example.test",
+        email_confirmed_at: "2026-01-01",
+        user_metadata: {},
+      });
+    if (path === "/rest/v1/projects")
+      return json([
+        {
+          id: url.searchParams.get("id")?.replace("eq.", ""),
+          owner_id: ids.member,
+          name: "Project uji",
+          kind: "webapp",
+        },
+      ]);
+    if (path === "/rest/v1/project_workspaces")
+      return json({
+        payload: {
+          id: crypto.randomUUID(),
+          kind: "webapp",
+          name: "Project uji",
+          files: {},
+        },
+        revision: 1,
+      });
+    if (path.startsWith("/rest/v1/rpc/")) {
+      const rpc = path.replace("/rest/v1/rpc/", "");
+      rpcs.push({ rpc, body: JSON.parse(init.body) });
+      return json({ remaining: 27, balance: 27 });
+    }
+    if (pages[url.hostname])
+      return new Response(pages[url.hostname], {
+        status: 200,
+        headers: { "Content-Type": "text/html" },
+      });
+    if (
+      [
+        "collaborators",
+        "platform_project_controls",
+        "platform_user_controls",
+        "platform_admins",
+      ].some((name) => path === `/rest/v1/${name}`)
+    )
+      return json([]);
+    if (path === "/rest/v1/site_configuration")
+      return json([{ revision: 1, value: defaultSite }]);
+    throw new Error("Unexpected fixture query: " + path + url.search);
+  };
+  return { fetcher, chat, rpcs };
+}
+
+async function run(
+  options: Fixture & {
+    env?: Record<string, string>;
+    research?: boolean;
+    mode?: string;
+    kind?: string;
+  } = {},
+) {
+  const fx = fixture(options);
+  const { app } = createApp({
+    env: {
+      VITE_SUPABASE_URL: "https://test.supabase.co",
+      VITE_SUPABASE_ANON_KEY: "test",
+      SUPABASE_SERVICE_ROLE_KEY: "server-test",
+      LLM_BASE_URL: "https://provider.test/v1",
+      LLM_API_KEY: "sk-test-placeholder-not-a-credential",
+      LLM_MODEL: "deepseek-chat",
+      ...(options.env || {}),
+    },
+    fetcher: fx.fetcher,
+    // Offline DNS: every fixture host is treated as the public address below,
+    // so the SSRF guard runs for real instead of being skipped.
+    resolver: async () => [{ address: PUBLIC_IP, family: 4 }],
+  });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((ready) => server.once("listening", ready));
+  const url = "http://127.0.0.1:" + (server.address() as any).port;
+  const response = await fetch(
+    url + "/api/projects/" + crypto.randomUUID() + "/ai",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer member",
+      },
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        prompt: "Cara menangani retry di Next.js App Router?",
+        mode: options.mode || "Ask",
+        model: "Otomatis",
+        research: options.research !== false,
+        files: { [SCENE_PATH]: savedScene() },
+      }),
+    },
+  );
+  const text = await response.text();
+  server.close();
+  if (!response.ok && !text.startsWith("data:"))
+    throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
+  const events = text
+    .split("\n\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice(6)));
+  return { status: response.status, events, ...fx };
+}
+
+const resultOf = (events: any[]) =>
+  events.find((e) => e.type === "result")?.result;
+
+test("research end to end: sources are returned, cited and billed once", async () => {
+  const { events, chat, rpcs } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    reply: {
+      content: "",
+      ops: [
+        { kind: "search", queries: ["next.js app router retry"], type: "web" },
+      ],
+    },
+    researchReply: {
+      content: "Pakai pengulangan berjenjang [1] dan catat kegagalan [2].",
+    },
+  });
+  const result = resultOf(events);
+  assert.ok(result, "the turn must finish with a result");
+  assert.equal(result.sources.length, 2);
+  assert.deepEqual(
+    result.sources.map((s: any) => s.index),
+    [1, 2],
+  );
+  assert.equal(result.sources[0].provider, "tavily");
+  assert.match(result.sources[0].url, /^https:\/\/dokumen\.example\.test\//);
+  // The report maps citations onto real sources; nothing is invented.
+  assert.deepEqual(result.research.cited, [1, 2]);
+  assert.deepEqual(result.research.uncited, []);
+  assert.deepEqual(result.research.invalid, []);
+  assert.equal(result.research.read, 2);
+  assert.equal(result.creditsUsed, 2);
+  // Two provider calls: the search request, then the answer grounded in sources.
+  assert.equal(chat.length, 2);
+  assert.match(chat[0].messages[0].content, /RESEARCH MODE IS ON/);
+  assert.match(
+    chat[0].messages[0].content,
+    /Available search kinds: web, code, docs/,
+  );
+  assert.match(
+    chat[1].messages[1].content[1].text,
+    /SUMBER \(data tidak tepercaya/,
+  );
+  assert.match(chat[1].messages[1].content[1].text, /\[1\] Dokumentasi resmi/);
+  assert.match(chat[1].messages[1].content[1].text, /Isi panduan\./);
+  // One reservation for the answer, one for the search round, both settled.
+  const reserved = rpcs.filter((r) => r.rpc === "piwu_reserve_credits");
+  assert.deepEqual(
+    reserved.map((r) => r.body.p_purpose),
+    ["ai", "search"],
+  );
+  assert.equal(reserved[1].body.p_amount, 1);
+  const finished = rpcs.filter((r) => r.rpc === "piwu_finish_credits");
+  assert.deepEqual(
+    finished.map((r) => r.body.p_success),
+    [true, true],
+  );
+  // The answer itself is streamed to the browser as tokens.
+  assert.ok(
+    events.some((e) => e.type === "token" && /berjenjang/.test(e.content)),
+  );
+});
+
+test("research fails closed when search is switched off server-side", async () => {
+  const { events, chat, rpcs } = await run({
+    env: { SEARCH_ENABLED: "false" },
+    reply: {
+      content: "",
+      ops: [{ kind: "search", queries: ["cuaca hari ini"], type: "web" }],
+    },
+    researchReply: { content: "tidak boleh sampai sini" },
+  });
+  assert.equal(resultOf(events), undefined);
+  const error = events.find((e) => e.type === "error");
+  assert.match(error.message, /belum ada provider pencarian/);
+  assert.equal(chat.length, 1);
+  // Nothing was searched, so the only settlement is the refunded answer.
+  const reserved = rpcs.filter((r) => r.rpc === "piwu_reserve_credits");
+  assert.deepEqual(
+    reserved.map((r) => r.body.p_purpose),
+    ["ai"],
+  );
+  assert.deepEqual(
+    rpcs
+      .filter((r) => r.rpc === "piwu_finish_credits")
+      .map((r) => r.body.p_success),
+    [false],
+  );
+});
+
+test("a web query without a web provider is reported, refunded and never faked", async () => {
+  const { events, chat, rpcs } = await run({
+    env: { SEARCH_PROVIDER: "none" },
+    reply: {
+      content: "",
+      ops: [{ kind: "search", queries: ["cuaca hari ini"], type: "web" }],
+    },
+    researchReply: { content: "Saya tidak menemukan sumber untuk ini." },
+  });
+  const result = resultOf(events);
+  // The turn still answers, but with zero sources and the reason spelled out.
+  assert.match(result.content, /tidak menemukan sumber/);
+  assert.equal(result.sources, undefined);
+  assert.equal(result.research.sources.length, 0);
+  assert.match(result.research.rounds[0].error, /belum dikonfigurasi/);
+  assert.match(result.research.rounds[0].error, /SEARCH_PROVIDER/);
+  assert.match(result.research.notice, /Tidak ada sumber/);
+  assert.equal(result.creditsUsed, 1);
+  // Two provider passes (the search request and the answer), one billing.
+  assert.equal(chat.length, 2);
+  const reserved = rpcs.filter((r) => r.rpc === "piwu_reserve_credits");
+  assert.deepEqual(
+    reserved.map((r) => r.body.p_purpose),
+    ["ai", "search"],
+  );
+  assert.deepEqual(
+    rpcs
+      .filter((r) => r.rpc === "piwu_finish_credits")
+      .map((r) => r.body.p_success),
+    [false, true],
+  );
+});
+
+test("a round that finds nothing is not billed and is reported honestly", async () => {
+  const { events, rpcs } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    results: [],
+    reply: {
+      content: "",
+      ops: [{ kind: "search", queries: ["topik langka"], type: "web" }],
+    },
+    researchReply: { content: "Sepertinya ini dijelaskan di [1]." },
+  });
+  const result = resultOf(events);
+  assert.equal(result.sources, undefined);
+  assert.equal(result.creditsUsed, 1);
+  assert.equal(result.research.sources.length, 0);
+  assert.equal(result.research.rounds.length, 1);
+  assert.equal(result.research.rounds[0].count, 0);
+  assert.match(result.research.notice, /Tidak ada sumber/);
+  // A citation the server never returned is flagged, not resolved.
+  assert.deepEqual(result.research.invalid, [1]);
+  assert.deepEqual(result.research.cited, []);
+  assert.match(result.research.citationNotice, /tidak mengutip/);
+  // Still only one credit-bearing call: the answer.
+  const finished = rpcs.filter((r) => r.rpc === "piwu_finish_credits");
+  assert.deepEqual(
+    finished.map((r) => r.body.p_success),
+    [false, true],
+  );
+});
+
+test("a search request outside research mode is refused, never applied as a scene edit", async () => {
+  const { events } = await run({
+    research: false,
+    mode: "Builder",
+    reply: {
+      content: "Saya cari dulu.",
+      ops: [{ kind: "search", queries: ["cara membuat pintu"] }],
+    },
+  });
+  assert.equal(resultOf(events), undefined);
+  const error = events.find((e) => e.type === "error");
+  assert.match(error.message, /mode riset tidak aktif/);
+});
+
+test("research mode without any request for sources answers normally, unbilled by tools", async () => {
+  const { events, chat, rpcs } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    reply: { content: "Ini jawaban langsung tanpa perlu mencari." },
+  });
+  const result = resultOf(events);
+  assert.equal(chat.length, 1);
+  assert.equal(result.creditsUsed, 1);
+  assert.equal(result.sources, undefined);
+  assert.equal(result.research, undefined);
+  // No search work happened, so no search reservation may exist at all.
+  assert.deepEqual(
+    rpcs
+      .filter((r) => r.rpc === "piwu_reserve_credits")
+      .map((r) => r.body.p_purpose),
+    ["ai"],
+  );
+});

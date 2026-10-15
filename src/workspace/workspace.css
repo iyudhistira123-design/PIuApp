@@ -977,6 +977,74 @@
   color: var(--ide-muted, #7f9188);
   margin-top: 6px;
 }
+/* Research sources: numbered like the citations in the answer, clickable, and
+   explicit about which ones the answer never used. */
+.ai-sources {
+  background: var(--ide-bg, #162820);
+  border: 1px solid var(--ide-border, #2b4736);
+  border-radius: 6px;
+  margin-top: 13px;
+  padding: 10px;
+}
+.ai-sources .sources-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 7px;
+  color: var(--ide-accent, #82baff);
+  width: 100%;
+  text-align: left;
+}
+.ai-sources ol {
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.ai-sources li {
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid var(--ide-border, #2b4736);
+  padding-left: 8px;
+}
+.ai-sources li a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  line-height: 1.6;
+  color: var(--ide-text, #cfd8d2);
+  overflow-wrap: anywhere;
+}
+.ai-sources li a:hover {
+  color: var(--ide-accent, #82baff);
+  text-decoration: underline;
+}
+.ai-sources li small {
+  font-size: 7px;
+  color: var(--ide-muted, #7f9188);
+}
+.ai-sources li span {
+  font-size: 7px;
+  line-height: 1.9;
+  color: var(--ide-subtle, #717887);
+}
+.ai-sources > small {
+  display: block;
+  font-size: 7px;
+  line-height: 1.8;
+  color: var(--ide-muted, #7f9188);
+  margin-top: 8px;
+}
+.ai-sources > small.warn {
+  color: var(--ide-warning, #efcf87);
+}
+/* The research toggle uses the shared icon button pressed state. */
+.ws-icon[aria-pressed="true"] {
+  background: var(--ide-accent-bg, #243b55);
+  color: var(--ide-accent, #82baff);
+}
 .message-actions {
   display: flex;
   gap: 11px;

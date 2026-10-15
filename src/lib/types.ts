@@ -16,6 +16,35 @@ export interface OpsReport {
   sceneChanged: boolean;
   note: string;
 }
+/** One numbered search result the server actually retrieved. */
+export interface SourceRef {
+  index: number;
+  provider: string;
+  kind: string;
+  title: string;
+  url: string;
+  snippet?: string;
+}
+export interface ResearchRound {
+  query: string;
+  kind: string;
+  provider: string;
+  label: string;
+  cached: boolean;
+  count: number;
+  error: string;
+}
+/** Honest report of the research round: what was searched, what was cited. */
+export interface ResearchReport {
+  rounds: ResearchRound[];
+  sources: SourceRef[];
+  read: number;
+  notice: string;
+  cited: number[];
+  uncited: number[];
+  invalid: number[];
+  citationNotice?: string;
+}
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -23,6 +52,9 @@ export interface Message {
   mode: Mode;
   files?: string[];
   ops?: OpsReport;
+  /** Numbered sources behind the answer, kept so the citations stay checkable. */
+  sources?: SourceRef[];
+  research?: ResearchReport;
   summary?: string[];
   /** Model the provider answered with, shown on the reply. */
   model?: string;

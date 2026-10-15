@@ -103,6 +103,11 @@ import "../workspace/theme.css";
 // Remembered per account, like the IDE theme. Tier presets stay valid even
 // when the provider list cannot be read.
 const MODEL_PREFERENCE_KEY = "piwu-ai-model-v1";
+// Research mode is remembered per account too, so a user who wants sources
+// does not have to switch it on again in every session.
+const RESEARCH_PREFERENCE_KEY = "piwu-ai-research-v1";
+const readStoredResearch = (scope: string): boolean =>
+  workspaceStorage.getItem(`${RESEARCH_PREFERENCE_KEY}:${scope}`) === "1";
 const readStoredModel = (scope: string): Model => {
   const stored = workspaceStorage.getItem(`${MODEL_PREFERENCE_KEY}:${scope}`);
   if (typeof stored !== "string" || !stored) return "Otomatis";
@@ -218,6 +223,9 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [mode, setMode] = useState<Mode>(store.pendingMode || "Builder");
   const modelScope = store.user?.id || "demo";
   const [model, setModel] = useState<Model>(() => readStoredModel(modelScope));
+  const [research, setResearch] = useState<boolean>(() =>
+    readStoredResearch(modelScope),
+  );
   const [catalog, setCatalog] = useState<AiModelCatalog | null>(null);
   const [catalogStatus, setCatalogStatus] = useState<CatalogStatus>("idle");
   const [catalogError, setCatalogError] = useState("");
@@ -243,6 +251,7 @@ function WorkspaceContent({ project }: { project: Project }) {
     "unavailable",
   );
   const [summaryOpen, setSummaryOpen] = useState("");
+  const [sourcesOpen, setSourcesOpen] = useState("");
   const [comment, setComment] = useState("");
   const [designText, setDesignText] = useState("");
   const [designColor, setDesignColor] = useState("#2857aa");
@@ -389,6 +398,12 @@ function WorkspaceContent({ project }: { project: Project }) {
     workspaceStorage.setItem(`${MODEL_PREFERENCE_KEY}:${modelScope}`, model);
   }, [model, modelScope]);
   useEffect(() => {
+    workspaceStorage.setItem(
+      `${RESEARCH_PREFERENCE_KEY}:${modelScope}`,
+      research ? "1" : "0",
+    );
+  }, [research, modelScope]);
+  useEffect(() => {
     const fn = (e: MessageEvent) => {
       if (e.source !== previewRef.current?.contentWindow) return;
       if (e.data?.type === "piwu-error")
@@ -464,6 +479,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           files: project.files,
           mode: currentMode,
           model,
+          research,
           onToken: setStreaming,
           signal: controller.signal,
         });
@@ -471,17 +487,23 @@ function WorkspaceContent({ project }: { project: Project }) {
         setProviderVerified(true);
         setAttachment(null);
         setReferences([]);
+        const answerId = crypto.randomUUID();
         store.addMessage(id, {
-          id: crypto.randomUUID(),
+          id: answerId,
           role: "assistant",
           content: result.content,
           files: result.files ? Object.keys(result.files) : undefined,
           summary: result.summary,
           ops: result.ops,
+          sources: result.sources,
+          research: result.research,
           model: result.model,
           mode: currentMode,
           at: Date.now(),
         });
+        // The sources behind this answer are open straight away; the header
+        // stays clickable to fold them back.
+        if (result.sources?.length) setSourcesOpen(answerId);
         if (currentMode === "Plan") {
           store.updateProject(id, {
             plan: result.plan!,
@@ -1995,6 +2017,70 @@ function WorkspaceContent({ project }: { project: Project }) {
                                 <small>{m.ops.note}</small>
                               </div>
                             )}
+                            {m.role === "assistant" && m.sources && (
+                              <div className="ai-sources">
+                                <button
+                                  className="sources-headline"
+                                  aria-expanded={sourcesOpen === m.id}
+                                  onClick={() =>
+                                    setSourcesOpen(
+                                      sourcesOpen === m.id ? "" : m.id,
+                                    )
+                                  }
+                                >
+                                  {sourcesOpen === m.id ? (
+                                    <ChevronDown size={11} />
+                                  ) : (
+                                    <ChevronRight size={11} />
+                                  )}
+                                  Sumber · {m.sources.length}
+                                  {m.research
+                                    ? ` dari ${m.research.rounds.filter((r) => r.provider).length} pencarian`
+                                    : ""}
+                                </button>
+                                {sourcesOpen === m.id && (
+                                  <>
+                                    <ol>
+                                      {m.sources.map((s) => (
+                                        <li key={s.index}>
+                                          <a
+                                            href={s.url}
+                                            target="_blank"
+                                            rel="noreferrer noopener"
+                                          >
+                                            {s.title || s.url}
+                                            <ExternalLink size={10} />
+                                          </a>
+                                          <small>
+                                            {s.kind} · {s.provider}
+                                            {m.research?.cited.includes(s.index)
+                                              ? " · dikutip"
+                                              : " · tidak dikutip"}
+                                          </small>
+                                          {s.snippet && (
+                                            <span>{s.snippet}</span>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ol>
+                                    <small>{m.research?.notice}</small>
+                                    {!!m.research?.invalid.length && (
+                                      <small className="warn">
+                                        Nomor sumber yang tidak pernah
+                                        dikembalikan:{" "}
+                                        {m.research.invalid.join(", ")} —
+                                        diabaikan, bukan dianggap sumber.
+                                      </small>
+                                    )}
+                                    {m.research?.citationNotice && (
+                                      <small className="warn">
+                                        {m.research.citationNotice}
+                                      </small>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                             {m.role === "assistant" && (
                               <div className="message-actions">
                                 <button
@@ -2222,6 +2308,26 @@ function WorkspaceContent({ project }: { project: Project }) {
                             }
                           >
                             <Sparkles size={13} />
+                          </button>
+                          <button
+                            className="ws-icon"
+                            title={
+                              research
+                                ? "Mode riset aktif: AI boleh mencari sumber lalu mengutipnya"
+                                : "Mode riset: biarkan AI mencari dan mengutip sumber"
+                            }
+                            aria-label="Mode riset"
+                            aria-pressed={research}
+                            onClick={() => {
+                              setResearch((on) => !on);
+                              store.notify(
+                                research
+                                  ? "Mode riset dimatikan."
+                                  : "Mode riset aktif. AI boleh mencari sumber; 1 kredit per ronde.",
+                              );
+                            }}
+                          >
+                            <Globe2 size={13} />
                           </button>
                           <button
                             className="ws-icon"

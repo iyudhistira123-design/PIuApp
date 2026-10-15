@@ -22,6 +22,7 @@ export function createReadinessReader(
       administration: configured("cloud"),
       studio: configured("cloud"),
       ai: configured("ai"),
+      search: configured("search"),
       sandbox: configured("sandbox"),
       publish: configured("publish"),
       payments: configured("payments"),

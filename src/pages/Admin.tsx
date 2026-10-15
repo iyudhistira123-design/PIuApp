@@ -1237,6 +1237,7 @@ export function AdminPanel({
                                   {
                                     cloud: "Database cloud",
                                     ai: "AI builder",
+                                    search: "Riset & pencarian",
                                     sandbox: "Sandbox",
                                     publish: "Hosting",
                                     payments: "Pembayaran",

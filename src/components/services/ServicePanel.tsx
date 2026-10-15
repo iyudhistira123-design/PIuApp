@@ -839,6 +839,7 @@ export default function ServicePanel({
                     auth: "Autentikasi",
                     cloud: "Database cloud",
                     ai: "Provider AI",
+                    search: "Riset & pencarian",
                     whatsapp: "OTP WhatsApp",
                     sandbox: "Sandbox",
                     publish: "Publish",

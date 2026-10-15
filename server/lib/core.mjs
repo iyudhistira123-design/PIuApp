@@ -153,6 +153,12 @@ export function appOrigin(env) {
     throw new HttpError(503, "APP_BASE_URL HTTPS belum dikonfigurasi.");
   }
 }
+/** `SEARCH_ENABLED=false` switches every outbound search off, keyless ones
+ * included, so an operator can keep the server from making those calls. */
+export function searchDisabled(env) {
+  const flag = String(env.SEARCH_ENABLED ?? "true").toLowerCase();
+  return flag === "false" || flag === "0" || flag === "off" || flag === "no";
+}
 export function capabilities(env) {
   const auth = Boolean(env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY);
   const db = auth && Boolean(env.SUPABASE_SERVICE_ROLE_KEY);
@@ -162,6 +168,10 @@ export function capabilities(env) {
     // LLM_MODEL is optional: when it is empty the first model the API key
     // offers is used, resolved per request from GET {LLM_BASE_URL}/models.
     ai: db && Boolean(env.LLM_API_KEY && env.LLM_BASE_URL),
+    // Research mode works without any search key because code and docs
+    // providers are keyless; a WEB provider additionally needs SEARCH_PROVIDER
+    // and SEARCH_API_KEY, and that detail is reported by researchStatus().
+    search: db && !searchDisabled(env),
     whatsapp:
       db &&
       Boolean(

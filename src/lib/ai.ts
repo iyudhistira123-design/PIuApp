@@ -1,5 +1,12 @@
 import type { Attachment } from "../services/api";
-import type { Mode, Model, OpsReport, Plan } from "./types";
+import type {
+  Mode,
+  Model,
+  OpsReport,
+  Plan,
+  SourceRef,
+  ResearchReport,
+} from "./types";
 import { supabase } from "./supabase";
 import { useStore } from "./store";
 export interface AIResult {
@@ -13,6 +20,9 @@ export interface AIResult {
   tier?: string;
   /** Present only when the reply asked for deterministic scene edits. */
   ops?: OpsReport;
+  /** Numbered sources plus the citation report, when research mode ran. */
+  sources?: SourceRef[];
+  research?: ResearchReport;
 }
 
 /** Tier presets; any other value is a concrete model id from the API key. */
@@ -99,6 +109,7 @@ export async function streamAI({
   files,
   mode,
   model,
+  research = false,
   onToken,
   signal,
 }: {
@@ -109,6 +120,8 @@ export async function streamAI({
   files: Record<string, string>;
   mode: Mode;
   model: string;
+  /** Opt-in: the reply may run one bounded search round and cite sources. */
+  research?: boolean;
   onToken: (s: string) => void;
   signal?: AbortSignal;
 }): Promise<AIResult> {
@@ -133,6 +146,7 @@ export async function streamAI({
       model,
       attachments,
       references,
+      research,
     }),
     signal,
   });

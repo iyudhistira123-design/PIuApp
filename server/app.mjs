@@ -27,10 +27,13 @@ export function createApp({
   context,
   sandbox,
   hosting,
+  resolver,
   worker = false,
 } = {}) {
   const app = express(),
     ctx = context || createContext(env, fetcher);
+  // Tests inject a resolver so the SSRF guard can be exercised offline.
+  if (resolver) ctx.resolver = resolver;
   const coordination = createCoordination(ctx);
   app.locals.coordination = coordination;
   sandbox ||= new SandboxProvider(env, coordination);
