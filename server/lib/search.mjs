@@ -30,6 +30,27 @@ const clean = (value, max = SNIPPET_MAX) =>
     .trim()
     .slice(0, max);
 
+// Provider text may carry markup (grep.app highlights hits with <mark>, snippets
+// arrive HTML-escaped). Neither the prompt nor the chat should show tags, so
+// provider text is flattened to plain text here — user queries are not, because
+// `#include <stdio.h>` is a legitimate search.
+const ENTITIES = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&apos;": "'",
+  "&nbsp;": " ",
+};
+const plain = (value, max) =>
+  clean(
+    String(value ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? " "),
+    max,
+  );
+
 const host = (url) => {
   try {
     return new URL(url).host.replace(/^www\./, "");
@@ -44,9 +65,9 @@ const normalize = (provider, kind, rows) =>
     .map((row) => ({
       provider,
       kind,
-      title: clean(row.title, 160) || host(row.url || ""),
+      title: plain(row.title, 160) || host(row.url || ""),
       url: clean(row.url, 300),
-      snippet: clean(row.snippet),
+      snippet: plain(row.snippet),
     }))
     .filter((row) => /^https:\/\//.test(row.url))
     .slice(0, SEARCH_RESULTS_MAX);

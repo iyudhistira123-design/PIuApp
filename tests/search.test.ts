@@ -70,7 +70,7 @@ const capabilityFixture = {
 
 function fixture(
   env: Record<string, string> = {},
-  { fail }: { fail?: string } = {},
+  { fail, payload }: { fail?: string; payload?: any } = {},
 ) {
   const calls: string[] = [];
   const ctx = {
@@ -90,6 +90,9 @@ function fixture(
       calls.push(url.host + url.pathname + (url.search || ""));
       if (fail && url.pathname.includes(fail))
         return new Response("nope", { status: 500 });
+      // Lets one test hand a provider response with markup in it.
+      if (payload && url.host === "api.tavily.com")
+        return Response.json(payload);
       for (const [name, payload] of Object.entries(capabilityFixture))
         if (url.host.startsWith(name.split(".")[0]) || url.host.includes(name))
           return Response.json(payload);
@@ -272,6 +275,27 @@ test("a page body that looks like a credential is redacted, not copied into the 
   assert.match(text, /teks lain/);
 });
 
+test("provider markup is flattened before it reaches the prompt or the chat", async () => {
+  resetSearchCache();
+  const { ctx } = fixture(
+    { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "k" },
+    {
+      payload: {
+        results: [
+          {
+            title: "<b>Docs</b> &amp; contoh",
+            url: "https://markup.example.test/x",
+            content: "<mark>retry</mark> dengan <code>try/catch</code>",
+          },
+        ],
+      },
+    },
+  );
+  const hit = await searchOne(ctx, { query: "markup", kind: "web" });
+  assert.equal(hit.sources[0].title, "Docs & contoh");
+  assert.equal(hit.sources[0].snippet, "retry dengan try/catch");
+});
+
 test("keyless code and docs search work without any API key", async () => {
   resetSearchCache();
   const { ctx } = fixture({ SEARCH_PROVIDER: "none", SEARCH_API_KEY: "" });
@@ -287,6 +311,9 @@ test("keyless code and docs search work without any API key", async () => {
     "https://github.com/acme/app/blob/HEAD/src/db.ts",
   );
   assert.match(code.sources[0].title, /acme\/app/);
+  // grep.app marks the hit with <mark>; the prompt and chat get plain text.
+  assert.equal(code.sources[0].snippet, "retry");
+  assert.doesNotMatch(code.sources[0].snippet, /<|>/);
 
   const docs = await searchOne(ctx, { query: "next.js routing", kind: "docs" });
   assert.equal(docs.provider, "context7");
