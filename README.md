@@ -8,7 +8,7 @@ Chat-based app builder MVP berbahasa Indonesia. React 19, TypeScript, Vite, Tail
 
 **138/138 unit/integrasi lulus**, suite browser lengkap **78/78 lulus**, lalu regresi native/tema **8/8 lulus**. Build produksi, 11 smoke HTTP, dan tes Chromium pada aset produksi/worker Monaco lulus. Admin kini memiliki pencarian server, filter, CSV aman, diagnostik, serta panel **AI & model**, **rincian kredit per akun** dan **runtime/sandbox** (semuanya baca-saja); migration **007–008** diperlukan. [Laporan terbaru](docs/ADMIN_PRODUCTION_VERIFICATION.md).
 
-Audit dependency utama PiwuApp: **0 temuan diketahui**. **Scaffold Expo SDK 57 masih memiliki 15 paket terdampak severity high dari dua advisory transitif**; export Android/iOS dan TypeScript berhasil, tetapi belum uji perangkat asli. Sebelas kapabilitas layanan masih `not_configured`; belum sertifikasi produksi/pentest. [Acceptance yang masih terblokir](docs/NATIVE_PRODUCTION_ACCEPTANCE.md).
+Audit dependency utama PiwuApp: **0 temuan diketahui**. **Scaffold Expo SDK 57 masih memiliki 15 paket terdampak severity high dari dua advisory transitif**; export Android/iOS dan TypeScript berhasil, tetapi belum uji perangkat asli. Dua belas kapabilitas layanan masih `not_configured` di lingkungan ini (termasuk `search`); belum sertifikasi produksi/pentest. [Acceptance yang masih terblokir](docs/NATIVE_PRODUCTION_ACCEPTANCE.md).
 
 ## Menjalankan
 
