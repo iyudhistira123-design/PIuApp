@@ -15,6 +15,7 @@ const sources = [
     title: "Dokumentasi resmi",
     url: "https://dokumen.example.test/panduan",
     snippet: "Cuplikan pertama",
+    query: "next.js app router retry",
   },
   {
     index: 2,
@@ -23,6 +24,7 @@ const sources = [
     title: "Artikel kedua",
     url: "https://kedua.example.test/tulis",
     snippet: "Cuplikan kedua",
+    query: "error handling app router",
   },
 ];
 const research = {
@@ -204,6 +206,9 @@ test("the chat lists the numbered sources and flags an invented citation", async
   await expect(items.nth(0).locator("a")).toContainText("Dokumentasi resmi");
   await expect(items.nth(0)).toContainText("dikutip");
   await expect(items.nth(1)).toContainText("tidak dikutip");
+  // Two queries in one round: each row says which query found it.
+  await expect(items.nth(0)).toContainText("kueri “next.js app router retry”");
+  await expect(items.nth(1)).toContainText("kueri “error handling app router”");
   await expect(items.nth(0)).toContainText("Cuplikan pertama");
   await expect(panel).toContainText("data tidak tepercaya");
   // A citation number the server never returned is reported, never resolved.

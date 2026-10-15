@@ -24,6 +24,8 @@ export interface SourceRef {
   title: string;
   url: string;
   snippet?: string;
+  /** Query that produced this source, so the panel can explain where it came from. */
+  query?: string;
 }
 export interface ResearchRound {
   query: string;

@@ -72,31 +72,103 @@ const normalize = (provider, kind, rows) =>
     .filter((row) => /^https:\/\//.test(row.url))
     .slice(0, SEARCH_RESULTS_MAX);
 
-const postJson = async (ctx, url, body, headers = {}, timeout = 15000) => {
-  const response = await ctx.fetcher(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeout),
-  });
-  if (!response.ok)
-    throw new HttpError(
-      502,
-      `Provider pencarian menolak permintaan (${response.status}).`,
+// A vendor call is retried only when retrying can help: network failures, timeouts
+// and the statuses vendors use to say "try again later". A 401/404 is final — we
+// never want to burn three attempts (and the user's wait) on a wrong key.
+const RETRY_DEFAULTS = {
+  attempts: 3,
+  baseMs: 400,
+  maxWaitMs: 5000,
+  budgetMs: 30000,
+};
+const retryConfig = (ctx) => ({
+  ...RETRY_DEFAULTS,
+  ...(ctx?.searchRetry || {}),
+});
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const retryableStatus = (status) =>
+  status === 408 || status === 425 || status === 429 || status >= 500;
+const retryAfterMs = (response, maxWaitMs) => {
+  const header = response?.headers?.get?.("retry-after");
+  if (!header) return 0;
+  const seconds = Number(header);
+  const value = Number.isFinite(seconds)
+    ? seconds * 1000
+    : Date.parse(header) - Date.now();
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(value, maxWaitMs);
+};
+
+/**
+ * Runs one vendor request with bounded retries. Non-retryable statuses are final
+ * immediately; the last error message always says how many tries were made.
+ */
+const withRetry = async (ctx, label, send) => {
+  const { attempts, baseMs, maxWaitMs, budgetMs } = retryConfig(ctx);
+  const deadline = Date.now() + budgetMs;
+  let status = 0;
+  let network = "";
+  let tries = 0;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let waitMs = 0;
+    tries = attempt;
+    try {
+      const response = await send();
+      if (response.ok) return response;
+      if (!retryableStatus(response.status))
+        throw new HttpError(
+          502,
+          `${label} menolak permintaan (${response.status}).`,
+        );
+      status = response.status;
+      network = "";
+      waitMs = retryAfterMs(response, maxWaitMs);
+      await response.body?.cancel?.().catch(() => {});
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      // Network error, DNS failure or our own timeout: worth one more try.
+      network = error?.name === "TimeoutError" ? "timeout" : "gagal dihubungi";
+      status = 0;
+    }
+    if (attempt === attempts) break;
+    if (Date.now() >= deadline) {
+      // The budget, not the attempt limit, stopped us — say so honestly.
+      break;
+    }
+    const backoff = Math.min(maxWaitMs, baseMs * 2 ** (attempt - 1));
+    await sleep(
+      Math.min(waitMs || backoff, Math.max(0, deadline - Date.now())),
     );
+  }
+  const reason = status ? `menolak permintaan (${status})` : network;
+  const stopped = tries < attempts ? " (batas waktu percobaan tercapai)" : "";
+  throw new HttpError(
+    502,
+    `${label} ${reason} setelah ${tries} percobaan${stopped}.`,
+  );
+};
+
+const postJson = async (ctx, url, body, headers = {}, timeout = 15000) => {
+  const response = await withRetry(ctx, "Provider pencarian", () =>
+    ctx.fetcher(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeout),
+    }),
+  );
+  // A retried call is otherwise invisible; the status code is a response header
+  // fact, so expose the attempt count for tests and diagnostics only.
   return response.json();
 };
 
 const getJson = async (ctx, url, headers = {}, timeout = 15000) => {
-  const response = await ctx.fetcher(url, {
-    headers,
-    signal: AbortSignal.timeout(timeout),
-  });
-  if (!response.ok)
-    throw new HttpError(
-      502,
-      `Sumber pencarian menolak permintaan (${response.status}).`,
-    );
+  const response = await withRetry(ctx, "Sumber pencarian", () =>
+    ctx.fetcher(url, {
+      headers,
+      signal: AbortSignal.timeout(timeout),
+    }),
+  );
   // Docs endpoints answer with text/plain, so read text and parse when it is JSON.
   const body = await response.text();
   if (/^\s*[[{]/.test(body))
@@ -121,10 +193,18 @@ export const providers = {
     label: "Tavily",
     env: "SEARCH_API_KEY",
     async run(ctx, query) {
+      // Optional Indonesian (or any) bias, only when the operator asks for it:
+      // a default bias would quietly ruin English documentation queries.
+      const locale = {};
+      const country = clean(ctx.env.SEARCH_COUNTRY, 40);
+      const language = clean(ctx.env.SEARCH_LANGUAGE, 12);
+      if (country) locale.country = country;
+      if (language) locale.language = language;
       const data = await postJson(
         ctx,
         "https://api.tavily.com/search",
         {
+          ...locale,
           query,
           max_results: SEARCH_RESULTS_MAX,
           search_depth: "basic",
@@ -421,8 +501,72 @@ export async function searchOne(ctx, { query, kind = "web", provider } = {}) {
 }
 
 /**
- * Runs a batch of queries (from an AI `search` op) with a hard cap, dedupes by
- * URL, and never lets provider text carry control characters into the prompt.
+ * Tracking parameters and a trailing slash do not change the page, so they must
+ * not make the same result look like a new source across queries or rounds.
+ */
+export function canonicalSourceKey(url) {
+  try {
+    const u = new URL(url);
+    const drop = [...u.searchParams.keys()].filter((key) =>
+      /^(utm_|fbclid$|gclid$|mc_cid$|mc_eid$|ref_src$)/i.test(key),
+    );
+    for (const key of drop) u.searchParams.delete(key);
+    const query = [...u.searchParams.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&");
+    const host = u.host.toLowerCase().replace(/^www\./, "");
+    const path = u.pathname.replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+    return host + path + (query ? "?" + query : "");
+  } catch {
+    return String(url || "");
+  }
+}
+
+const STOPWORDS =
+  /^(the|and|for|with|from|that|this|you|your|are|was|were|how|what|when|why|does|into|out|not|but|all|any|can|use|using|dan|yang|untuk|dengan|dari|pada|ini|itu|adalah|atau|juga|ke|di|apa|bagaimana|cara|sebuah|the|of|in|on|to)$/i;
+const terms = (text) =>
+  new Set(
+    String(text || "")
+      .toLowerCase()
+      .split(/[^a-z0-9.+_-]+/)
+      .filter((word) => word.length >= 4 && !STOPWORDS.test(word)),
+  );
+
+/**
+ * Cheap lexical relevance: how many query terms the title (weight 2) and the
+ * snippet (weight 1) share. No extra vendor call, and it only reorders results
+ * that already came back — it never invents or drops a source.
+ */
+export function relevanceScore(source, query) {
+  const wanted = terms(query);
+  if (!wanted.size) return 0;
+  const title = terms(source.title);
+  const snippet = terms(source.snippet);
+  let score = 0;
+  for (const term of wanted) {
+    if (title.has(term)) score += 2;
+    else if (snippet.has(term)) score += 1;
+  }
+  return score;
+}
+
+/** Titles that are near-identical on the same host are the same page. */
+export function sameTitle(a, b) {
+  const left = terms(a);
+  const right = terms(b);
+  if (!left.size || !right.size) return false;
+  let shared = 0;
+  for (const term of left) if (right.has(term)) shared++;
+  return shared / Math.min(left.size, right.size) >= 0.85;
+}
+
+/**
+ * Runs a batch of queries (from an AI `search` op) with a hard cap, reranks each
+ * query's results by lexical relevance, drops duplicates (same canonical URL, or
+ * near-identical title on the same host) and never lets provider text carry
+ * control characters into the prompt. Every kept source reports the query that
+ * produced it, so the panel can explain where a source came from.
  */
 export async function runSearch(ctx, { queries, kind = "web", provider } = {}) {
   const list = (Array.isArray(queries) ? queries : [queries])
@@ -432,6 +576,7 @@ export async function runSearch(ctx, { queries, kind = "web", provider } = {}) {
   if (!list.length) throw new HttpError(400, "Tidak ada kata kunci pencarian.");
   const rounds = [];
   const seen = new Set();
+  const seenTitles = [];
   const sources = [];
   for (const query of list) {
     let result;
@@ -450,11 +595,25 @@ export async function runSearch(ctx, { queries, kind = "web", provider } = {}) {
       });
       continue;
     }
+    const ranked = result.sources
+      .map((source) => ({ source, score: relevanceScore(source, query) }))
+      .sort((a, b) => b.score - a.score);
     let added = 0;
-    for (const source of result.sources) {
-      if (seen.has(source.url)) continue;
-      seen.add(source.url);
-      sources.push({ ...source, index: sources.length + 1 });
+    let duplicates = 0;
+    for (const { source } of ranked) {
+      const key = canonicalSourceKey(source.url);
+      const duplicateTitle = seenTitles.some(
+        (known) =>
+          known.host === host(source.url) &&
+          sameTitle(known.title, source.title),
+      );
+      if (seen.has(key) || duplicateTitle) {
+        duplicates++;
+        continue;
+      }
+      seen.add(key);
+      seenTitles.push({ host: host(source.url), title: source.title });
+      sources.push({ ...source, query, index: sources.length + 1 });
       added++;
     }
     rounds.push({
@@ -464,6 +623,7 @@ export async function runSearch(ctx, { queries, kind = "web", provider } = {}) {
       label: result.label,
       cached: result.cached,
       count: added,
+      duplicates,
       error: "",
     });
   }

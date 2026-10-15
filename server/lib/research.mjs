@@ -4,6 +4,7 @@ import { HttpError } from "./core.mjs";
 import {
   SEARCH_QUERIES_MAX,
   assertCleanSources,
+  canonicalSourceKey,
   fetchSourceBodies,
   runSearch,
   searchCapability,
@@ -117,7 +118,9 @@ export function researchInstruction(capability, { round = 0, max = 1 } = {}) {
  * Runs one search round: every query the model asked for, deduplicated against
  * what earlier rounds already returned. Returns the per-query rounds and only
  * the NEW sources, still unnumbered — the caller owns the numbering, because a
- * citation number has to stay stable across rounds.
+ * citation number has to stay stable across rounds. `seen` holds canonical
+ * source keys (see `canonicalSourceKey`), so the same page reached through
+ * tracking links is recognised as already returned.
  */
 export async function runSearchRound(ctx, { searches, seen = new Set() }) {
   const rounds = [];
@@ -129,8 +132,9 @@ export async function runSearchRound(ctx, { searches, seen = new Set() }) {
     });
     rounds.push(...result.rounds);
     for (const source of result.sources) {
-      if (seen.has(source.url)) continue;
-      seen.add(source.url);
+      const key = canonicalSourceKey(source.url);
+      if (seen.has(key)) continue;
+      seen.add(key);
       // The per-search index is dropped: numbering is the caller's job so it
       // stays stable across rounds.
       const { index: _index, ...rest } = source;
@@ -185,6 +189,9 @@ export function buildResearchReport({ rounds, sources, bodies, notes = [] }) {
       url: s.url,
       provider: s.provider,
       kind: s.kind,
+      // Which query found it: the panel can show this instead of pretending a
+      // merged list came from one search.
+      query: s.query || "",
     })),
     read: bodies.filter((b) => b.text).length,
     notice,

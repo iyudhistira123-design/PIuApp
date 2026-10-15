@@ -5,6 +5,7 @@ import {
   SEARCH_QUERIES_MAX,
   SEARCH_RESULTS_MAX,
   assertCleanSources,
+  canonicalSourceKey,
   fetchSourceBodies,
   providers,
   resetSearchCache,
@@ -107,7 +108,13 @@ function fixture(
     fail,
     payload,
     payloadHost = "api.tavily.com",
-  }: { fail?: string; payload?: any; payloadHost?: string } = {},
+    retry,
+  }: {
+    fail?: string;
+    payload?: any;
+    payloadHost?: string;
+    retry?: Record<string, number>;
+  } = {},
 ) {
   const calls: string[] = [];
   // Full request log, so tests can assert the vendor contract (URL, method,
@@ -119,6 +126,8 @@ function fixture(
       SEARCH_API_KEY: "search-test-key",
       ...env,
     },
+    // Backoff is real in production; tests keep it at zero so the suite stays fast.
+    searchRetry: { baseMs: 0, ...(retry || {}) },
     fetcher: async (input: any, init: any = {}) => {
       const url = new URL(
         typeof input === "string"
@@ -390,6 +399,84 @@ test("provider text is stripped of control characters before it reaches a prompt
   assert.equal(result.sources[0].snippet, "Cuplikan dengan nul baris baru");
 });
 
+test("a vendor hiccup is retried, a wrong key is not, and the time budget is honest", async () => {
+  // Two transient failures (429 with Retry-After, then a 500) before success.
+  resetSearchCache();
+  const { ctx } = fixture();
+  const base = ctx.fetcher;
+  let attempts = 0;
+  ctx.fetcher = async (input: any, init: any) => {
+    attempts++;
+    if (attempts === 1)
+      return new Response("slow down", {
+        status: 429,
+        headers: { "Retry-After": "0" },
+      });
+    if (attempts === 2) return new Response("boom", { status: 500 });
+    return base(input, init);
+  };
+  const recovered = await searchOne(ctx, {
+    query: "cara pakai vite",
+    kind: "web",
+  });
+  assert.equal(attempts, 3);
+  assert.ok(recovered.sources.length >= 1);
+
+  // A wrong key is final: one attempt, no retry storm, honest message.
+  resetSearchCache();
+  const bad = fixture();
+  let badCalls = 0;
+  bad.ctx.fetcher = async () => {
+    badCalls++;
+    return new Response("nope", { status: 401 });
+  };
+  await assert.rejects(
+    () => searchOne(bad.ctx, { query: "kunci salah", kind: "web" }),
+    /menolak permintaan \(401\)/,
+  );
+  assert.equal(badCalls, 1);
+
+  // Retry-After may not hold the request hostage for half a minute.
+  resetSearchCache();
+  const capped = fixture({}, { retry: { baseMs: 0, maxWaitMs: 0 } });
+  const cappedBase = fixture().ctx.fetcher;
+  let cappedCalls = 0;
+  capped.ctx.fetcher = async (input: any, init: any) => {
+    cappedCalls++;
+    if (cappedCalls === 1)
+      return new Response("slow", {
+        status: 429,
+        headers: { "Retry-After": "30" },
+      });
+    return cappedBase(input, init);
+  };
+  const started = Date.now();
+  const afterWait = await searchOne(capped.ctx, {
+    query: "cara pakai vite",
+    kind: "web",
+  });
+  assert.ok(
+    Date.now() - started < 1500,
+    "Retry-After 30 detik seharusnya dibatasi",
+  );
+  assert.equal(cappedCalls, 2);
+  assert.ok(afterWait.sources.length >= 1);
+
+  // When the budget runs out the report says how many tries really happened.
+  resetSearchCache();
+  const budget = fixture({}, { retry: { attempts: 5, budgetMs: 0 } });
+  let budgetCalls = 0;
+  budget.ctx.fetcher = async () => {
+    budgetCalls++;
+    return new Response("boom", { status: 503 });
+  };
+  await assert.rejects(
+    () => searchOne(budget.ctx, { query: "batas waktu", kind: "web" }),
+    /setelah 1 percobaan \(batas waktu percobaan tercapai\)/,
+  );
+  assert.equal(budgetCalls, 1);
+});
+
 test("results are cached with a time window, so one page is not billed twice", async () => {
   resetSearchCache();
   const { ctx, calls } = fixture();
@@ -556,6 +643,134 @@ test("keyless code and docs search work without any API key", async () => {
   assert.equal(docs.provider, "context7");
   assert.equal(docs.sources[0].url, "https://context7.com/vercel/next.js");
   assert.match(docs.sources[0].snippet, /Dokumentasi Next\.js/);
+});
+
+test("sources keep the query that found them, and near-duplicates are dropped once", async () => {
+  resetSearchCache();
+  const { ctx } = fixture();
+  const result = await runSearch(ctx, {
+    queries: ["panduan vite", "konfigurasi vite"],
+  });
+  const urls = result.sources.map((s: any) => s.url);
+  assert.deepEqual(urls, [
+    "https://docs.example.test/a",
+    "https://example.test/b",
+  ]);
+  // Each source names its own query instead of pretending it came from one search.
+  assert.deepEqual(
+    result.sources.map((s: any) => s.query),
+    ["panduan vite", "panduan vite"],
+  );
+  // The second query returns the same two pages, so nothing is added twice.
+  assert.deepEqual(
+    result.rounds.map((r) => r.count),
+    [2, 0],
+  );
+  assert.deepEqual(
+    result.rounds.map((r) => r.duplicates),
+    [0, 2],
+  );
+
+  // Tracking parameters and a trailing slash are the same page, not a new source.
+  resetSearchCache();
+  const tracking = fixture();
+  tracking.ctx.fetcher = async () =>
+    Response.json({
+      results: [
+        {
+          title: "Satu",
+          url: "https://dup.example.test/a?utm_source=x",
+          content: "satu",
+        },
+        {
+          title: "Satu",
+          url: "https://www.dup.example.test/a/",
+          content: "satu",
+        },
+      ],
+    });
+  const deduped = await runSearch(tracking.ctx, { queries: ["duplikat"] });
+  assert.equal(deduped.sources.length, 1);
+  assert.equal(deduped.rounds[0].duplicates, 1);
+
+  // Same host and a near-identical title counts as the same page too.
+  resetSearchCache();
+  const nearTitle = fixture();
+  nearTitle.ctx.fetcher = async () =>
+    Response.json({
+      results: [
+        {
+          title: "Cara pakai Vite dengan React",
+          url: "https://dup.example.test/satu",
+          content: "satu",
+        },
+        {
+          title: "Cara pakai Vite dengan React 19",
+          url: "https://dup.example.test/dua",
+          content: "dua",
+        },
+        {
+          title: "Halaman lain sama sekali",
+          url: "https://dup.example.test/tiga",
+          content: "tiga",
+        },
+      ],
+    });
+  const titles = await runSearch(nearTitle.ctx, { queries: ["vite"] });
+  assert.deepEqual(
+    titles.sources.map((s: any) => s.url),
+    ["https://dup.example.test/satu", "https://dup.example.test/tiga"],
+  );
+});
+
+test("the best-matching result is listed first, and locale bias is opt-in", async () => {
+  resetSearchCache();
+  const ranked = fixture();
+  ranked.ctx.fetcher = async () =>
+    Response.json({
+      results: [
+        {
+          title: "Halaman umum",
+          url: "https://rank.example.test/umum",
+          content: "tidak menyebut apa pun yang dicari",
+        },
+        {
+          title: "Dokumentasi useState untuk React",
+          url: "https://rank.example.test/tepat",
+          content: "useState pada React 19",
+        },
+      ],
+    });
+  const ordered = await runSearch(ranked.ctx, { queries: ["useState React"] });
+  assert.equal(ordered.sources[0].url, "https://rank.example.test/tepat");
+
+  // No locale by default: a silent bias would break English documentation queries.
+  resetSearchCache();
+  const plain = fixture();
+  await searchOne(plain.ctx, { query: "vite", kind: "web" });
+  const plainRequests = plain.requests;
+  assert.equal(plainRequests.at(-1).body.country, undefined);
+  assert.equal(plainRequests.at(-1).body.language, undefined);
+
+  // With the env vars set, Tavily is told the country and language.
+  resetSearchCache();
+  const local = fixture({
+    SEARCH_COUNTRY: "indonesia",
+    SEARCH_LANGUAGE: "id",
+  });
+  await searchOne(local.ctx, { query: "resep rendang", kind: "web" });
+  const localBody = local.requests.at(-1).body;
+  assert.equal(localBody.country, "indonesia");
+  assert.equal(localBody.language, "id");
+  // The documented fields are still exactly the documented fields.
+  assert.deepEqual(Object.keys(localBody).sort(), [
+    "country",
+    "include_answer",
+    "language",
+    "max_results",
+    "query",
+    "search_depth",
+  ]);
 });
 
 test("runSearch batches queries, dedupes by URL, caps the count and reports per-query failures", async () => {
@@ -736,7 +951,9 @@ test("the sources block numbers every source and marks unreadable pages", () => 
 test("a round only returns new sources, and the report counts what was really read", async () => {
   resetSearchCache();
   const { ctx } = fixture();
-  const seen = new Set(["https://docs.example.test/a"]);
+  // `seen` now holds canonical keys, so tracking links cannot smuggle a
+  // duplicate back into a later round.
+  const seen = new Set([canonicalSourceKey("https://docs.example.test/a")]);
   const round = await runSearchRound(ctx, {
     searches: [{ queries: ["dokumen"], type: "web" }],
     seen,
@@ -747,6 +964,7 @@ test("a round only returns new sources, and the report counts what was really re
   assert.equal(round.sources[0].url, "https://example.test/b");
   assert.equal(round.sources[0].index, undefined);
   assert.equal(seen.size, 2);
+  assert.ok(seen.has("example.test/b"));
   assert.equal(round.rounds.length, 1);
 
   const numbered = [{ ...round.sources[0], index: 4 }];
@@ -765,6 +983,7 @@ test("a round only returns new sources, and the report counts what was really re
     "index",
     "kind",
     "provider",
+    "query",
     "title",
     "url",
   ]);

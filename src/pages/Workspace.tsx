@@ -86,7 +86,7 @@ import {
   PanelRight,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import type { Mode, Model, Project } from "../lib/types";
+import type { Mode, Model, Project, SourceRef } from "../lib/types";
 import { Logo, Modal } from "../components/ui";
 import { compilePreview } from "../lib/preview";
 import { scopeFor } from "../lib/cloud/types";
@@ -141,6 +141,11 @@ const icons = [
   { id: "github", icon: GitBranch, label: "GitHub" },
   { id: "security", icon: ShieldCheck, label: "Pemeriksaan kualitas" },
 ];
+// Only show "kueri …" when the round really merged several queries; on a single
+// search it would just repeat the same string on every row.
+const distinctQueries = (sources?: SourceRef[]) =>
+  new Set((sources || []).map((s) => s.query).filter(Boolean)).size;
+
 export default function Workspace() {
   return (
     <IDEThemeProvider>
@@ -2058,6 +2063,10 @@ function WorkspaceContent({ project }: { project: Project }) {
                                               </a>
                                               <small>
                                                 {s.kind} · {s.provider}
+                                                {distinctQueries(m.sources) >
+                                                  1 && s.query
+                                                  ? ` · kueri “${s.query}”`
+                                                  : ""}
                                                 {m.research?.cited.includes(
                                                   s.index,
                                                 )
