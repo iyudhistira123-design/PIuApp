@@ -91,12 +91,23 @@ import { Logo, Modal } from "../components/ui";
 import { compilePreview } from "../lib/preview";
 import { scopeFor } from "../lib/cloud/types";
 import { StorageStatus } from "../components/storage/StorageStatus";
-import { streamAI } from "../lib/ai";
+import { AI_TIERS, estimateCredits, fetchAiModels, streamAI } from "../lib/ai";
+import type { AiModelCatalog } from "../lib/ai";
+import AiModelPicker from "../components/ai/AiModelPicker";
+import type { CatalogStatus } from "../components/ai/AiModelPicker";
 import FileExplorer, { FileIcon } from "../workspace/FileExplorer";
 import PlanPanel from "../workspace/PlanPanel";
 import "../workspace/workspace.css";
 import "../workspace/workbench.css";
 import "../workspace/theme.css";
+// Remembered per account, like the IDE theme. Tier presets stay valid even
+// when the provider list cannot be read.
+const MODEL_PREFERENCE_KEY = "piwu-ai-model-v1";
+const readStoredModel = (scope: string): Model => {
+  const stored = workspaceStorage.getItem(`${MODEL_PREFERENCE_KEY}:${scope}`);
+  if (typeof stored !== "string" || !stored) return "Otomatis";
+  return stored.length <= 100 ? stored : "Otomatis";
+};
 const CanvasPanel = lazy(() => import("../workspace/CanvasPanel"));
 const CodeEditor = lazy(() => import("../workspace/CodeEditor"));
 const ServicePanel = lazy(() => import("../components/services/ServicePanel"));
@@ -205,9 +216,11 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [refresh, setRefresh] = useState(0);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>(store.pendingMode || "Builder");
-const [model, setModel] = useState<Model>("Otomatis");
-  const [aiModels, setAiModels] = useState<string[]>([]);
-  const [aiModelsLoaded, setAiModelsLoaded] = useState(false);
+  const modelScope = store.user?.id || "demo";
+  const [model, setModel] = useState<Model>(() => readStoredModel(modelScope));
+  const [catalog, setCatalog] = useState<AiModelCatalog | null>(null);
+  const [catalogStatus, setCatalogStatus] = useState<CatalogStatus>("idle");
+  const [catalogError, setCatalogError] = useState("");
   const [chatTab, setChatTab] = useState("Chat");
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState("");
@@ -341,16 +354,40 @@ const [model, setModel] = useState<Model>("Otomatis");
       .catch(() => setInitializing(false));
     return () => controller.abort();
   }, []);
+  const loadModels = useCallback((refresh = false) => {
+    setCatalogStatus("loading");
+    setCatalogError("");
+    return fetchAiModels({ refresh })
+      .then((next) => {
+        setCatalog(next);
+        setCatalogStatus("ready");
+        // A remembered model that the API key no longer offers would be
+        // rejected by the server, so fall back to the automatic preset.
+        setModel((current) =>
+          (AI_TIERS as readonly string[]).includes(current) ||
+          !current ||
+          next.models.includes(current)
+            ? current
+            : "Otomatis",
+        );
+      })
+      .catch((e: unknown) => {
+        setCatalog(null);
+        setCatalogStatus("error");
+        setCatalogError(
+          e instanceof Error
+            ? e.message
+            : "Daftar model provider tidak dapat dibaca.",
+        );
+      });
+  }, []);
   useEffect(() => {
     if (provider !== "configured") return;
-    fetch("/api/ai/models")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.models) setAiModels(d.models);
-        setAiModelsLoaded(true);
-      })
-      .catch(() => setAiModelsLoaded(true));
-  }, [provider]);
+    void loadModels();
+  }, [provider, loadModels]);
+  useEffect(() => {
+    workspaceStorage.setItem(`${MODEL_PREFERENCE_KEY}:${modelScope}`, model);
+  }, [model, modelScope]);
   useEffect(() => {
     const fn = (e: MessageEvent) => {
       if (e.source !== previewRef.current?.contentWindow) return;
@@ -440,6 +477,7 @@ const [model, setModel] = useState<Model>("Otomatis");
           content: result.content,
           files: result.files ? Object.keys(result.files) : undefined,
           summary: result.summary,
+          model: result.model,
           mode: currentMode,
           at: Date.now(),
         });
@@ -1868,7 +1906,10 @@ const [model, setModel] = useState<Model>("Otomatis");
                           <div className={"chat-message " + m.role} key={m.id}>
                             {m.role === "assistant" ? (
                               <div className="message-author">
-                                <span>✳</span>PiwuApp <small>AI</small>
+                                <span>✳</span>PiwuApp{" "}
+                                <small title="Model yang menjawab">
+                                  {m.model || "AI"}
+                                </small>
                               </div>
                             ) : (
                               <div className="message-author">
@@ -2201,31 +2242,26 @@ const [model, setModel] = useState<Model>("Otomatis");
                       </div>
                     </div>
                     <div className="composer-footer">
-                      <select
-                        aria-label="Pilih model"
+                      <AiModelPicker
                         value={model}
-                        onChange={(e) => setModel(e.target.value)}
+                        onChange={setModel}
+                        catalog={catalog}
+                        status={catalogStatus}
+                        error={catalogError}
+                        onRefresh={() => void loadModels(true)}
                         disabled={provider !== "configured"}
-                      >
-                        {["Otomatis", "Cepat", "Seimbang", "Kuat"].map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                        {aiModelsLoaded && aiModels.length > 0 && (
-                          <optgroup label="Model Langsung">
-                            {aiModels.map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
+                      />
                       <span>
                         {provider !== "configured"
                           ? "AI belum tersedia"
-                          : `Estimasi ${mode === "Ask" ? 1 : mode === "Plan" ? 2 : model === "Kuat" || (aiModels.includes(model) && model !== "Otomatis" && model !== "Seimbang") ? 8 : model === "Cepat" ? 1 : 3} kredit · belum ditagih`}
+                          : `Estimasi ${estimateCredits({
+                              mode,
+                              model,
+                              tiers: catalog?.tiers,
+                              prompt: input,
+                              hasAttachments:
+                                !!attachment || references.length > 0,
+                            })} kredit · belum ditagih`}
                       </span>
                     </div>
                   </div>

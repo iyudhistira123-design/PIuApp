@@ -8,6 +8,86 @@ export interface AIResult {
   creditsUsed?: number;
   files?: Record<string, string>;
   summary?: string[];
+  /** Model the provider actually answered with, plus the tier it billed as. */
+  model?: string;
+  tier?: string;
+}
+
+/** Tier presets; any other value is a concrete model id from the API key. */
+export const AI_TIERS = ["Otomatis", "Cepat", "Seimbang", "Kuat"] as const;
+export const TIER_INFO: Record<string, string> = {
+  Otomatis: "Pilih sendiri: ringan untuk obrolan, kuat untuk permintaan besar",
+  Cepat: "Jawaban tercepat untuk pertanyaan ringan",
+  Seimbang: "Seimbang antara kecepatan dan kualitas",
+  Kuat: "Paling teliti untuk perubahan besar",
+};
+export interface AiModelGroup {
+  label: string;
+  models: string[];
+}
+export interface AiModelCatalog {
+  source: "provider";
+  count: number;
+  models: string[];
+  groups: AiModelGroup[];
+  /** Optional per-tier overrides the operator configured on the server. */
+  tiers: Record<string, string>;
+  defaultModel: string;
+  defaultSource: string;
+}
+export function tierCost(tier: string) {
+  return tier === "Kuat" ? 8 : tier === "Cepat" ? 1 : 3;
+}
+export function tierOfModel(model: string, tiers: Record<string, string> = {}) {
+  for (const tier of ["Kuat", "Seimbang", "Cepat"])
+    if (tiers[tier] === model) return tier;
+  return "Seimbang";
+}
+/** Client mirror of the server cost rule, so the estimate never lies. */
+export function estimateCredits({
+  mode,
+  model,
+  tiers = {},
+  prompt = "",
+  hasAttachments = false,
+}: {
+  mode: Mode;
+  model: string;
+  tiers?: Record<string, string>;
+  prompt?: string;
+  hasAttachments?: boolean;
+}) {
+  if (mode === "Ask") return 1;
+  if (mode === "Plan") return 2;
+  const tier = (AI_TIERS as readonly string[]).includes(model)
+    ? model === "Otomatis"
+      ? prompt.length > 1200 || hasAttachments
+        ? "Kuat"
+        : "Seimbang"
+      : model
+    : tierOfModel(model, tiers);
+  return tierCost(tier);
+}
+/**
+ * Every model the configured API key serves, straight from the provider.
+ * Throws with the server message when the list cannot be read; the tier
+ * presets keep working in that case.
+ */
+export async function fetchAiModels({
+  refresh = false,
+  signal,
+}: { refresh?: boolean; signal?: AbortSignal } = {}): Promise<AiModelCatalog> {
+  const response = await fetch(
+    "/api/ai/models" + (refresh ? "?refresh=1" : ""),
+    { signal },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(data.models))
+    throw new Error(
+      data.error ||
+        "Daftar model provider tidak dapat dibaca. Tier Otomatis/Cepat/Seimbang/Kuat tetap tersedia.",
+    );
+  return data as AiModelCatalog;
 }
 export async function streamAI({
   projectId,

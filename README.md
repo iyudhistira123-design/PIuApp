@@ -6,7 +6,7 @@ Chat-based app builder MVP berbahasa Indonesia. React 19, TypeScript, Vite, Tail
 
 ## Verifikasi terakhir — 15 Oktober 2026
 
-**87/87 unit/integrasi lulus**, suite browser lengkap **62/62 lulus**, lalu regresi native/tema **8/8 lulus**. Build produksi, 11 smoke HTTP, dan tes Chromium pada aset produksi/worker Monaco lulus. Admin kini memiliki pencarian server, filter, CSV aman dan diagnostik; migration **007–008** diperlukan. [Laporan terbaru](docs/ADMIN_PRODUCTION_VERIFICATION.md).
+**95/95 unit/integrasi lulus**, suite browser lengkap **66/66 lulus**, lalu regresi native/tema **8/8 lulus**. Build produksi, 11 smoke HTTP, dan tes Chromium pada aset produksi/worker Monaco lulus. Admin kini memiliki pencarian server, filter, CSV aman dan diagnostik; migration **007–008** diperlukan. [Laporan terbaru](docs/ADMIN_PRODUCTION_VERIFICATION.md).
 
 Audit dependency utama PiwuApp: **0 temuan diketahui**. **Scaffold Expo SDK 57 masih memiliki 15 paket terdampak severity high dari dua advisory transitif**; export Android/iOS dan TypeScript berhasil, tetapi belum uji perangkat asli. Sebelas kapabilitas layanan masih `not_configured`; belum sertifikasi produksi/pentest. [Acceptance yang masih terblokir](docs/NATIVE_PRODUCTION_ACCEPTANCE.md).
 
@@ -43,6 +43,8 @@ Buka port **3001**. Vite meneruskan `/api` ke backend port 3002; browser tidak m
 9. **Layanan** menampilkan status konfigurasi, kolaborasi, sandbox/npm, storage/secrets, URL reference, publish/domain, analytics, audit dan marketplace.
 
 Hero landing memakai video awan pilihan pengguna, dengan autoplay tanpa kontrol player dan fallback hemat gerak/data. Sumber dan opsi self-hosted: [MEDIA.md](docs/MEDIA.md).
+
+Chat AI punya pemilih model: pilih preset tier (Otomatis/Cepat/Seimbang/Kuat) **atau** model mana pun yang dilayani `LLM_API_KEY` Anda — daftar diambil dari `GET {LLM_BASE_URL}/models`, jadi DeepSeek, Claude, GLM, Qwen, dan model lain di key itu semuanya muncul (dikelompokkan hanya untuk tampilan, pencarian, dan bisa di-scroll keyboard). Model yang dipilih dikirim apa adanya, balasan menampilkan nama model yang menjawab, dan estimasi kredit di composer mengikuti aturan server. Detail konfigurasi: [SERVICES_SETUP.md](docs/SERVICES_SETUP.md).
 
 Landing juga memakai lapisan animasi terisolasi (`landing-motion.css` + `useLandingMotion.ts`): entrance hero bertahap, reveal saat scroll, ambient gradien, indikator progres, dan micro-interaction hover. Konten hanya disembunyikan setelah JavaScript aktif (`html.js-reveal`), tanpa IntersectionObserver semua blok tetap tampil, dan `prefers-reduced-motion` mematikan seluruh gerakan.
 

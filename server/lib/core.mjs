@@ -159,7 +159,9 @@ export function capabilities(env) {
   return {
     auth,
     cloud: db,
-    ai: db && Boolean(env.LLM_API_KEY && env.LLM_BASE_URL && env.LLM_MODEL),
+    // LLM_MODEL is optional: when it is empty the first model the API key
+    // offers is used, resolved per request from GET {LLM_BASE_URL}/models.
+    ai: db && Boolean(env.LLM_API_KEY && env.LLM_BASE_URL),
     whatsapp:
       db &&
       Boolean(

@@ -8,7 +8,7 @@ Installer baru atomik 001–008, pemeriksaan read-only tabel/RLS/RPC/bucket, dan
 
 ## Pembaruan terbaru: admin dan hardening
 
-**87/87 unit/integrasi, 62/62 browser lengkap (lima di antaranya regresi motion landing baru), 8/8 regresi native/tema, build produksi, 11/11 smoke HTTP dan 1/1 tes bundle produksi lulus.** Admin ditambah pencarian server, filter, ekspor CSV, diagnostik dan aksesibilitas tabel. Migration 007 menambahkan rate limit/kuota bersama; 008 menambahkan direktori akun service-only. Produksi fail-closed bila kontrol keamanan/koordinasi tidak tersedia. Routing sandbox tetap memerlukan affinity; belum HA/failover transparan.
+**95/95 unit/integrasi, 66/66 browser lengkap (lima regresi motion landing dan empat regresi pemilih model AI), 8/8 regresi native/tema, build produksi, 11/11 smoke HTTP dan 1/1 tes bundle produksi lulus.** Admin ditambah pencarian server, filter, ekspor CSV, diagnostik dan aksesibilitas tabel. Migration 007 menambahkan rate limit/kuota bersama; 008 menambahkan direktori akun service-only. Produksi fail-closed bila kontrol keamanan/koordinasi tidak tersedia. Routing sandbox tetap memerlukan affinity; belum HA/failover transparan.
 
 Monaco utama turun **3.350,19 → 3.201,51 kB**, aset JS **112 → 38**. Scaffold Expo diperbarui ke SDK 57 dan berhasil diekspor oleh Metro/Hermes untuk Android/iOS. **Dependency utama 0 temuan, scaffold Expo masih 15 paket terdampak high (dua advisory upstream)**; perangkat asli, Studio asli, pentest menyeluruh dan cluster produksi belum diuji. Tidak ada konfigurasi provider atau migration live yang diaktifkan.
 
@@ -98,6 +98,15 @@ Verifikasi patch: seluruh 55 tes unit/integrasi lulus dan 9 tes browser terarah 
 - Hanya `transform`/`opacity` yang dianimasikan dan tidak ada elemen dekoratif tambahan yang menerima event pointer, jadi tidak ada layout shift atau area klik baru. Animasi reveal di-settle setelah selesai agar transform hover berikutnya tidak terblokir.
 - Komitmen aksesibilitas: konten hanya disembunyikan setelah JavaScript menambahkan `html.js-reveal`; tanpa JavaScript/IntersectionObserver semua blok tampil penuh, dan `prefers-reduced-motion: reduce` mematikan seluruh animasi (garis bawah tetap tergambar, indikator progres disembunyikan).
 - Verifikasi: spec baru `tests/landing-motion.spec.ts` (5 tes: reveal saat scroll, reduced motion, spotlight/progres, harga tahunan, fallback tanpa lapisan reveal) plus 15 tes landing lama; suite browser lengkap **62/62 lulus** dalam 3,5 menit. Gerakan dinilai dari hasil tangkapan layar Chromium, bukan pengujian perangkat asli atau Safari.
+
+## Pemilih model AI — semua model dari API key provider
+
+- Chat AI kini membiarkan pengguna memilih sendiri modelnya. Daftar diambil dari `GET {LLM_BASE_URL}/models` milik API key yang dipasang, jadi DeepSeek, Claude, GLM, Qwen, Kimi, Grok, Mistral, model internal perusahaan, atau id apa pun yang dikembalikan provider tersebut ikut tampil. Pengelompokan (DeepSeek/Anthropic Claude/Z.ai GLM/…/"Model lainnya") **hanya untuk tampilan** dan tidak pernah menyembunyikan id; id yang tidak dikenal tetap ada di "Model lainnya".
+- Preset tier (Otomatis/Cepat/Seimbang/Kuat) tetap tersedia dan tetap memakai `LLM_MODEL*` bila diisi. `LLM_MODEL` sekarang **opsional**: bila kosong, server memakai model pertama dari daftar provider. Bila daftar tidak terbaca dan `LLM_MODEL` juga kosong, permintaan gagal dengan pesan jelas, bukan diam-diam memakai model lain.
+- Model yang dipilih dikirim apa adanya ke provider; server hanya menolak id yang tidak ada di daftar (fail closed, bukan downgrade senyap). Balasan menyimpan dan menampilkan nama model yang menjawab.
+- Biaya kredit: `Ask` 1, `Plan` 2, `Builder` mengikuti tier (Cepat 1 / Seimbang 3 / Kuat 8). Model provider dihitung setara Seimbang kecuali operator memetakannya ke tier lewat `LLM_MODEL_KUAT` dll. Estimasi di composer memakai aturan yang sama seperti server, termasuk saat Otomatis memilih tier Kuat untuk prompt panjang.
+- Daftar model di-cache 60 detik di server dengan penggabungan permintaan bersamaan dan tombol muat ulang di UI; pilihan terakhir pengguna disimpan per akun di browser (kunci `piwu-ai-model-v1:<scope>`).
+- Verifikasi: `tests/ai-models.test.ts` (8 tes: katalog, cache, default opsional, tarif, penolakan model tak dikenal, kegagalan daftar, `/api/ai/models` lewat HTTP nyata) dan `tests/ai-model-picker.spec.ts` (4 tes: kelengkapan daftar + pencarian + keyboard, pengiriman model pilihan + nama model di balasan, kegagalan daftar tetap jujur, aksesibilitas & lebar di panel sempit). Suite browser lengkap lulus 66/66; unit/integrasi 95/95.
 
 ## Jalur layanan nyata — demo interaktif dinonaktifkan
 

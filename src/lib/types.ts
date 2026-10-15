@@ -7,6 +7,8 @@ export interface Message {
   mode: Mode;
   files?: string[];
   summary?: string[];
+  /** Model the provider answered with, shown on the reply. */
+  model?: string;
   at: number;
 }
 export interface Version {

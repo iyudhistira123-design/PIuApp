@@ -9,6 +9,11 @@ import {
 } from "../lib/core.mjs";
 import { rateLimit } from "../lib/context.mjs";
 import { attachmentParts } from "../lib/attachments.mjs";
+import {
+  listProviderModels,
+  modelCatalog,
+  resolveAiModel,
+} from "../lib/ai-models.mjs";
 const resultSchema = z.object({
   content: z.string().max(40000),
   summary: z.array(z.string().max(500)).max(6).optional(),
@@ -64,24 +69,21 @@ export function registerAI(app, ctx) {
     if (!capabilities(ctx.env).ai)
       return res.status(503).json({ error: "AI belum dikonfigurasi." });
     try {
-      const r = await ctx.fetcher(
-        ctx.env.LLM_BASE_URL.replace(/\/$/, "") + "/models",
-        {
-          headers: { Authorization: "Bearer " + ctx.env.LLM_API_KEY },
-          signal: AbortSignal.timeout(10000),
-        },
-      );
-      if (!r.ok)
-        return res
-          .status(502)
-          .json({ error: "Provider AI menolak permintaan." });
-      const data = await r.json();
-      const models = (data.data || [])
-        .map((m) => m.id)
-        .sort();
-      res.json({ models });
-    } catch {
-      res.status(503).json({ error: "Provider AI tidak dapat dijangkau." });
+      // Every model the configured API key serves; grouping is display-only.
+      const models = await listProviderModels(ctx, {
+        force: req.query.refresh === "1",
+      });
+      res.set("Cache-Control", "no-store");
+      res.json(modelCatalog(ctx.env, models));
+    } catch (e) {
+      res.status(e instanceof HttpError ? e.status : 503).json({
+        error:
+          e instanceof HttpError
+            ? e.message
+            : "Provider AI tidak dapat dijangkau.",
+        models: [],
+        retryable: true,
+      });
     }
   });
   app.post(
@@ -119,17 +121,17 @@ export function registerAI(app, ctx) {
           : kind === "mobile"
             ? "This is an EXPO React Native project. Use native components, TypeScript, and the existing Expo SDK. NEVER DOM/CSS/Vite. Do not claim a device build/test or app-store upload unless actually executed."
             : "Use React with classic JSX and local CSS.";
-      const cost =
-        body.mode === "Ask"
-          ? 1
-          : body.mode === "Plan"
-            ? 2
-            : body.model === "Kuat"
-              ? 8
-              : body.model === "Cepat"
-                ? 1
-                : 3;
       const parts = await attachmentParts(body.attachments, body.references);
+      // The provider API key decides which models exist; the request may name a
+      // tier ("Otomatis") or any model id that API key serves.
+      const resolved = await resolveAiModel({
+        ctx,
+        model: body.model,
+        mode: body.mode,
+        prompt: body.prompt,
+        hasAttachments: parts.length > 0,
+      });
+      const cost = resolved.cost;
       await ctx.reserve(req.user.id, body.requestId, cost, "ai");
       let charged = false;
       const abort = new AbortController();
@@ -147,18 +149,7 @@ export function registerAI(app, ctx) {
         if (!res.destroyed) res.write(": keep-alive\n\n");
       }, 10000);
       try {
-        const tierMap = {
-          Otomatis:
-            body.prompt.length > 1200 || parts.length
-              ? "Kuat"
-              : "Seimbang",
-          Cepat: "Cepat",
-          Seimbang: "Seimbang",
-          Kuat: "Kuat",
-        };
-        const chosen = tierMap[body.model] || body.model;
-        const modelName =
-          ctx.env["LLM_MODEL_" + chosen.toUpperCase()] || chosen;
+        const modelName = resolved.model;
         const response = await ctx.fetcher(
           ctx.env.LLM_BASE_URL.replace(/\/$/, "") + "/chat/completions",
           {
@@ -199,7 +190,7 @@ export function registerAI(app, ctx) {
         if (!response.ok)
           throw new HttpError(
             502,
-            "Provider AI menolak permintaan. Periksa model, dukungan gambar, dan konfigurasi akun.",
+            `Provider AI menolak permintaan untuk model ${modelName}. Periksa dukungan model, gambar, dan konfigurasi akun.`,
           );
         const reader = response.body.getReader(),
           decoder = new TextDecoder();
@@ -256,19 +247,23 @@ export function registerAI(app, ctx) {
         }
         let decoded;
         try {
-          const cleaned = output.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+          const cleaned = output
+            .replace(/^```(?:json)?\s*/, "")
+            .replace(/\s*```$/, "");
           decoded = JSON.parse(cleaned);
         } catch {
           // Jika parsing gagal, coba perbaiki JSON yang mungkin truncated
           try {
-            let fixed = output.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+            let fixed = output
+              .replace(/^```(?:json)?\s*/, "")
+              .replace(/\s*```$/, "");
             // Cari posisi kunci pertama yang belum tertutup
-            const lastKey = fixed.lastIndexOf(',');
+            const lastKey = fixed.lastIndexOf(",");
             if (lastKey !== -1) {
-              fixed = fixed.substring(0, lastKey) + '}';
+              fixed = fixed.substring(0, lastKey) + "}";
             }
             // Tambahkan penutup jika belum lengkap
-            if (!fixed.trim().endsWith('}')) fixed += '}';
+            if (!fixed.trim().endsWith("}")) fixed += "}";
             decoded = JSON.parse(fixed);
           } catch {
             throw new HttpError(
@@ -281,7 +276,15 @@ export function registerAI(app, ctx) {
         send({ type: "token", content: result.content.slice(sent) });
         await ctx.finish(body.requestId, true);
         charged = true;
-        send({ type: "result", result: { ...result, creditsUsed: cost } });
+        send({
+          type: "result",
+          result: {
+            ...result,
+            creditsUsed: cost,
+            model: modelName,
+            tier: resolved.tier,
+          },
+        });
       } catch (e) {
         send({
           type: "error",

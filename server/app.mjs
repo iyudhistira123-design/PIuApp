@@ -104,9 +104,11 @@ export function createApp({
           );
           if (r.ok) {
             const d = await r.json();
+            const list = Array.isArray(d.data) ? d.data : [];
+            // LLM_MODEL is optional; without it any listed model is usable.
             result.ai =
-              Array.isArray(d.data) &&
-              d.data.some((m) => m.id === env.LLM_MODEL)
+              list.length &&
+              (!env.LLM_MODEL || list.some((m) => m.id === env.LLM_MODEL))
                 ? "model_available"
                 : "endpoint_reachable";
           } else result.ai = "inconclusive";
