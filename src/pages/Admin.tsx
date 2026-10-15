@@ -2090,9 +2090,12 @@ function CreditDetail({
             hanya baca, penyesuaian tetap lewat tindakan beralasan.
           </p>
         </div>
-        <button className="ad-secondary" onClick={onClose}>
-          Tutup
-        </button>
+        <div className="ad-detail-actions">
+          <Wallet size={20} />
+          <button className="ad-secondary" onClick={onClose}>
+            Tutup
+          </button>
+        </div>
       </div>
       {error && <div className="ad-note ad-error">{error}</div>}
       {!data && !error && <div className="ad-empty">Memuat rincian akun…</div>}

@@ -1228,3 +1228,9 @@
     flex-wrap: wrap;
   }
 }
+.ad-detail-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #3d7452;
+}
