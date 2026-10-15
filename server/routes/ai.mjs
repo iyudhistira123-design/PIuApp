@@ -23,6 +23,7 @@ import {
   SOURCES_TOTAL_MAX,
   buildResearchReport,
   citationReport,
+  groundingReport,
   readBodies,
   researchInstruction,
   runSearchRound,
@@ -477,6 +478,9 @@ export function registerAI(app, ctx) {
           researchReport = {
             ...researchReport,
             ...citationReport(result.content, sources),
+            // Heuristic grounding check: a citation whose source shares no
+            // significant word with the sentence is reported, not hidden.
+            ...groundingReport(result.content, sources, bodies),
           };
         send({ type: "token", content: result.content.slice(sent) });
         await ctx.finish(body.requestId, true);

@@ -2103,6 +2103,19 @@ function WorkspaceContent({ project }: { project: Project }) {
                                           diabaikan, bukan dianggap sumber.
                                         </small>
                                       )}
+                                      {m.research?.groundingNotice && (
+                                        <small className="warn">
+                                          {m.research.groundingNotice}
+                                        </small>
+                                      )}
+                                      {!!m.research?.insufficient?.length && (
+                                        <small>
+                                          Sitasi yang belum bisa diperiksa:{" "}
+                                          {m.research.insufficient.join(", ")} —
+                                          kalimatnya terlalu pendek atau
+                                          sumbernya tidak terbaca.
+                                        </small>
+                                      )}
                                       {m.research?.citationNotice && (
                                         <small className="warn">
                                           {m.research.citationNotice}

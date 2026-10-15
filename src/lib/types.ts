@@ -46,6 +46,12 @@ export interface ResearchReport {
   uncited: number[];
   invalid: number[];
   citationNotice?: string;
+  /** Citations whose source shares no significant word with the sentence. */
+  unsupported?: number[];
+  /** Citations too short to judge, or whose source has no readable text. */
+  insufficient?: number[];
+  checked?: number;
+  groundingNotice?: string;
 }
 export interface Message {
   id: string;

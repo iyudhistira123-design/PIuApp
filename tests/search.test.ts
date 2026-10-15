@@ -18,6 +18,7 @@ import {
   SOURCES_TOTAL_MAX,
   buildResearchReport,
   citationReport,
+  groundingReport,
   readBodies,
   researchInstruction,
   researchStatus,
@@ -27,6 +28,7 @@ import {
   sourcesPrompt,
   splitSearchOps,
 } from "../server/lib/research.mjs";
+import { fetchReference } from "../server/lib/references.mjs";
 import { capabilities } from "../server/lib/core.mjs";
 
 // Payloads below are the vendors' documented response shapes (verified against
@@ -101,6 +103,29 @@ const providerPayloads: Record<string, any> = {
     ],
   },
 };
+
+/** A real (tiny) PDF, so the document path is exercised for real, not mocked. */
+function pdfBytes(text: string) {
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 100] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+    `4 0 obj\n<< /Length ${text.length + 40} >>\nstream\nBT /F1 12 Tf 20 50 Td (${text}) Tj ET\nendstream\nendobj\n`,
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += obj;
+  }
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const off of offsets)
+    pdf += String(off).padStart(10, "0") + " 00000 n \n";
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
 
 function fixture(
   env: Record<string, string> = {},
@@ -1027,4 +1052,144 @@ test("every provider that needs a key declares it, so nothing is charged by surp
       assert.equal(provider.env, "SEARCH_API_KEY", name);
     else assert.equal(provider.env, "", name);
   }
+});
+
+test("the grounding check is a heuristic, and it says so", () => {
+  const sources = [
+    { index: 1, title: "Panduan Vite", url: "https://a.test", snippet: "" },
+    {
+      index: 2,
+      title: "Artikel pertanian",
+      url: "https://b.test",
+      snippet: "",
+    },
+    { index: 3, title: "Tanpa isi", url: "https://c.test", snippet: "" },
+  ];
+  const bodies = [
+    {
+      index: 1,
+      url: "https://a.test",
+      title: "Panduan Vite",
+      text: "Gunakan pengulangan berjenjang untuk menangani galat jaringan.",
+    },
+    {
+      index: 2,
+      url: "https://b.test",
+      title: "Artikel pertanian",
+      text: "Panen kopi di dataran tinggi menurun karena curah hujan.",
+    },
+    { index: 3, url: "https://c.test", title: "Tanpa isi", text: "" },
+  ];
+  const report = groundingReport(
+    "Gunakan pengulangan berjenjang untuk galat jaringan [1]. Harga emas naik tajam [2]. Ya [3].",
+    sources as any,
+    bodies as any,
+  );
+  // [1] shares words with its page, [2] does not, [3] is too short to judge and
+  // its page has no text at all.
+  assert.equal(report.checked, 1);
+  assert.deepEqual(report.unsupported, [2]);
+  assert.deepEqual(report.insufficient, [3]);
+  assert.match(report.groundingNotice, /sitasi 2/);
+  assert.match(report.groundingNotice, /heuristik/);
+  // The notice must never claim the claim was verified.
+  assert.doesNotMatch(report.groundingNotice, /terverifikasi|diverifikasi/);
+
+  // Nothing cited: no notice, and nothing claimed as checked.
+  const quiet = groundingReport(
+    "Jawaban tanpa sumber.",
+    sources as any,
+    bodies as any,
+  );
+  assert.deepEqual(quiet.unsupported, []);
+  assert.equal(quiet.checked, 0);
+  assert.equal(quiet.groundingNotice, "");
+});
+
+test("a PDF, a markdown page and a thin page are all read honestly", async () => {
+  resetSearchCache();
+  const sources = [
+    {
+      index: 1,
+      title: "Dokumen PDF",
+      url: "https://dok.example.test/panduan.pdf",
+    },
+    { index: 2, title: "Markdown", url: "https://dok.example.test/readme.md" },
+    { index: 3, title: "Halaman JS-only", url: "https://dok.example.test/spa" },
+    { index: 4, title: "Rusak", url: "https://dok.example.test/rusak" },
+  ];
+  const longHtml =
+    "<html><title>Panjang</title><body>" +
+    "Isi halaman yang cukup panjang untuk membuktikan batas karakter baru. ".repeat(
+      120,
+    ) +
+    "</body></html>";
+  const { ctx } = fixture();
+  ctx.fetcher = async (input: any) => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url,
+    );
+    if (url.pathname.endsWith(".pdf"))
+      return new Response(pdfBytes("Konten dokumen uji untuk riset."), {
+        headers: { "Content-Type": "application/pdf" },
+      });
+    if (url.pathname.endsWith(".md"))
+      return new Response("# Panduan\n\nLangkah pemasangan ada di sini.", {
+        headers: { "Content-Type": "text/markdown" },
+      });
+    if (url.pathname === "/spa")
+      return new Response(
+        '<html><body><div id="app"></div><script></script></body></html>',
+        {
+          headers: { "Content-Type": "text/html" },
+        },
+      );
+    if (url.pathname === "/rusak")
+      return new Response("gagal", { status: 500 });
+    return new Response(longHtml, { headers: { "Content-Type": "text/html" } });
+  };
+  const bodies = await fetchSourceBodies(
+    { ...ctx, resolver: async () => [{ address: "93.184.216.34", family: 4 }] },
+    sources as any[],
+    { limit: 4 },
+  );
+  // 1. A PDF is parsed for real, and the model is told it is a PDF.
+  assert.equal(bodies[0].kind, "pdf");
+  assert.match(bodies[0].text as string, /Konten dokumen uji untuk riset/);
+  // 2. Markdown arrives as text, with its heading.
+  assert.equal(bodies[1].kind, "text");
+  assert.match(bodies[1].text as string, /Langkah pemasangan/);
+  // 3. A JavaScript shell is not silently treated as a well-read page.
+  assert.equal(bodies[2].unreadable, undefined);
+  assert.match(String(bodies[2].note), /JavaScript/);
+  // 4. A failed fetch carries the real reason, not a generic shrug.
+  assert.equal(bodies[3].unreadable, true);
+  assert.match(String(bodies[3].reason), /tidak dapat diakses/);
+  // 5. The read budget grew: a long page is no longer cut at 4.000 characters.
+  const long = await fetchSourceBodies(
+    { ...ctx, resolver: async () => [{ address: "93.184.216.34", family: 4 }] },
+    [
+      { index: 1, title: "Panjang", url: "https://dok.example.test/long" },
+    ] as any[],
+    { limit: 1 },
+  );
+  assert.ok((long[0].text as string).length > 4000);
+  assert.ok((long[0].text as string).length <= 6000);
+
+  // The design-reference path keeps its old contract: no documents.
+  await assert.rejects(
+    () =>
+      fetchReference("https://dok.example.test/panduan.pdf", {
+        fetcher: async () =>
+          new Response(pdfBytes("x"), {
+            headers: { "Content-Type": "application/pdf" },
+          }),
+        resolve: async () => [{ address: "93.184.216.34", family: 4 }],
+      } as any),
+    /HTML atau teks/,
+  );
 });

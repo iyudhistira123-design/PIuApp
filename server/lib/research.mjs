@@ -6,6 +6,7 @@ import {
   assertCleanSources,
   canonicalSourceKey,
   fetchSourceBodies,
+  significantTerms,
   runSearch,
   searchCapability,
 } from "./search.mjs";
@@ -158,11 +159,14 @@ export function sourcesPrompt({ sources, bodies }) {
     .map((source) => {
       const page = body.get(source.index);
       const text = page?.text ? `\n    ${page.text}` : "";
+      const note = page?.unreadable
+        ? `\n    (halaman tidak dapat dibaca: ${page.reason || "tanpa alasan"}; hanya judul dan cuplikan tersedia)`
+        : page?.note
+          ? `\n    (catatan: ${page.note})`
+          : "";
       return `[${source.index}] ${source.title} — ${source.url} (${source.provider}, ${source.kind})${
-        page?.unreadable
-          ? "\n    (halaman tidak dapat dibaca; hanya judul dan cuplikan tersedia)"
-          : ""
-      }\n    cuplikan: ${source.snippet}${text}`;
+        page?.kind === "pdf" ? " [dokumen PDF]" : ""
+      }${note}\n    cuplikan: ${source.snippet}${text}`;
     })
     .join("\n");
 }
@@ -224,6 +228,57 @@ export function citationReport(content, sources) {
     citationNotice: cited.size
       ? ""
       : "Jawaban tidak mengutip nomor sumber mana pun.",
+  };
+}
+
+/**
+ * Heuristic check that each citation has something to stand on: the sentence
+ * citing [n] must share at least one significant word with the text of source n
+ * (the page body when it was read, otherwise the title and snippet).
+ *
+ * This is not proof of correctness — a paraphrased claim can fail it and a
+ * copied sentence can pass it. It exists to catch a number that points at a
+ * source saying something completely different, and it is reported as a
+ * heuristic, never as "verified".
+ */
+export function groundingReport(content, sources = [], bodies = []) {
+  const text = new Map(
+    bodies.map((body) => [body.index, String(body.text || "")]),
+  );
+  const unsupported = new Set();
+  const insufficient = new Set();
+  let checked = 0;
+  const sentences = String(content)
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+  for (const sentence of sentences) {
+    const cites = [...sentence.matchAll(/\[(\d{1,2})\]/g)]
+      .map((match) => Number(match[1]))
+      .filter((index) => index >= 1 && index <= sources.length);
+    if (!cites.length) continue;
+    const claim = significantTerms(sentence.replace(/\[\d{1,2}\]/g, " "));
+    for (const index of cites) {
+      const source = sources.find((s) => s.index === index);
+      const haystack =
+        (text.get(index) || "").trim() ||
+        `${source?.title || ""} ${source?.snippet || ""}`.trim();
+      if (claim.size < 3 || !haystack) insufficient.add(index);
+      else if (![...claim].some((term) => significantTerms(haystack).has(term)))
+        unsupported.add(index);
+      else checked++;
+    }
+  }
+  const list = (set) => [...set].sort((a, b) => a - b);
+  return {
+    checked,
+    unsupported: list(unsupported),
+    insufficient: list(insufficient),
+    // A separate field from the retrieval notice and the citation notice: three
+    // different facts must not overwrite each other.
+    groundingNotice: unsupported.size
+      ? `Pemeriksaan heuristik: sitasi ${list(unsupported).join(", ")} tidak berbagi satu kata pun dengan isi sumbernya. Periksa ulang sebelum dipercaya.`
+      : "",
   };
 }
 

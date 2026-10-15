@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createApp } from "../server/app.mjs";
 import { SCENE_PATH } from "../server/lib/ai-ops.mjs";
 import { defaultSite } from "../server/lib/platform.mjs";
@@ -66,9 +67,9 @@ function fixture({
   resultsByQuery,
   pages = {
     "dokumen.example.test":
-      "<html><title>Panduan</title><body>Isi panduan.</body></html>",
+      "<html><title>Panduan</title><body>Gunakan pengulangan berjenjang untuk menangani galat. Isi panduan.</body></html>",
     "kedua.example.test":
-      "<html><title>Artikel</title><body>Isi artikel.</body></html>",
+      "<html><title>Artikel</title><body>Catat kegagalan agar mudah diperiksa. Isi artikel.</body></html>",
     "ketiga.example.test":
       "<html><title>Ronde dua</title><body>Isi halaman ronde dua.</body></html>",
     "keempat.example.test":
@@ -267,6 +268,10 @@ test("research end to end: sources are returned, cited and billed once", async (
   assert.deepEqual(result.research.uncited, []);
   assert.deepEqual(result.research.invalid, []);
   assert.equal(result.research.read, 2);
+  // The cited sentences share real words with the pages that were read, so the
+  // heuristic has nothing to report.
+  assert.deepEqual(result.research.unsupported, []);
+  assert.equal(result.research.groundingNotice, "");
   assert.equal(result.creditsUsed, 2);
   // Two provider calls: the search request, then the answer grounded in sources.
   assert.equal(chat.length, 2);
@@ -330,6 +335,25 @@ test("the running server calls Tavily with the contract the vendor documents", a
   // The key travels in the header only, never in the body or the query string.
   assert.doesNotMatch(call.url, /search-test-key/);
   assert.doesNotMatch(JSON.stringify(call.body), /search-test-key/);
+});
+
+test("a citation whose source says something else is flagged, never silently accepted", async () => {
+  const { events } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    reply: {
+      content: "",
+      ops: [{ kind: "search", queries: ["produk pertanian"], type: "web" }],
+    },
+    // Neither sentence shares a significant word with the pages that were read.
+    researchReply: {
+      content: "Harga emas naik tajam [1] dan panen kopi menurun [2].",
+    },
+  });
+  const result = resultOf(events);
+  assert.deepEqual(result.research.cited, [1, 2]);
+  assert.deepEqual(result.research.unsupported, [1, 2]);
+  assert.match(result.research.groundingNotice, /Pemeriksaan heuristik/);
+  assert.match(result.research.groundingNotice, /1, 2/);
 });
 
 test("two rounds are numbered 1..4, billed one credit each and closed honestly", async () => {

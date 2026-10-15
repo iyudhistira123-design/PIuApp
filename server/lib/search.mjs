@@ -533,6 +533,9 @@ const terms = (text) =>
       .filter((word) => word.length >= 4 && !STOPWORDS.test(word)),
   );
 
+/** Same word filter as reranking, exported so grounding checks use one rule. */
+export const significantTerms = (text) => terms(text);
+
 /**
  * Cheap lexical relevance: how many query terms the title (weight 2) and the
  * snippet (weight 1) share. No extra vendor call, and it only reorders results
@@ -659,30 +662,44 @@ const redact = (text) =>
 export async function fetchSourceBodies(
   ctx,
   sources,
-  { limit = 3, characters = 4000 } = {},
+  { limit = 3, characters = 6000 } = {},
 ) {
   const out = [];
   // The fetcher is injectable (tests, and the production default is fetch); the
   // resolver is optional so the SSRF guard falls back to real DNS lookups.
-  const options = { fetcher: ctx.fetcher };
+  const options = { fetcher: ctx.fetcher, allowDocuments: true };
   if (ctx.resolver) options.resolve = ctx.resolver;
   for (const source of sources.slice(0, limit)) {
     try {
       const page = await fetchReference(source.url, options);
-      out.push({
+      const entry = {
         index: source.index,
         url: page.url,
         title: page.title || source.title,
         text: redact(clean(page.text, characters)),
-      });
-    } catch {
-      // A page that cannot be read stays a snippet-only citation.
+        kind: page.kind || "html",
+      };
+      // A page with almost no text is usually JavaScript-rendered or behind a
+      // login. Keep whatever came back, but say why it is thin.
+      if (page.thin)
+        entry.note =
+          page.kind === "html"
+            ? "teks halaman sangat pendek; kemungkinan dimuat oleh JavaScript atau butuh login"
+            : "dokumen hampir tanpa teks";
+      out.push(entry);
+    } catch (error) {
+      // A page that cannot be read stays a snippet-only citation, with the real
+      // reason instead of a generic shrug.
       out.push({
         index: source.index,
         url: source.url,
         title: source.title,
         text: "",
         unreadable: true,
+        reason:
+          error instanceof HttpError
+            ? error.message
+            : "Halaman tidak dapat dibaca.",
       });
     }
   }

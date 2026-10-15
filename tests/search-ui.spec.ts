@@ -46,6 +46,11 @@ const research = {
   uncited: [2],
   invalid: [7],
   citationNotice: "",
+  checked: 1,
+  unsupported: [2],
+  insufficient: [],
+  groundingNotice:
+    "Pemeriksaan heuristik: sitasi 2 tidak berbagi satu kata pun dengan isi sumbernya. Periksa ulang sebelum dipercaya.",
 };
 
 async function fixture(page: Page) {
@@ -209,12 +214,15 @@ test("the chat lists the numbered sources and flags an invented citation", async
   // Two queries in one round: each row says which query found it.
   await expect(items.nth(0)).toContainText("kueri “next.js app router retry”");
   await expect(items.nth(1)).toContainText("kueri “error handling app router”");
+  // The grounding heuristic is spoken plainly, never as "verified".
+  await expect(panel).toContainText("Pemeriksaan heuristik");
+  await expect(panel).not.toContainText("terverifikasi");
   await expect(items.nth(0)).toContainText("Cuplikan pertama");
   await expect(panel).toContainText("data tidak tepercaya");
   // A citation number the server never returned is reported, never resolved.
-  await expect(panel.locator("small.warn")).toContainText(
-    "Nomor sumber yang tidak pernah dikembalikan: 7",
-  );
+  await expect(
+    panel.locator("small.warn", { hasText: "tidak pernah dikembalikan" }),
+  ).toContainText("Nomor sumber yang tidak pernah dikembalikan: 7");
   // Folding works, and the report is kept with the answer.
   await panel.locator(".sources-headline").click();
   await expect(page.locator(".ai-sources").last().locator("ol")).toHaveCount(0);
