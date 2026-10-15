@@ -113,6 +113,9 @@ const getJson = async (ctx, url, headers = {}, timeout = 15000) => {
  * `docs` are keyless so they are always available.
  */
 export const providers = {
+  // Tavily — contract checked against the official SDKs (tavily-js `src/utils.ts`
+  // sends `Authorization: Bearer <key>` and no key in the body; `src/search.ts`
+  // sends snake_case fields and reads `results[].content`).
   tavily: {
     kind: "web",
     label: "Tavily",
@@ -121,7 +124,12 @@ export const providers = {
       const data = await postJson(
         ctx,
         "https://api.tavily.com/search",
-        { query, max_results: SEARCH_RESULTS_MAX, search_depth: "basic" },
+        {
+          query,
+          max_results: SEARCH_RESULTS_MAX,
+          search_depth: "basic",
+          include_answer: false,
+        },
         { Authorization: "Bearer " + ctx.env.SEARCH_API_KEY },
       );
       return normalize(
@@ -135,6 +143,10 @@ export const providers = {
       );
     },
   },
+  // Exa — contract checked against exa-js/exa-py: `x-api-key`, camelCase body
+  // (`numResults`, `type`), and an explicit `contents` block; without it the API
+  // returns no page text, so snippets would come back empty. Exa highlights are
+  // relevance-sized excerpts and the vendors recommend them for AI context.
   exa: {
     kind: "web",
     label: "Exa",
@@ -143,7 +155,12 @@ export const providers = {
       const data = await postJson(
         ctx,
         "https://api.exa.ai/search",
-        { query, numResults: SEARCH_RESULTS_MAX, type: "auto" },
+        {
+          query,
+          numResults: SEARCH_RESULTS_MAX,
+          type: "auto",
+          contents: { highlights: true },
+        },
         { "x-api-key": ctx.env.SEARCH_API_KEY },
       );
       return normalize(
@@ -152,22 +169,32 @@ export const providers = {
         (data.results || []).map((r) => ({
           title: r.title,
           url: r.url,
-          snippet: r.text || r.highlights?.join(" ") || "",
+          // `highlights` is a LIST of strings, unlike Tavily's single `content`.
+          snippet:
+            r.text ||
+            (Array.isArray(r.highlights) ? r.highlights.join(" ") : "") ||
+            r.summary ||
+            "",
         })),
       );
     },
   },
+  // Brave — contract checked against brave-search-mcp-server (`src/BraveAPI/`):
+  // GET `https://api.search.brave.com/res/v1/web/search`, header
+  // `X-Subscription-Token`, and results read from `web.results[]`. Brave caps
+  // the query at 50 words, so a long model query is trimmed instead of 422-ing.
   brave: {
     kind: "web",
     label: "Brave Search",
     env: "SEARCH_API_KEY",
     async run(ctx, query) {
+      const words = query.split(/\s+/).filter(Boolean).slice(0, 50).join(" ");
       const data = await getJson(
         ctx,
         "https://api.search.brave.com/res/v1/web/search?count=" +
           SEARCH_RESULTS_MAX +
           "&q=" +
-          encodeURIComponent(query),
+          encodeURIComponent(words),
         {
           Accept: "application/json",
           "X-Subscription-Token": ctx.env.SEARCH_API_KEY,
@@ -179,11 +206,16 @@ export const providers = {
         (data.web?.results || []).map((r) => ({
           title: r.title,
           url: r.url,
-          snippet: r.description,
+          snippet:
+            r.description ||
+            (Array.isArray(r.extra_snippets) ? r.extra_snippets.join(" ") : ""),
         })),
       );
     },
   },
+  // Parallel — contract checked against the vendor OpenAPI document
+  // (`parallel-llms-txt` → `/v1/search`): `x-api-key`, POST body with a REQUIRED
+  // `search_queries` array, and results carrying `excerpts[]` (no `snippet`).
   parallel: {
     kind: "web",
     label: "Parallel",
@@ -191,8 +223,13 @@ export const providers = {
     async run(ctx, query) {
       const data = await postJson(
         ctx,
-        "https://api.parallel.ai/v1beta/search",
-        { objective: query, max_results: SEARCH_RESULTS_MAX },
+        "https://api.parallel.ai/v1/search",
+        {
+          objective: query,
+          search_queries: [query],
+          mode: "basic",
+          max_chars_total: 6000,
+        },
         { "x-api-key": ctx.env.SEARCH_API_KEY },
       );
       return normalize(
@@ -201,7 +238,7 @@ export const providers = {
         (data.results || []).map((r) => ({
           title: r.title,
           url: r.url,
-          snippet: (r.excerpts || []).join(" "),
+          snippet: Array.isArray(r.excerpts) ? r.excerpts.join(" ") : "",
         })),
       );
     },

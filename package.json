@@ -12,6 +12,7 @@
     "start": "NODE_ENV=production node --env-file-if-exists=.env server/index.mjs",
     "test:e2e:sandbox": "node scripts/test-browser-sandbox.mjs",
     "verify:readiness": "node scripts/verify-readiness.mjs",
+    "verify:search": "node --env-file-if-exists=.env scripts/verify-search-providers.mjs",
     "test:security": "node --import tsx --import ./tests/storage-setup.mjs --test --test-concurrency=2 tests/production-hardening.test.ts tests/admin.test.ts tests/services.test.ts tests/services-db.test.ts tests/studio-api.test.ts",
     "verify:production": "node scripts/verify-production.mjs",
     "check:bundle": "node scripts/check-bundle.mjs",

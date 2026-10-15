@@ -50,11 +50,14 @@ function fixture({
       title: "Dokumentasi resmi",
       url: "https://dokumen.example.test/panduan",
       content: "Cuplikan pertama",
+      score: 0.96,
+      raw_content: null,
     },
     {
       title: "Artikel kedua",
       url: "https://kedua.example.test/tulis",
       content: "Cuplikan kedua",
+      score: 0.82,
     },
   ],
   reply,
@@ -75,6 +78,9 @@ function fixture({
 }: Fixture = {}) {
   const chat: any[] = [];
   const rpcs: any[] = [];
+  // Every outbound vendor call, so a test can assert the real HTTP contract
+  // instead of trusting the provider wrapper.
+  const vendor: any[] = [];
   const fetcher = async (input: any, init: any = {}) => {
     const url = new URL(
       typeof input === "string"
@@ -104,6 +110,17 @@ function fixture({
       );
     }
     if (url.host === "api.tavily.com") {
+      vendor.push({
+        url: url.href,
+        method: init.method || "GET",
+        headers: Object.fromEntries(
+          Object.entries(init.headers || {}).map(([key, value]) => [
+            key.toLowerCase(),
+            String(value),
+          ]),
+        ),
+        body: JSON.parse(init.body || "{}"),
+      });
       if (searchStatus !== 200)
         return new Response("nope", { status: searchStatus });
       const query = String(JSON.parse(init.body || "{}").query || "");
@@ -161,7 +178,7 @@ function fixture({
       return json([{ revision: 1, value: defaultSite }]);
     throw new Error("Unexpected fixture query: " + path + url.search);
   };
-  return { fetcher, chat, rpcs };
+  return { fetcher, chat, rpcs, vendor };
 }
 
 async function run(
@@ -284,6 +301,35 @@ test("research end to end: sources are returned, cited and billed once", async (
   assert.ok(
     events.some((e) => e.type === "token" && /berjenjang/.test(e.content)),
   );
+});
+
+test("the running server calls Tavily with the contract the vendor documents", async () => {
+  // The unit tests check the provider wrapper; this one checks that the real
+  // HTTP route keeps that contract when it builds the request itself.
+  const { vendor, status } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    reply: {
+      content: "",
+      ops: [{ kind: "search", queries: ["kontrak tavily yang terverifikasi"] }],
+    },
+    researchReply: { content: "Menurut [1], gunakan try/catch." },
+  });
+  assert.equal(status, 200);
+  assert.equal(vendor.length, 1);
+  const call = vendor[0];
+  assert.equal(call.url, "https://api.tavily.com/search");
+  assert.equal(call.method, "POST");
+  assert.equal(call.headers.authorization, "Bearer search-test-key");
+  assert.equal(call.headers["content-type"], "application/json");
+  assert.deepEqual(call.body, {
+    query: "kontrak tavily yang terverifikasi",
+    max_results: 8,
+    search_depth: "basic",
+    include_answer: false,
+  });
+  // The key travels in the header only, never in the body or the query string.
+  assert.doesNotMatch(call.url, /search-test-key/);
+  assert.doesNotMatch(JSON.stringify(call.body), /search-test-key/);
 });
 
 test("two rounds are numbered 1..4, billed one credit each and closed honestly", async () => {

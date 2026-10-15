@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   SEARCH_QUERIES_MAX,
+  SEARCH_RESULTS_MAX,
   assertCleanSources,
   fetchSourceBodies,
   providers,
@@ -26,43 +28,74 @@ import {
 } from "../server/lib/research.mjs";
 import { capabilities } from "../server/lib/core.mjs";
 
-const capabilityFixture = {
-  tavily: {
+// Payloads below are the vendors' documented response shapes (verified against
+// the official SDKs, MCP servers and OpenAPI documents on 2026-10-15), not what
+// our own parser happens to expect — so a wrong field name fails right here.
+const providerPayloads: Record<string, any> = {
+  "api.tavily.com": {
+    query: "cara pakai vite",
+    response_time: 0.42,
     results: [
       {
         title: "Dokumentasi resmi",
         url: "https://docs.example.test/a",
         content: "Isi halaman",
+        score: 0.97,
+        raw_content: null,
       },
       {
         title: "Referensi kedua",
         url: "https://example.test/b",
         content: "Cuplikan",
+        score: 0.81,
       },
     ],
   },
-  exa: {
+  // Exa returns highlights as a LIST of strings, plus camelCase metadata.
+  "api.exa.ai": {
+    requestId: "req_1",
+    resolvedSearchType: "auto",
+    costDollars: { total: 0.007 },
     results: [
-      { title: "Exa hit", url: "https://exa.example.test/x", text: "Teks" },
+      {
+        id: "https://exa.example.test/x",
+        title: "Exa hit",
+        url: "https://exa.example.test/x",
+        highlights: ["Bagian penting pertama.", "Bagian penting kedua."],
+        highlightScores: [0.9, 0.8],
+      },
     ],
   },
-  brave: {
+  // Brave nests hits under web.results and adds extra_snippets.
+  "api.search.brave.com": {
+    type: "search",
     web: {
       results: [
         {
           title: "Brave hit",
           url: "https://brave.example.test/y",
           description: "Deskripsi",
+          extra_snippets: ["Potongan tambahan"],
         },
       ],
     },
   },
-  parallel: {
+  // Parallel has no `snippet`: excerpts are a list, and title may be null.
+  "api.parallel.ai": {
+    search_id: "search_1",
+    session_id: "session_1",
     results: [
       {
-        title: "Parallel hit",
         url: "https://parallel.example.test/z",
+        title: "Parallel hit",
+        publish_date: "2026-01-15",
         excerpts: ["Kutipan satu", "Kutipan dua"],
+      },
+      {
+        url: "https://parallel.example.test/tanpa-judul",
+        title: null,
+        publish_date: null,
+        excerpts: ["Hanya cuplikan."],
       },
     ],
   },
@@ -70,16 +103,23 @@ const capabilityFixture = {
 
 function fixture(
   env: Record<string, string> = {},
-  { fail, payload }: { fail?: string; payload?: any } = {},
+  {
+    fail,
+    payload,
+    payloadHost = "api.tavily.com",
+  }: { fail?: string; payload?: any; payloadHost?: string } = {},
 ) {
   const calls: string[] = [];
+  // Full request log, so tests can assert the vendor contract (URL, method,
+  // headers, body) and not only the parsed result.
+  const requests: any[] = [];
   const ctx = {
     env: {
       SEARCH_PROVIDER: "tavily",
       SEARCH_API_KEY: "search-test-key",
       ...env,
     },
-    fetcher: async (input: any) => {
+    fetcher: async (input: any, init: any = {}) => {
       const url = new URL(
         typeof input === "string"
           ? input
@@ -88,22 +128,23 @@ function fixture(
             : input.url,
       );
       calls.push(url.host + url.pathname + (url.search || ""));
+      requests.push({
+        url: url.href,
+        method: init.method || "GET",
+        headers: Object.fromEntries(
+          Object.entries(init.headers || {}).map(([key, value]) => [
+            key.toLowerCase(),
+            String(value),
+          ]),
+        ),
+        body: init.body ? JSON.parse(String(init.body)) : undefined,
+      });
       if (fail && url.pathname.includes(fail))
         return new Response("nope", { status: 500 });
       // Lets one test hand a provider response with markup in it.
-      if (payload && url.host === "api.tavily.com")
-        return Response.json(payload);
-      for (const [name, payload] of Object.entries(capabilityFixture))
-        if (url.host.startsWith(name.split(".")[0]) || url.host.includes(name))
-          return Response.json(payload);
-      if (url.host === "api.tavily.com")
-        return Response.json(capabilityFixture.tavily);
-      if (url.host === "api.exa.ai")
-        return Response.json(capabilityFixture.exa);
-      if (url.host === "api.search.brave.com")
-        return Response.json(capabilityFixture.brave);
-      if (url.host === "api.parallel.ai")
-        return Response.json(capabilityFixture.parallel);
+      if (payload && url.host === payloadHost) return Response.json(payload);
+      if (providerPayloads[url.host])
+        return Response.json(providerPayloads[url.host]);
       if (url.host === "grep.app")
         return Response.json({
           hits: {
@@ -126,7 +167,7 @@ function fixture(
       throw new Error("Unexpected search fixture: " + url.href);
     },
   };
-  return { ctx: ctx as any, calls };
+  return { ctx: ctx as any, calls, requests };
 }
 
 test("web search normalizes every provider to one source shape", async () => {
@@ -148,6 +189,167 @@ test("web search normalizes every provider to one source shape", async () => {
       assert.ok(source.snippet.length <= 320);
     }
   }
+});
+
+test("each web provider is called the way its vendor documents the API", async () => {
+  const expected: Record<
+    string,
+    { url: string; method: string; header: [string, string]; body?: any }
+  > = {
+    tavily: {
+      url: "https://api.tavily.com/search",
+      method: "POST",
+      // The official SDK sends the key as a bearer token only, never in the body.
+      header: ["authorization", "Bearer search-test-key"],
+      body: {
+        query: "kontrak",
+        max_results: SEARCH_RESULTS_MAX,
+        search_depth: "basic",
+        include_answer: false,
+      },
+    },
+    exa: {
+      url: "https://api.exa.ai/search",
+      method: "POST",
+      header: ["x-api-key", "search-test-key"],
+      body: {
+        query: "kontrak",
+        numResults: SEARCH_RESULTS_MAX,
+        type: "auto",
+        // Without an explicit contents block Exa returns no page text at all.
+        contents: { highlights: true },
+      },
+    },
+    brave: {
+      url:
+        "https://api.search.brave.com/res/v1/web/search?count=" +
+        SEARCH_RESULTS_MAX +
+        "&q=kontrak",
+      method: "GET",
+      header: ["x-subscription-token", "search-test-key"],
+    },
+    parallel: {
+      url: "https://api.parallel.ai/v1/search",
+      method: "POST",
+      header: ["x-api-key", "search-test-key"],
+      // `search_queries` is a required field in the vendor's schema.
+      body: {
+        objective: "kontrak",
+        search_queries: ["kontrak"],
+        mode: "basic",
+        max_chars_total: 6000,
+      },
+    },
+  };
+  for (const [provider, want] of Object.entries(expected)) {
+    resetSearchCache();
+    const { ctx, requests } = fixture({ SEARCH_PROVIDER: provider });
+    await searchOne(ctx, { query: "kontrak", kind: "web" });
+    const request = requests.at(-1);
+    assert.equal(request.url, want.url, provider + " url");
+    assert.equal(request.method, want.method, provider + " method");
+    assert.equal(request.headers[want.header[0]], want.header[1], provider);
+    assert.equal(
+      request.headers["content-type"],
+      want.method === "POST" ? "application/json" : undefined,
+      provider + " content-type",
+    );
+    if (want.body)
+      assert.deepEqual(request.body, want.body, provider + " body");
+    else assert.equal(request.body, undefined, provider + " body");
+  }
+});
+
+test("every provider payload is read the way its vendor documents it", async () => {
+  // Exa: highlights are a list, so they have to be joined into one snippet.
+  resetSearchCache();
+  const exa = await searchOne(fixture({ SEARCH_PROVIDER: "exa" }).ctx, {
+    query: "cara pakai vite",
+    kind: "web",
+  });
+  assert.equal(
+    exa.sources[0].snippet,
+    "Bagian penting pertama. Bagian penting kedua.",
+  );
+  // When Exa returns full text, that wins over the highlights.
+  const withText = fixture(
+    { SEARCH_PROVIDER: "exa" },
+    {
+      payloadHost: "api.exa.ai",
+      payload: {
+        results: [
+          {
+            id: "https://exa.example.test/t",
+            title: "",
+            url: "https://exa.example.test/t",
+            text: "Teks penuh halaman",
+            highlights: ["Sorotan"],
+          },
+        ],
+      },
+    },
+  );
+  const textFirst = await searchOne(withText.ctx, {
+    query: "teks penuh",
+    kind: "web",
+  });
+  assert.equal(textFirst.sources[0].snippet, "Teks penuh halaman");
+  // An empty title falls back to the host instead of an empty row.
+  assert.equal(textFirst.sources[0].title, "exa.example.test");
+
+  // Brave: description normally wins, extra_snippets covers an empty one.
+  resetSearchCache();
+  const brave = fixture(
+    { SEARCH_PROVIDER: "brave" },
+    {
+      payloadHost: "api.search.brave.com",
+      payload: {
+        web: {
+          results: [
+            {
+              title: "Brave tanpa deskripsi",
+              url: "https://brave.example.test/kosong",
+              description: "",
+              extra_snippets: ["Potongan satu", "Potongan dua"],
+            },
+          ],
+        },
+      },
+    },
+  );
+  const fromExtra = await searchOne(brave.ctx, {
+    query: "brave",
+    kind: "web",
+  });
+  assert.equal(fromExtra.sources[0].snippet, "Potongan satu Potongan dua");
+
+  // Parallel: excerpts are a list and title may be null.
+  resetSearchCache();
+  const parallel = await searchOne(
+    fixture({ SEARCH_PROVIDER: "parallel" }).ctx,
+    {
+      query: "cara pakai vite",
+      kind: "web",
+    },
+  );
+  assert.equal(parallel.sources[0].snippet, "Kutipan satu Kutipan dua");
+  assert.equal(parallel.sources[1].title, "parallel.example.test");
+  assert.equal(parallel.sources[1].snippet, "Hanya cuplikan.");
+
+  // Nothing but the normalized fields ever reaches the prompt: vendor extras
+  // such as Tavily's relevance score are dropped here.
+  resetSearchCache();
+  const tavily = await searchOne(fixture().ctx, {
+    query: "cara pakai vite",
+    kind: "web",
+  });
+  assert.deepEqual(Object.keys(tavily.sources[0]).sort(), [
+    "kind",
+    "provider",
+    "snippet",
+    "title",
+    "url",
+  ]);
 });
 
 test("a provider that returns a private or plain-http URL is dropped, not fetched", async () => {
@@ -203,6 +405,41 @@ test("results are cached with a time window, so one page is not billed twice", a
   assert.equal(second.cached, true);
   assert.deepEqual(first.sources, second.sources);
   assert.equal(calls.length, 1);
+});
+
+test("the live verification script skips honestly and never calls a vendor without a key", () => {
+  // Keys are cleared on purpose: this test must never spend real vendor quota.
+  const env = {
+    ...process.env,
+    SEARCH_PROVIDER: "none",
+    SEARCH_API_KEY: "",
+    CONTEXT7_API_KEY: "",
+  } as any;
+  const run = (args: string[]) => {
+    try {
+      return {
+        status: 0,
+        stdout: execFileSync(
+          process.execPath,
+          ["scripts/verify-search-providers.mjs", ...args],
+          { encoding: "utf8", env },
+        ),
+      };
+    } catch (error: any) {
+      return {
+        status: Number(error.status),
+        stdout: String(error.stdout || ""),
+      };
+    }
+  };
+  const none = run([]);
+  assert.equal(none.status, 0);
+  assert.match(none.stdout, /Tidak ada provider yang diuji/);
+  assert.match(none.stdout, /berarti tidak diuji, bukan berarti berfungsi/);
+  // Naming a provider without a key is a gap, so it must exit non-zero.
+  const forced = run(["--provider=exa"]);
+  assert.equal(forced.status, 1);
+  assert.match(forced.stdout, /DILEWATI exa: SEARCH_API_KEY belum diisi\./);
 });
 
 test("web search fails closed when nothing is configured, and never silently falls back", async () => {
