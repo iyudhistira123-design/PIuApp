@@ -1162,3 +1162,69 @@
   outline: 2px solid #2563eb;
   outline-offset: 3px;
 }
+
+/* AI & model panel: model ids are long, so chips wrap instead of overflowing. */
+.ad-model-group {
+  border-top: 1px solid var(--ad-border);
+  padding: 16px 0 6px;
+  margin-top: 18px;
+}
+.ad-model-group > strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ad-model-group > strong small {
+  font-size: 9px;
+  font-weight: 400;
+  color: #65725f;
+}
+.ad-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ad-chips code {
+  font-size: 9px;
+  padding: 4px 7px;
+  border: 1px solid var(--ad-border);
+  border-radius: 4px;
+  background: #f7f9f5;
+  color: #33412d;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.ad-chips > span {
+  font-size: 9px;
+  color: #65725f;
+  align-self: center;
+}
+.ad-card-heading .ad-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ad-note.ad-error {
+  color: #8d3a3a;
+  border-top-color: #e6d3d3;
+}
+/* Read-only account detail panel under the users table. */
+.ad-detail {
+  margin-top: 20px;
+  border-style: dashed;
+}
+.ad-detail dl {
+  margin-top: 20px;
+}
+@media (max-width: 900px) {
+  .ad-chips code {
+    font-size: 8px;
+  }
+  .ad-card-heading {
+    flex-wrap: wrap;
+  }
+}

@@ -14,6 +14,11 @@ import {
   platformAdmin,
   siteSettings,
 } from "../lib/platform.mjs";
+import {
+  aiOverview,
+  accountDetail,
+  runtimeOverview,
+} from "../lib/admin-insights.mjs";
 import { paymentProvider } from "../providers/payments.mjs";
 export const siteSchema = z
   .object({
@@ -282,6 +287,29 @@ export function registerAdmin(app, ctx) {
     ),
   );
   const readiness = createReadinessReader(ctx);
+  app.get(
+    "/api/admin/ai",
+    ...auth,
+    rateLimit({ max: 20 }),
+    wrap(async (req, res) =>
+      res.json(await aiOverview(ctx, { refresh: req.query.refresh === "1" })),
+    ),
+  );
+  app.get(
+    "/api/admin/users/:id",
+    ...auth,
+    wrap(async (req, res) =>
+      res.json(await accountDetail(ctx, z.uuid().parse(req.params.id))),
+    ),
+  );
+  app.get(
+    "/api/admin/runtime",
+    ...auth,
+    rateLimit({ max: 30 }),
+    wrap(async (req, res) =>
+      res.json(await runtimeOverview(ctx, app.locals.coordination)),
+    ),
+  );
   app.get(
     "/api/admin/diagnostics",
     ...auth,

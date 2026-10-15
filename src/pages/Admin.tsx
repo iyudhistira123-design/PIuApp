@@ -22,6 +22,10 @@ import {
   CheckCircle2,
   LockKeyhole,
   Radio,
+  Sparkles,
+  Cpu,
+  Gauge,
+  Wallet,
 } from "lucide-react";
 import { Logo, Modal } from "../components/ui";
 import { useStore } from "../lib/store";
@@ -35,6 +39,7 @@ const sections = [
   ["marketplace", "Marketplace", Store],
   ["broadcasts", "Broadcast", Megaphone],
   ["operations", "Operasional", Server],
+  ["ai", "AI & model", Sparkles],
   ["diagnostics", "Diagnostik", ShieldCheck],
   ["settings", "Pengaturan situs", Settings],
   ["roles", "Administrator", ShieldCheck],
@@ -95,6 +100,21 @@ const money = (v: number) =>
     maximumFractionDigits: 0,
   }).format(v);
 const short = (v: string) => (v ? v.slice(0, 8) + "…" : "—");
+/** Indonesian wording for insight payloads; unknown keys stay verbatim. */
+const insightLabel = (v: string) =>
+  (
+    ({
+      ai: "Chat AI",
+      sandbox: "Sandbox",
+      publish: "Publish",
+      plan: "Rencana",
+      build: "Builder",
+      settled: "Selesai",
+      refunded: "Dikembalikan",
+      reserved: "Berjalan",
+      active: "Berjalan",
+    }) as Record<string, string>
+  )[v] || label(v);
 const getAdmin = (path: string) => api<Row>("/admin/" + path);
 function Badge({
   children,
@@ -191,6 +211,51 @@ export default function Admin() {
   return <AdminPanel key={user?.id || "visitor"} session={session} />;
 }
 type AdminClient = (path: string, body?: unknown) => Promise<any>;
+/** Shared read-only table renderer. `search`/`query` only drive the empty state. */
+function table_(
+  headers: string[],
+  rows: Row[],
+  render: (r: Row) => ReactNode,
+  options: { search?: string; query?: string } = {},
+) {
+  return (
+    <div
+      className="ad-table-wrap"
+      role="region"
+      aria-label={"Tabel " + headers.join(", ")}
+      tabIndex={0}
+    >
+      <table className="ad-table">
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.id || r.user_id || i}>{render(r)}</tr>
+          ))}
+        </tbody>
+      </table>
+      {!rows.length && (
+        <div className="ad-empty">
+          <FolderKanban size={25} />
+          <h3>
+            {options.search ? "Tidak ada hasil pencarian" : "Belum ada data"}
+          </h3>
+          <p>
+            {options.query
+              ? "Ubah kata kunci atau filter pencarian."
+              : "Data akan muncul ketika tersedia di platform."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminPanel({
   session,
   client = api,
@@ -218,7 +283,8 @@ export function AdminPanel({
     [command, setCommand] = useState<Row | null>(null),
     [editBroadcast, setEditBroadcast] = useState<Row | null>(null),
     [roleUser, setRoleUser] = useState(""),
-    [newRole, setNewRole] = useState("auditor");
+    [newRole, setNewRole] = useState("auditor"),
+    [creditUser, setCreditUser] = useState("");
   const role = session?.role || "auditor",
     canWrite = ["superadmin", "operator"].includes(role),
     superadmin = role === "superadmin";
@@ -279,40 +345,7 @@ export function AdminPanel({
     headers: string[],
     rows: Row[],
     render: (r: Row) => ReactNode,
-  ) => (
-    <div
-      className="ad-table-wrap"
-      role="region"
-      aria-label={"Tabel " + headers.join(", ")}
-      tabIndex={0}
-    >
-      <table className="ad-table">
-        <thead>
-          <tr>
-            {headers.map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.id || r.user_id || i}>{render(r)}</tr>
-          ))}
-        </tbody>
-      </table>
-      {!rows.length && (
-        <div className="ad-empty">
-          <FolderKanban size={25} />
-          <h3>{search ? "Tidak ada hasil pencarian" : "Belum ada data"}</h3>
-          <p>
-            {appliedQuery
-              ? "Ubah kata kunci atau filter pencarian."
-              : "Data akan muncul ketika tersedia di platform."}
-          </p>
-        </div>
-      )}
-    </div>
-  );
+  ) => table_(headers, rows, render, { search, query: appliedQuery });
   const broadcastStatus = (r: Row) =>
     r.status !== "published"
       ? label(r.status)
@@ -713,6 +746,7 @@ export function AdminPanel({
                   </div>
                 )}
 
+                {tab === "ai" && <AiPanel data={data} client={client} />}
                 {tab === "diagnostics" && (
                   <section className="ad-card">
                     <h2>Kesehatan layanan dan koordinasi server</h2>
@@ -793,61 +827,80 @@ export function AdminPanel({
                     </button>
                   </section>
                 )}
-                {tab === "users" &&
-                  table(
-                    ["Pengguna", "Kredit", "Status", "Peran", "Tindakan"],
-                    items,
-                    (r) => (
-                      <>
-                        <td>
-                          <strong>{r.name || r.email || short(r.id)}</strong>
-                          <small>{r.email}</small>
-                          <code title={r.id}>{r.id}</code>
-                        </td>
-                        <td>{r.balance ?? "Belum dibuat"}</td>
-                        <td>
-                          <Badge warn={r.suspended}>
-                            {r.suspended ? "Ditangguhkan" : "Aktif"}
-                          </Badge>
-                          <small>
-                            {r.verified
-                              ? "Terverifikasi"
-                              : "Belum terverifikasi"}
-                          </small>
-                        </td>
-                        <td>{label(r.admin_role)}</td>
-                        <td>
-                          <div className="ad-actions">
-                            {act(
-                              "Sesuaikan kredit",
-                              () => ask("credits", r.id, { delta: 0 }, r.email),
-                              !superadmin,
-                            )}
-                            {act(
-                              r.suspended ? "Aktifkan akun" : "Tangguhkan",
-                              () =>
-                                ask(
-                                  "user_suspend",
-                                  r.id,
-                                  { suspended: !r.suspended },
-                                  r.email,
-                                ),
-                              !superadmin || !!r.admin_role,
-                              true,
-                            )}
-                            {act(
-                              "Kelola peran",
-                              () => {
-                                setRoleUser(r.id);
-                                changeTab("roles");
-                              },
-                              !superadmin,
-                            )}
-                          </div>
-                        </td>
-                      </>
-                    ),
-                  )}
+                {tab === "users" && (
+                  <>
+                    {table(
+                      ["Pengguna", "Kredit", "Status", "Peran", "Tindakan"],
+                      items,
+                      (r) => (
+                        <>
+                          <td>
+                            <strong>{r.name || r.email || short(r.id)}</strong>
+                            <small>{r.email}</small>
+                            <code title={r.id}>{r.id}</code>
+                          </td>
+                          <td>{r.balance ?? "Belum dibuat"}</td>
+                          <td>
+                            <Badge warn={r.suspended}>
+                              {r.suspended ? "Ditangguhkan" : "Aktif"}
+                            </Badge>
+                            <small>
+                              {r.verified
+                                ? "Terverifikasi"
+                                : "Belum terverifikasi"}
+                            </small>
+                          </td>
+                          <td>{label(r.admin_role)}</td>
+                          <td>
+                            <div className="ad-actions">
+                              {act(
+                                "Sesuaikan kredit",
+                                () =>
+                                  ask("credits", r.id, { delta: 0 }, r.email),
+                                !superadmin,
+                              )}
+                              {act(
+                                r.suspended ? "Aktifkan akun" : "Tangguhkan",
+                                () =>
+                                  ask(
+                                    "user_suspend",
+                                    r.id,
+                                    { suspended: !r.suspended },
+                                    r.email,
+                                  ),
+                                !superadmin || !!r.admin_role,
+                                true,
+                              )}
+                              {act(
+                                "Kelola peran",
+                                () => {
+                                  setRoleUser(r.id);
+                                  changeTab("roles");
+                                },
+                                !superadmin,
+                              )}
+                              {act(
+                                "Rincian kredit",
+                                () =>
+                                  setCreditUser((current) =>
+                                    current === r.id ? "" : r.id,
+                                  ),
+                                false,
+                              )}
+                            </div>
+                          </td>
+                        </>
+                      ),
+                    )}
+                    {creditUser && (
+                      <CreditDetail
+                        client={client}
+                        userId={creditUser}
+                        onClose={() => setCreditUser("")}
+                      />
+                    )}
+                  </>
+                )}
                 {tab === "projects" &&
                   table(
                     ["Project", "Pemilik", "Status", "Diperbarui", "Tindakan"],
@@ -1157,6 +1210,7 @@ export function AdminPanel({
                   )}
                 {tab === "operations" && (
                   <>
+                    <RuntimeCard client={client} />
                     <section className="ad-card">
                       <div className="ad-card-heading">
                         <div>
@@ -1800,5 +1854,454 @@ function SettingsForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/** Model catalogue for the configured API key, read straight from the provider. */
+function AiPanel({ data, client }: { data: Row; client: AdminClient }) {
+  const [state, setState] = useState<Row>(data);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setState(data);
+    setError("");
+  }, [data]);
+  const groups: Row[] = state.catalog?.groups || [];
+  const reload = async (refresh: boolean) => {
+    setBusy(true);
+    setError("");
+    try {
+      setState(await client("/admin/ai" + (refresh ? "?refresh=1" : "")));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Katalog model gagal dibaca.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <section className="ad-card">
+        <div className="ad-card-heading">
+          <div>
+            <h2>Status provider AI</h2>
+            <p>
+              Konfigurasi server. Nilai API key tidak pernah dikirim ke browser,
+              termasuk untuk superadmin.
+            </p>
+          </div>
+          <Sparkles size={20} />
+        </div>
+        <div className="ad-service-grid">
+          <div>
+            <strong>AI builder</strong>
+            <Badge warn={!state.configured}>
+              {state.configured ? "Dikonfigurasi" : "Belum dikonfigurasi"}
+            </Badge>
+          </div>
+          <div>
+            <strong>API key</strong>
+            <Badge warn={!state.keyPresent}>
+              {state.keyPresent ? "Tersimpan di server" : "Belum diisi"}
+            </Badge>
+          </div>
+          <div>
+            <strong>Katalog model</strong>
+            <Badge warn={!state.catalog}>
+              {state.catalog
+                ? `${state.catalog.count} model`
+                : state.configured
+                  ? "Tidak terbaca"
+                  : "Belum tersedia"}
+            </Badge>
+          </div>
+        </div>
+        <dl>
+          <dt>Base URL</dt>
+          <dd>
+            {state.baseHost ? (
+              <>
+                <code>{state.baseHost + state.basePath}</code> — host publik
+                provider, bukan kredensial
+              </>
+            ) : (
+              "Belum diisi (LLM_BASE_URL)"
+            )}
+          </dd>
+          <dt>Model default</dt>
+          <dd>
+            {state.defaultModel ? (
+              <code>{state.defaultModel}</code>
+            ) : (
+              "Kosong — dipakai model pertama dari daftar provider"
+            )}
+          </dd>
+          <dt>Sumber default</dt>
+          <dd>{state.defaultSource}</dd>
+        </dl>
+      </section>
+      <section className="ad-card">
+        <div className="ad-card-heading">
+          <div>
+            <h2>Pemetaan tier</h2>
+            <p>
+              Tier yang dipilih pengguna di chat. Tanpa override, permintaan
+              memakai model default.
+            </p>
+          </div>
+          <Cpu size={20} />
+        </div>
+        {table_(["Tier", "Model", "Sumber"], state.tiers || [], (r) => (
+          <>
+            <td>
+              <strong>{r.tier}</strong>
+            </td>
+            <td>{r.model ? <code>{r.model}</code> : "Model default"}</td>
+            <td>
+              <small>{r.source}</small>
+            </td>
+          </>
+        ))}
+      </section>
+      <section className="ad-card">
+        <div className="ad-card-heading">
+          <div>
+            <h2>Katalog model dari API key</h2>
+            <p>
+              {state.catalog
+                ? `${state.catalog.count} model dalam ${groups.length} grup, dibaca ${date(state.catalogAt)}.`
+                : "Daftar diambil dari GET /models milik provider."}
+            </p>
+          </div>
+          <button
+            className="ad-secondary"
+            disabled={busy || !state.configured}
+            onClick={() => void reload(true)}
+          >
+            <RefreshCw size={13} /> {busy ? "Membaca…" : "Muat ulang katalog"}
+          </button>
+        </div>
+        {!state.configured && (
+          <div className="ad-note">
+            Isi <code>LLM_BASE_URL</code> dan <code>LLM_API_KEY</code> di server
+            untuk membaca daftar model.
+          </div>
+        )}
+        {state.configured && (state.catalogError || error) && (
+          <div className="ad-note">
+            {error || state.catalogError} Preset tier Otomatis/Cepat/Seimbang/
+            Kuat tetap dapat dipakai pengguna.
+          </div>
+        )}
+        {error && <div className="ad-note ad-error">{error}</div>}
+        {groups.map((group) => (
+          <div className="ad-model-group" key={group.label}>
+            <strong>
+              {group.label} <small>{group.models.length} model</small>
+            </strong>
+            <div className="ad-chips">
+              {group.models.slice(0, 40).map((model: string) => (
+                <code key={model}>{model}</code>
+              ))}
+              {group.models.length > 40 && (
+                <span>+{group.models.length - 40} model lain</span>
+              )}
+            </div>
+          </div>
+        ))}
+        <p className="ad-safety">
+          Pengelompokan hanya untuk tampilan; setiap id di daftar ini dapat
+          dipilih pengguna di chat dan dikirim apa adanya ke provider. Baris ini
+          tidak menjalankan inference.
+        </p>
+      </section>
+      <section className="ad-card">
+        <div className="ad-card-heading">
+          <div>
+            <h2>Penggunaan kredit AI</h2>
+            <p>
+              {state.usage?.windowDays || 30} hari terakhir. Angka berasal dari
+              ledger dan reservasi kredit.
+            </p>
+          </div>
+          <Gauge size={20} />
+        </div>
+        <dl>
+          <dt>Kredit terpakai untuk AI</dt>
+          <dd>
+            <strong>{state.usage?.aiCreditsSpent ?? 0}</strong> kredit
+            {state.usage?.truncated ? " (sebagian, batas baca tercapai)" : ""}
+          </dd>
+        </dl>
+        {table_(
+          ["Tujuan", "Reservasi", "Selesai", "Dikembalikan", "Kredit selesai"],
+          state.usage?.purposes || [],
+          (r) => (
+            <>
+              <td>
+                <strong>{insightLabel(r.purpose)}</strong>
+              </td>
+              <td>{r.reserved || 0}</td>
+              <td>{r.settled || 0}</td>
+              <td>{r.refunded || 0}</td>
+              <td>{r.settledCredits || 0}</td>
+            </>
+          ),
+        )}
+        <p className="ad-safety">{state.notice}</p>
+      </section>
+    </>
+  );
+}
+
+/** Balance, ledger and reservations for one account — read-only. */
+function CreditDetail({
+  client,
+  userId,
+  onClose,
+}: {
+  client: AdminClient;
+  userId: string;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<Row | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let dead = false;
+    setData(null);
+    setError("");
+    client("/admin/users/" + userId)
+      .then((d) => {
+        if (!dead) setData(d);
+      })
+      .catch((e) => {
+        if (!dead) setError(e.message);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [client, userId]);
+  return (
+    <section className="ad-card ad-detail" aria-label="Rincian kredit akun">
+      <div className="ad-card-heading">
+        <div>
+          <h2>Rincian kredit akun</h2>
+          <p>
+            {data?.account?.name || data?.account?.email || short(userId)} ·
+            hanya baca, penyesuaian tetap lewat tindakan beralasan.
+          </p>
+        </div>
+        <button className="ad-secondary" onClick={onClose}>
+          Tutup
+        </button>
+      </div>
+      {error && <div className="ad-note ad-error">{error}</div>}
+      {!data && !error && <div className="ad-empty">Memuat rincian akun…</div>}
+      {data && (
+        <>
+          <div className="ad-service-grid">
+            <div>
+              <strong>Saldo</strong>
+              <Badge warn={data.balance === null}>
+                {data.balance === null ? "Belum dibuat" : data.balance}
+              </Badge>
+            </div>
+            <div>
+              <strong>Status akun</strong>
+              <Badge warn={data.suspended}>
+                {data.suspended ? "Ditangguhkan" : "Aktif"}
+              </Badge>
+            </div>
+            <div>
+              <strong>Peran admin</strong>
+              <Badge>{label(data.adminRole)}</Badge>
+            </div>
+            <div>
+              <strong>Project</strong>
+              <Badge>{data.projects}</Badge>
+            </div>
+          </div>
+          <dl>
+            <dt>Email</dt>
+            <dd>{data.account?.email || "—"}</dd>
+            <dt>Terdaftar</dt>
+            <dd>
+              {data.account?.createdAt ? date(data.account.createdAt) : "—"}
+            </dd>
+            <dt>Masuk terakhir</dt>
+            <dd>
+              {data.account?.lastSignInAt
+                ? date(data.account.lastSignInAt)
+                : "Belum pernah"}
+            </dd>
+            <dt>Verifikasi</dt>
+            <dd>
+              {data.account?.verified ? "Terverifikasi" : "Belum terverifikasi"}
+            </dd>
+            <dt>{data.window?.days || 30} hari terakhir</dt>
+            <dd>
+              +{data.window?.added ?? 0} kredit masuk · −
+              {data.window?.spent ?? 0} kredit terpakai
+              {data.window?.truncated ? " (sebagian, batas baca tercapai)" : ""}
+            </dd>
+            {data.suspendedReason && (
+              <>
+                <dt>Alasan penangguhan</dt>
+                <dd>{data.suspendedReason}</dd>
+              </>
+            )}
+          </dl>
+          <h3 className="ad-section-title">
+            Ledger kredit <small>25 terakhir</small>
+          </h3>
+          {table_(
+            ["Waktu", "Delta", "Alasan", "Referensi"],
+            data.ledger || [],
+            (r) => (
+              <>
+                <td>{date(r.created_at)}</td>
+                <td>
+                  <strong>{r.delta > 0 ? "+" + r.delta : r.delta}</strong>
+                </td>
+                <td>{insightLabel(r.reason)}</td>
+                <td>
+                  <code>{r.reference}</code>
+                </td>
+              </>
+            ),
+          )}
+          <h3 className="ad-section-title">
+            Reservasi proses <small>25 terakhir</small>
+          </h3>
+          {table_(
+            ["Waktu", "Tujuan", "Jumlah", "Status"],
+            data.reservations || [],
+            (r) => (
+              <>
+                <td>{date(r.created_at)}</td>
+                <td>
+                  <strong>{insightLabel(r.purpose)}</strong>
+                </td>
+                <td>{r.amount}</td>
+                <td>
+                  <Badge warn={r.status === "refunded"}>
+                    {insightLabel(r.status)}
+                  </Badge>
+                </td>
+              </>
+            ),
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Shared sandbox slots and rate-limit buckets from migration 007. */
+function RuntimeCard({ client }: { client: AdminClient }) {
+  const [data, setData] = useState<Row | null>(null);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let dead = false;
+    setData(null);
+    setError("");
+    client("/admin/runtime")
+      .then((d) => {
+        if (!dead) setData(d);
+      })
+      .catch((e) => {
+        if (!dead) setError(e.message);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [client, attempt]);
+  return (
+    <section className="ad-card">
+      <div className="ad-card-heading">
+        <div>
+          <h2>Runtime &amp; sandbox</h2>
+          <p>
+            Slot sandbox bersama dan pembatas permintaan, dibaca dari tabel
+            koordinasi.
+          </p>
+        </div>
+        <button
+          className="ad-secondary"
+          onClick={() => setAttempt((n) => n + 1)}
+        >
+          <RefreshCw size={13} /> Muat ulang
+        </button>
+      </div>
+      {error && <div className="ad-note ad-error">{error}</div>}
+      {!data && !error && <div className="ad-empty">Membaca runtime…</div>}
+      {data && !data.available && (
+        <div className="ad-note ad-error">{data.notice}</div>
+      )}
+      {data && data.available && (
+        <>
+          <div className="ad-service-grid">
+            <div>
+              <strong>Slot sandbox aktif</strong>
+              <Badge
+                warn={data.slots.active >= (data.slots.max || 50)}
+              >{`${data.slots.active} / ${data.slots.max}`}</Badge>
+            </div>
+            <div>
+              <strong>Slot tersimpan</strong>
+              <Badge>{data.slots.total}</Badge>
+            </div>
+            <div>
+              <strong>Bucket rate aktif</strong>
+              <Badge>{`${data.buckets.active} / ${data.buckets.total}`}</Badge>
+            </div>
+            <div>
+              <strong>Hit tersimpan</strong>
+              <Badge>{data.buckets.hits}</Badge>
+            </div>
+          </div>
+          <dl>
+            <dt>Mode pembatas</dt>
+            <dd>
+              {data.mode === "database"
+                ? "PostgreSQL bersama"
+                : "Memori satu proses — bukan mode produksi"}
+            </dd>
+            <dt>Routing sandbox</dt>
+            <dd>
+              {data.sandboxRouting === "sticky-owner-lease"
+                ? "Sesi tetap ke server pemilik; kuota per akun dan server"
+                : "Lokal satu proses"}
+            </dd>
+            <dt>Kuota per akun</dt>
+            <dd>{data.slots.perUser} sesi serentak</dd>
+          </dl>
+          {table_(
+            ["Pengguna", "Project", "Server pemilik", "Berlaku sampai"],
+            data.items || [],
+            (r) => (
+              <>
+                <td>
+                  <code title={r.user_id}>{short(r.user_id)}</code>
+                </td>
+                <td>
+                  <code title={r.project_id}>{short(r.project_id)}</code>
+                </td>
+                <td>
+                  <code title={r.owner}>{short(r.owner)}</code>
+                </td>
+                <td>{date(r.expires_at)}</td>
+              </>
+            ),
+          )}
+        </>
+      )}
+      {data?.available !== false && (
+        <p className="ad-safety">
+          {data?.notice ||
+            "Angka dibaca dari tabel koordinasi bersama; lease kedaluwarsa tidak dihitung aktif."}
+        </p>
+      )}
+    </section>
   );
 }
