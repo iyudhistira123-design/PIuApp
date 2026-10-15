@@ -26,7 +26,7 @@ export async function streamAI({
   prompt: string;
   files: Record<string, string>;
   mode: Mode;
-  model: Model;
+  model: string;
   onToken: (s: string) => void;
   signal?: AbortSignal;
 }): Promise<AIResult> {

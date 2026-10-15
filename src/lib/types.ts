@@ -1,5 +1,5 @@
 export type Mode = "Builder" | "Plan" | "Ask";
-export type Model = "Otomatis" | "Cepat" | "Seimbang" | "Kuat";
+export type Model = "Otomatis" | "Cepat" | "Seimbang" | "Kuat" | (string & {});
 export interface Message {
   id: string;
   role: "user" | "assistant";

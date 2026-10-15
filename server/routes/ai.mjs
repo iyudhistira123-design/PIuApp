@@ -60,6 +60,30 @@ export function validateAIResult(value, mode) {
   return r;
 }
 export function registerAI(app, ctx) {
+  app.get("/api/ai/models", rateLimit({ max: 60 }), async (req, res) => {
+    if (!capabilities(ctx.env).ai)
+      return res.status(503).json({ error: "AI belum dikonfigurasi." });
+    try {
+      const r = await ctx.fetcher(
+        ctx.env.LLM_BASE_URL.replace(/\/$/, "") + "/models",
+        {
+          headers: { Authorization: "Bearer " + ctx.env.LLM_API_KEY },
+          signal: AbortSignal.timeout(10000),
+        },
+      );
+      if (!r.ok)
+        return res
+          .status(502)
+          .json({ error: "Provider AI menolak permintaan." });
+      const data = await r.json();
+      const models = (data.data || [])
+        .map((m) => m.id)
+        .sort();
+      res.json({ models });
+    } catch {
+      res.status(503).json({ error: "Provider AI tidak dapat dijangkau." });
+    }
+  });
   app.post(
     "/api/projects/:id/ai",
     ctx.auth,
@@ -76,7 +100,7 @@ export function registerAI(app, ctx) {
           requestId: z.uuid(),
           prompt: z.string().trim().min(1).max(12000),
           mode: z.enum(["Builder", "Plan", "Ask"]),
-          model: z.enum(["Otomatis", "Cepat", "Seimbang", "Kuat"]),
+          model: z.string().trim().min(1).max(100),
           files: z.record(z.string(), z.string()),
           attachments: z.array(z.any()).max(3).optional(),
           references: z.array(z.string()).max(2).optional(),
@@ -123,12 +147,18 @@ export function registerAI(app, ctx) {
         if (!res.destroyed) res.write(": keep-alive\n\n");
       }, 10000);
       try {
-        const chosen =
-          body.model === "Otomatis"
-            ? body.prompt.length > 1200 || parts.length
+        const tierMap = {
+          Otomatis:
+            body.prompt.length > 1200 || parts.length
               ? "Kuat"
-              : "Seimbang"
-            : body.model;
+              : "Seimbang",
+          Cepat: "Cepat",
+          Seimbang: "Seimbang",
+          Kuat: "Kuat",
+        };
+        const chosen = tierMap[body.model] || body.model;
+        const modelName =
+          ctx.env["LLM_MODEL_" + chosen.toUpperCase()] || chosen;
         const response = await ctx.fetcher(
           ctx.env.LLM_BASE_URL.replace(/\/$/, "") + "/chat/completions",
           {
@@ -142,9 +172,7 @@ export function registerAI(app, ctx) {
               AbortSignal.timeout(120000),
             ]),
             body: JSON.stringify({
-              model:
-                ctx.env["LLM_MODEL_" + chosen.toUpperCase()] ||
-                ctx.env.LLM_MODEL,
+              model: modelName,
               stream: true,
               messages: [
                 {
@@ -228,14 +256,26 @@ export function registerAI(app, ctx) {
         }
         let decoded;
         try {
-          decoded = JSON.parse(
-            output.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, ""),
-          );
+          const cleaned = output.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+          decoded = JSON.parse(cleaned);
         } catch {
-          throw new HttpError(
-            502,
-            "Provider mengembalikan JSON tidak lengkap.",
-          );
+          // Jika parsing gagal, coba perbaiki JSON yang mungkin truncated
+          try {
+            let fixed = output.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+            // Cari posisi kunci pertama yang belum tertutup
+            const lastKey = fixed.lastIndexOf(',');
+            if (lastKey !== -1) {
+              fixed = fixed.substring(0, lastKey) + '}';
+            }
+            // Tambahkan penutup jika belum lengkap
+            if (!fixed.trim().endsWith('}')) fixed += '}';
+            decoded = JSON.parse(fixed);
+          } catch {
+            throw new HttpError(
+              502,
+              "Provider mengembalikan JSON tidak lengkap.",
+            );
+          }
         }
         const result = validateAIResult(decoded, body.mode);
         send({ type: "token", content: result.content.slice(sent) });

@@ -205,7 +205,9 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [refresh, setRefresh] = useState(0);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>(store.pendingMode || "Builder");
-  const [model, setModel] = useState<Model>("Otomatis");
+const [model, setModel] = useState<Model>("Otomatis");
+  const [aiModels, setAiModels] = useState<string[]>([]);
+  const [aiModelsLoaded, setAiModelsLoaded] = useState(false);
   const [chatTab, setChatTab] = useState("Chat");
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState("");
@@ -339,6 +341,16 @@ function WorkspaceContent({ project }: { project: Project }) {
       .catch(() => setInitializing(false));
     return () => controller.abort();
   }, []);
+  useEffect(() => {
+    if (provider !== "configured") return;
+    fetch("/api/ai/models")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.models) setAiModels(d.models);
+        setAiModelsLoaded(true);
+      })
+      .catch(() => setAiModelsLoaded(true));
+  }, [provider]);
   useEffect(() => {
     const fn = (e: MessageEvent) => {
       if (e.source !== previewRef.current?.contentWindow) return;
@@ -2192,16 +2204,28 @@ function WorkspaceContent({ project }: { project: Project }) {
                       <select
                         aria-label="Pilih model"
                         value={model}
-                        onChange={(e) => setModel(e.target.value as Model)}
+                        onChange={(e) => setModel(e.target.value)}
+                        disabled={provider !== "configured"}
                       >
                         {["Otomatis", "Cepat", "Seimbang", "Kuat"].map((m) => (
-                          <option key={m}>{m}</option>
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
                         ))}
+                        {aiModelsLoaded && aiModels.length > 0 && (
+                          <optgroup label="Model Langsung">
+                            {aiModels.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                       <span>
                         {provider !== "configured"
                           ? "AI belum tersedia"
-                          : `Estimasi ${mode === "Ask" ? 1 : mode === "Plan" ? 2 : model === "Kuat" ? 8 : model === "Cepat" ? 1 : 3} kredit · belum ditagih`}
+                          : `Estimasi ${mode === "Ask" ? 1 : mode === "Plan" ? 2 : model === "Kuat" || (aiModels.includes(model) && model !== "Otomatis" && model !== "Seimbang") ? 8 : model === "Cepat" ? 1 : 3} kredit · belum ditagih`}
                       </span>
                     </div>
                   </div>
