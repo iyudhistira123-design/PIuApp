@@ -477,6 +477,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           content: result.content,
           files: result.files ? Object.keys(result.files) : undefined,
           summary: result.summary,
+          ops: result.ops,
           model: result.model,
           mode: currentMode,
           at: Date.now(),
@@ -1959,6 +1960,39 @@ function WorkspaceContent({ project }: { project: Project }) {
                                     <Check size={11} />
                                   </button>
                                 ))}
+                              </div>
+                            )}
+                            {m.ops && (
+                              <div className="ai-ops-list">
+                                <span
+                                  className={
+                                    m.ops.rejected.length
+                                      ? "ops-headline warn"
+                                      : "ops-headline"
+                                  }
+                                >
+                                  <ListChecks size={12} />
+                                  {m.ops.sceneChanged
+                                    ? `Scene diperbarui · ${m.ops.applied.length} operasi`
+                                    : m.ops.rejected.length
+                                      ? `Tidak ada perubahan scene · ${m.ops.rejected.length} operasi ditolak`
+                                      : "Tanpa perubahan scene"}
+                                </span>
+                                {m.ops.applied.map((op, i) => (
+                                  <p key={"applied" + i}>
+                                    <Check size={11} />
+                                    <strong>{op.name || op.target}</strong>
+                                    {(op.changes || []).join(" · ")}
+                                  </p>
+                                ))}
+                                {m.ops.rejected.map((op, i) => (
+                                  <p className="rejected" key={"rejected" + i}>
+                                    <X size={11} />
+                                    <strong>{op.target || op.kind}</strong>
+                                    {op.reason}
+                                  </p>
+                                ))}
+                                <small>{m.ops.note}</small>
                               </div>
                             )}
                             {m.role === "assistant" && (

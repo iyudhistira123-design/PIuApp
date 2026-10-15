@@ -14,6 +14,14 @@ const files = z
   .record(safePath, z.string().max(262144))
   .refine((f) => Object.keys(f).length <= 200);
 const finiteTime = z.number().finite().nonnegative();
+const opsChange = z.object({
+  kind: z.string().max(40),
+  target: z.string().max(120),
+  id: z.string().max(100).optional(),
+  name: z.string().max(80).optional(),
+  changes: z.array(z.string().max(200)).max(40).optional(),
+  reason: z.string().max(300).optional(),
+});
 const message = z.object({
   id: z.string().min(1).max(128),
   role: z.enum(["user", "assistant"]),
@@ -21,6 +29,16 @@ const message = z.object({
   mode: z.enum(["Builder", "Plan", "Ask"]),
   files: z.array(safePath).optional(),
   summary: z.array(z.string()).optional(),
+  // Report of applied/rejected structured scene ops, shown as-is in the chat.
+  ops: z
+    .object({
+      version: z.number(),
+      applied: z.array(opsChange).max(40),
+      rejected: z.array(opsChange).max(40),
+      sceneChanged: z.boolean(),
+      note: z.string().max(300),
+    })
+    .optional(),
   at: finiteTime,
 });
 export const projectSchema = z.object({

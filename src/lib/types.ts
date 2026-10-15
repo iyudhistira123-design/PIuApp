@@ -1,11 +1,28 @@
 export type Mode = "Builder" | "Plan" | "Ask";
 export type Model = "Otomatis" | "Cepat" | "Seimbang" | "Kuat" | (string & {});
+export interface OpsChange {
+  kind: string;
+  target: string;
+  id?: string;
+  name?: string;
+  changes?: string[];
+  reason?: string;
+}
+/** What the server actually did with a structured scene ops batch. */
+export interface OpsReport {
+  version: number;
+  applied: OpsChange[];
+  rejected: OpsChange[];
+  sceneChanged: boolean;
+  note: string;
+}
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   mode: Mode;
   files?: string[];
+  ops?: OpsReport;
   summary?: string[];
   /** Model the provider answered with, shown on the reply. */
   model?: string;

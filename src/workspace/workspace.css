@@ -934,6 +934,49 @@
 .ai-file-list > button:hover {
   color: var(--ide-text, #d2e8d8);
 }
+/* Structured scene ops: applied vs refused, with the server's own wording so a
+   rejected batch never looks like a successful edit. */
+.ai-ops-list {
+  background: var(--ide-bg, #162820);
+  border: 1px solid var(--ide-border, #2b4736);
+  border-radius: 6px;
+  margin-top: 13px;
+  padding: 10px;
+}
+.ai-ops-list > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 7px;
+  color: var(--ide-success, #74a183);
+  margin-bottom: 7px;
+}
+.ai-ops-list > span.warn {
+  color: var(--ide-warning, #d8a657);
+}
+.ai-ops-list p {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 8px;
+  line-height: 1.8;
+  color: var(--ide-text, #cfd8d2);
+  margin: 0;
+  padding: 3px 0;
+}
+.ai-ops-list p strong {
+  font-weight: 600;
+}
+.ai-ops-list p.rejected {
+  color: var(--ide-warning, #d8a657);
+}
+.ai-ops-list small {
+  display: block;
+  font-size: 7px;
+  line-height: 1.8;
+  color: var(--ide-muted, #7f9188);
+  margin-top: 6px;
+}
 .message-actions {
   display: flex;
   gap: 11px;

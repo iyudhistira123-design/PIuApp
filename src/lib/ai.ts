@@ -1,5 +1,5 @@
 import type { Attachment } from "../services/api";
-import type { Mode, Model, Plan } from "./types";
+import type { Mode, Model, OpsReport, Plan } from "./types";
 import { supabase } from "./supabase";
 import { useStore } from "./store";
 export interface AIResult {
@@ -11,6 +11,8 @@ export interface AIResult {
   /** Model the provider actually answered with, plus the tier it billed as. */
   model?: string;
   tier?: string;
+  /** Present only when the reply asked for deterministic scene edits. */
+  ops?: OpsReport;
 }
 
 /** Tier presets; any other value is a concrete model id from the API key. */
