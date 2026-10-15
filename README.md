@@ -54,7 +54,7 @@ Landing juga memakai lapisan animasi terisolasi (`landing-motion.css` + `useLand
 
 ## Paket SQL siap dipasang
 
-Mulai dari **[supabase/README.md](supabase/README.md)**. Database baru memakai satu file `supabase/install/INSTALL_NEW_DATABASE.sql` (001–008, transaksi atomik). Database lama hanya menjalankan migration yang belum diterapkan—**jangan gunakan installer baru**. Paket juga menyediakan `CHECK_INSTALLATION.sql` yang read-only dan `BOOTSTRAP_FIRST_ADMIN.sql` untuk akun email terverifikasi, tanpa password bawaan.
+Mulai dari **[supabase/README.md](supabase/README.md)**. Database baru memakai satu file `supabase/install/INSTALL_NEW_DATABASE.sql` (001–009, transaksi atomik). Database lama hanya menjalankan migration yang belum diterapkan—**jangan gunakan installer baru**. Paket juga menyediakan `CHECK_INSTALLATION.sql` yang read-only dan `BOOTSTRAP_FIRST_ADMIN.sql` untuk akun email terverifikasi, tanpa password bawaan.
 
 ## Konfigurasi cloud / provider
 

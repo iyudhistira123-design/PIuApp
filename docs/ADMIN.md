@@ -65,7 +65,7 @@ Laporan pengujian, batas multi-instance, dan temuan dependency native: [ADMIN_PR
 - Worker mengecek suspension/project lock sebelum build dan sebelum mengirim ke hosting. Pause sandbox juga menjeda build publish. Request eksternal yang sudah berjalan bisa tetap selesai; tidak ada klaim cancellation/exactly-once provider.
 - Unpublish menolak project dengan job queued/building, mengunci project, menghapus pemetaan hosting dan memasukkan penghapusan remote ke antrean. **Website belum dianggap offline sampai cleanup selesai.** Membuka kunci kembali mengizinkan publish baru. Retry cleanup hanya menjadwalkan ulang, bukan membuktikan site terhapus.
 - Hapus project menolak build berjalan dan mengembalikan reservasi kredit job queued dalam transaksi sebelum cascade delete. Penghapusan permanen; backup terlebih dahulu.
-- Pada produksi, skema suspension/lock/settings yang hilang memblokir operasi (fail-closed). Development mempertahankan kompatibilitas deployment bertahap. Terapkan 001–008 dan verifikasi hak RPC/RLS sebelum mengandalkan kontrol admin.
+- Pada produksi, skema suspension/lock/settings yang hilang memblokir operasi (fail-closed). Development mempertahankan kompatibilitas deployment bertahap. Terapkan 001–009 dan verifikasi hak RPC/RLS sebelum mengandalkan kontrol admin.
 
 ## Pengujian dan checklist staging
 
