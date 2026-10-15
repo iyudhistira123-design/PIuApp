@@ -769,6 +769,7 @@ export function AdminPanel({
                                   administration: "Administrasi",
                                   studio: "Studio",
                                   ai: "AI",
+                                  search: "Riset & pencarian",
                                   sandbox: "Sandbox",
                                   publish: "Publish",
                                   payments: "Pembayaran",
@@ -793,6 +794,78 @@ export function AdminPanel({
                           </div>
                         ))}
                     </div>
+                    <h3>Pencarian web (baca-saja)</h3>
+                    {data.search ? (
+                      <>
+                        <dl>
+                          <dt>Provider dipilih</dt>
+                          <dd>
+                            {data.search.selected === "none"
+                              ? "belum dipilih"
+                              : data.search.selected}{" "}
+                            <Badge
+                              warn={
+                                !data.search.selectedAvailable ||
+                                data.search.disabled
+                              }
+                            >
+                              {data.search.disabled
+                                ? "Dimatikan (SEARCH_ENABLED=false)"
+                                : data.search.selectedAvailable
+                                  ? "Siap dipakai"
+                                  : "Kunci belum ada"}
+                            </Badge>
+                          </dd>
+                          <dt>Kunci API</dt>
+                          <dd>
+                            {data.search.keyConfigured
+                              ? "terpasang di server (tidak pernah dikirim ke browser)"
+                              : "belum diisi (SEARCH_API_KEY)"}
+                          </dd>
+                          <dt>Jenis yang tersedia</dt>
+                          <dd>
+                            {[
+                              data.search.web ? "web" : "",
+                              data.search.code ? "kode" : "",
+                              data.search.docs ? "dokumentasi" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(", ") || "tidak ada"}
+                          </dd>
+                          <dt>Ronde riset maksimum</dt>
+                          <dd>{data.search.rounds}</dd>
+                          <dt>Bias lokal</dt>
+                          <dd>
+                            {data.search.locale?.country ||
+                            data.search.locale?.language
+                              ? `${data.search.locale?.country || "-"} / ${
+                                  data.search.locale?.language || "-"
+                                }`
+                              : "tidak diatur (opsional)"}
+                          </dd>
+                          <dt>Cache hasil</dt>
+                          <dd>
+                            {data.search.cache?.mode === "shared"
+                              ? "bersama (tabel runtime_search_cache)"
+                              : "per-proses (migration 009 belum diterapkan)"}{" "}
+                            · {data.search.cache?.entries ?? 0} entri ·{" "}
+                            {data.search.cache?.stats?.hits ?? 0} hit (
+                            {data.search.cache?.stats?.sharedHits ?? 0} dari
+                            tabel) · {data.search.cache?.stats?.errors ?? 0}{" "}
+                            galat
+                          </dd>
+                          <dt>Kunci Context7</dt>
+                          <dd>
+                            {data.search.context7KeyConfigured
+                              ? "terpasang"
+                              : "tidak diisi (dokumentasi tetap bisa dicari tanpa kunci)"}
+                          </dd>
+                        </dl>
+                        <p>{data.search.notice}</p>
+                      </>
+                    ) : (
+                      <p>Data pencarian tidak tersedia pada respons ini.</p>
+                    )}
                     <dl>
                       <dt>Pembatas permintaan</dt>
                       <dd>

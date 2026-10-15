@@ -305,6 +305,59 @@ test("runtime overview counts only live leases and reports a missing migration",
   }
 });
 
+test("diagnostics reports the search provider and cache without ever leaking the key", async () => {
+  const secret = "tvly-not-a-real-credential-000000";
+  const { server, url } = await serve({
+    env: {
+      SEARCH_PROVIDER: "tavily",
+      SEARCH_API_KEY: secret,
+      SEARCH_COUNTRY: "indonesia",
+      SEARCH_LANGUAGE: "id",
+    },
+  });
+  try {
+    const { status, body } = await get(url + "/admin/diagnostics");
+    assert.equal(status, 200);
+    assert.equal(body.search.provider, "tavily");
+    assert.equal(body.search.selected, "tavily");
+    assert.equal(body.search.selectedAvailable, true);
+    assert.equal(body.search.keyConfigured, true);
+    assert.equal(body.search.disabled, false);
+    assert.equal(body.search.web, true);
+    assert.equal(body.search.code, true);
+    assert.equal(body.search.docs, true);
+    assert.equal(body.search.rounds, 2);
+    assert.deepEqual(body.search.locale, {
+      country: "indonesia",
+      language: "id",
+    });
+    assert.ok(["process", "shared"].includes(body.search.cache.mode));
+    assert.equal(typeof body.search.cache.entries, "number");
+    assert.equal(typeof body.search.cache.stats.hits, "number");
+    assert.match(body.search.notice, /verify:search/);
+    // The key is a boolean fact, never a value.
+    assert.ok(!JSON.stringify(body).includes(secret));
+    assert.ok(!JSON.stringify(body).includes("tvly-"));
+  } finally {
+    server.close();
+  }
+});
+
+test("the diagnostics search block says when search is switched off", async () => {
+  const { server, url } = await serve({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_ENABLED: "false" },
+  });
+  try {
+    const { body } = await get(url + "/admin/diagnostics");
+    assert.equal(body.search.disabled, true);
+    assert.equal(body.search.available, false);
+    assert.equal(body.search.web, false);
+    assert.equal(body.search.keyConfigured, false);
+  } finally {
+    server.close();
+  }
+});
+
 test("runtime overview explains a missing migration 007 without failing the request", async () => {
   const { server, url } = await serve({ runtimeSchema: false });
   try {

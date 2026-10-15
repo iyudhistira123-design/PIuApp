@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createApp } from "../server/app.mjs";
+import { resetSearchCache } from "../server/lib/search.mjs";
 import { SCENE_PATH } from "../server/lib/ai-ops.mjs";
 import { defaultSite } from "../server/lib/platform.mjs";
 
@@ -43,6 +44,8 @@ type Fixture = {
   researchReply?: any;
   pages?: Record<string, string>;
   searchStatus?: number;
+  /** Shared fake of the `runtime_search_cache` table (migration 009). */
+  cacheRows?: Map<string, any>;
 };
 
 function fixture({
@@ -76,6 +79,7 @@ function fixture({
       "<html><title>Ronde dua lagi</title><body>Isi halaman keempat.</body></html>",
   },
   searchStatus = 200,
+  cacheRows = new Map(),
 }: Fixture = {}) {
   const chat: any[] = [];
   const rpcs: any[] = [];
@@ -156,6 +160,15 @@ function fixture({
         },
         revision: 1,
       });
+    if (path === "/rest/v1/runtime_search_cache") {
+      if ((init.method || "GET") === "POST") {
+        for (const row of [].concat(JSON.parse(init.body || "[]")))
+          cacheRows.set(row.key, row);
+        return json([], 201);
+      }
+      const key = (url.searchParams.get("key") || "").replace("eq.", "");
+      return json(cacheRows.has(key) ? [cacheRows.get(key)] : []);
+    }
     if (path.startsWith("/rest/v1/rpc/")) {
       const rpc = path.replace("/rest/v1/rpc/", "");
       rpcs.push({ rpc, body: JSON.parse(init.body) });
@@ -179,7 +192,7 @@ function fixture({
       return json([{ revision: 1, value: defaultSite }]);
     throw new Error("Unexpected fixture query: " + path + url.search);
   };
-  return { fetcher, chat, rpcs, vendor };
+  return { fetcher, chat, rpcs, vendor, cacheRows };
 }
 
 async function run(
@@ -354,6 +367,52 @@ test("a citation whose source says something else is flagged, never silently acc
   assert.deepEqual(result.research.unsupported, [1, 2]);
   assert.match(result.research.groundingNotice, /Pemeriksaan heuristik/);
   assert.match(result.research.groundingNotice, /1, 2/);
+});
+
+test("two server instances share one cached search instead of paying twice", async () => {
+  // One fake table, two independent apps (two `createApp` calls), same query.
+  const cacheRows = new Map<string, any>();
+  const first = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    cacheRows,
+    reply: {
+      content: "",
+      ops: [
+        {
+          kind: "search",
+          queries: ["cache bersama lintas instance"],
+          type: "web",
+        },
+      ],
+    },
+    researchReply: { content: "Catatan [1]." },
+  });
+  assert.equal(first.vendor.length, 1);
+  assert.equal(resultOf(first.events).research.rounds[0].cached, false);
+  assert.equal(resultOf(first.events).research.rounds[0].cache, "shared");
+  assert.equal(cacheRows.size, 1);
+
+  // A different instance has its own memory: only the table carries over.
+  resetSearchCache();
+  const second = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    cacheRows,
+    reply: {
+      content: "",
+      ops: [
+        {
+          kind: "search",
+          queries: ["cache bersama lintas instance"],
+          type: "web",
+        },
+      ],
+    },
+    researchReply: { content: "Catatan [1]." },
+  });
+  // The second instance answers from the shared row: no vendor call at all.
+  assert.equal(second.vendor.length, 0);
+  assert.equal(resultOf(second.events).research.rounds[0].cached, true);
+  assert.equal(resultOf(second.events).sources.length, 2);
 });
 
 test("two rounds are numbered 1..4, billed one credit each and closed honestly", async () => {

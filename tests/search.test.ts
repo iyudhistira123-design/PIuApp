@@ -29,6 +29,7 @@ import {
   splitSearchOps,
 } from "../server/lib/research.mjs";
 import { fetchReference } from "../server/lib/references.mjs";
+import { cacheKey, createSearchCache } from "../server/lib/search-cache.mjs";
 import { capabilities } from "../server/lib/core.mjs";
 
 // Payloads below are the vendors' documented response shapes (verified against
@@ -103,6 +104,34 @@ const providerPayloads: Record<string, any> = {
     ],
   },
 };
+
+/** Minimal stand-in for the service-role client, with PostgREST-shaped answers. */
+function cacheAdmin(rows: Map<string, any>, { missing = false } = {}) {
+  const builder: any = {
+    key: "",
+    select: () => builder,
+    eq: (_column: string, value: string) => ((builder.key = value), builder),
+    limit: () => builder,
+    lt: () => builder,
+    abortSignal: () => builder,
+    delete: () => builder,
+    upsert: async (row: any) => {
+      if (missing) return { error: { code: "PGRST205", message: "missing" } };
+      rows.set(row.key, row);
+      return { error: null };
+    },
+    then: (resolve: any, reject?: any) =>
+      Promise.resolve(
+        missing
+          ? { error: { code: "PGRST205", message: "missing" }, data: null }
+          : {
+              data: rows.has(builder.key) ? [rows.get(builder.key)] : [],
+              error: null,
+            },
+      ).then(resolve, reject),
+  };
+  return { from: () => builder } as any;
+}
 
 /** A real (tiny) PDF, so the document path is exercised for real, not mocked. */
 function pdfBytes(text: string) {
@@ -1192,4 +1221,81 @@ test("a PDF, a markdown page and a thin page are all read honestly", async () =>
       } as any),
     /HTML atau teks/,
   );
+});
+
+test("the search cache is shared across instances, and falls back when it cannot be", async () => {
+  resetSearchCache();
+  // Two caches, one table: the second instance pays nothing for the same query.
+  const rows = new Map<string, any>();
+  const first = createSearchCache({ admin: cacheAdmin(rows), env: {} });
+  const payload = {
+    provider: "tavily",
+    label: "Tavily",
+    kind: "web",
+    query: "cara pakai vite",
+    sources: [{ title: "A", url: "https://a.test", snippet: "isi" }],
+  };
+  await first.set(cacheKey(["tavily", "web", "cara pakai vite"]), payload);
+  assert.equal(first.mode(), "shared");
+
+  const second = createSearchCache({ admin: cacheAdmin(rows), env: {} });
+  const hit = await second.get(cacheKey(["tavily", "web", "cara pakai vite"]));
+  assert.ok(hit);
+  assert.equal(hit!.mode, "shared");
+  assert.equal(hit!.value.query, "cara pakai vite");
+  assert.equal(second.stats.sharedHits, 1);
+
+  // Switching the shared layer off is possible without touching the memory one.
+  const local = createSearchCache({
+    admin: cacheAdmin(rows),
+    env: { SEARCH_CACHE_SHARED: "false" },
+  });
+  assert.equal(local.mode(), "process");
+  await local.set("k", payload);
+  assert.equal((await local.get("k"))!.mode, "process");
+
+  // A missing table is a configuration fact: one failed round trip, then memory.
+  const missing = createSearchCache({
+    admin: cacheAdmin(new Map(), { missing: true }),
+    env: {},
+  });
+  assert.equal(await missing.get("k"), null);
+  assert.equal(missing.mode(), "process");
+  assert.equal(missing.stats.errors, 1);
+  await missing.set("k", payload);
+  assert.equal((await missing.get("k"))!.value.query, "cara pakai vite");
+  assert.equal(missing.stats.errors, 1);
+});
+
+test("a shared hit answers a real search without calling the vendor", async () => {
+  resetSearchCache();
+  const rows = new Map<string, any>();
+  rows.set(cacheKey(["tavily", "web", "cara pakai vite"]), {
+    payload: {
+      provider: "tavily",
+      label: "Tavily",
+      kind: "web",
+      query: "cara pakai vite",
+      sources: [
+        { title: "Dari cache", url: "https://cache.test/a", snippet: "isi" },
+      ],
+    },
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+  });
+  let vendorCalls = 0;
+  const { ctx } = fixture();
+  ctx.admin = cacheAdmin(rows);
+  ctx.fetcher = async () => {
+    vendorCalls++;
+    throw new Error("vendor harusnya tidak dipanggil");
+  };
+  const result = await searchOne(ctx, {
+    query: "cara pakai vite",
+    kind: "web",
+  });
+  assert.equal(vendorCalls, 0);
+  assert.equal(result.cached, true);
+  assert.equal(result.cacheMode, "shared");
+  assert.equal(result.sources[0].title, "Dari cache");
+  resetSearchCache();
 });

@@ -1,5 +1,7 @@
 import { adminFilters, applyAdminFilters } from "../lib/admin-query.mjs";
 import { createReadinessReader } from "../lib/readiness.mjs";
+import { researchStatus } from "../lib/research.mjs";
+import { searchCacheInfo, searchCapability } from "../lib/search.mjs";
 import { createPublicSiteReader } from "../lib/public-site.mjs";
 import { z } from "zod";
 import {
@@ -342,6 +344,26 @@ export function registerAdmin(app, ctx) {
               ? "sticky-owner-lease"
               : "process-local",
         },
+        // Read-only search status: which provider is selected, whether its key
+        // is present, and what the cache is doing. Never the key itself.
+        search: (() => {
+          const capability = searchCapability(ctx.env);
+          return {
+            ...researchStatus(ctx.env),
+            selected: capability.selected,
+            selectedAvailable: capability.selectedAvailable,
+            disabled: capability.disabled,
+            keyConfigured: Boolean(ctx.env.SEARCH_API_KEY),
+            context7KeyConfigured: Boolean(ctx.env.CONTEXT7_API_KEY),
+            locale: {
+              country: ctx.env.SEARCH_COUNTRY || "",
+              language: ctx.env.SEARCH_LANGUAGE || "",
+            },
+            cache: searchCacheInfo(ctx),
+            notice:
+              "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
+          };
+        })(),
         liveVerified: false,
         notice:
           "Probe read-only: bukan bukti transaksi, inference, deployment, uji perangkat, atau kelulusan pentest.",

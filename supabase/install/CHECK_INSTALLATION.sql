@@ -13,7 +13,8 @@ with markers(migration,table_name,function_signature) as (values
  ('006','public.studio_bridges',null),
  ('007','public.runtime_rate_buckets','public.piwu_take_rate(text,integer,integer)'),
  ('007','public.runtime_sandbox_slots','public.piwu_sandbox_slot(uuid,uuid,uuid,boolean)'),
- ('008',null,'public.piwu_admin_users(uuid,text,integer)')
+ ('008',null,'public.piwu_admin_users(uuid,text,integer)'),
+ ('009','public.runtime_search_cache',null)
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)

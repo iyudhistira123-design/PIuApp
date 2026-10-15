@@ -1,4 +1,4 @@
--- PIWUAPP: INSTALL BARU SAJA (001–008)
+-- PIWUAPP: INSTALL BARU SAJA (001–009)
 -- Dibuat oleh npm run sql:bundle dari migration kanonis; jangan edit hasil ini manual.
 -- Jalankan SELURUH file di SQL Editor project Supabase baru sebagai operator database.
 -- BUKAN untuk database yang pernah menerima migration PiwuApp.
@@ -11,7 +11,7 @@ begin
   if to_regclass('auth.users') is null or to_regclass('storage.objects') is null or to_regclass('storage.buckets') is null then
     raise exception 'PIWU_SUPABASE_REQUIRED: gunakan project Supabase dengan Auth dan Storage tersedia';
   end if;
-  if exists (select 1 from unnest(array['public.users','public.projects','public.collaborators','public.project_files','public.messages','public.plans','public.versions','public.project_memory','public.prompts','public.model_settings','public.comments','public.session_recordings','public.env_vars','public.deployments','public.analytics_events','public.templates','public.referrals','public.subscriptions','public.scan_reports','public.usage','public.project_workspaces','public.project_invites','public.credit_accounts','public.credit_ledger','public.credit_reservations','public.payment_orders','public.webhook_receipts','public.referral_codes','public.template_entitlements','public.marketplace_sales','public.project_sites','public.publish_jobs','public.recording_shares','public.asset_records','public.hosting_cleanup_jobs','public.project_datasets','public.platform_admins','public.platform_user_controls','public.platform_project_controls','public.site_configuration','public.platform_broadcasts','public.broadcast_reads','public.platform_audit','public.studio_bridges','public.runtime_rate_buckets','public.runtime_sandbox_slots']) as candidate(name) where to_regclass(name) is not null) then
+  if exists (select 1 from unnest(array['public.users','public.projects','public.collaborators','public.project_files','public.messages','public.plans','public.versions','public.project_memory','public.prompts','public.model_settings','public.comments','public.session_recordings','public.env_vars','public.deployments','public.analytics_events','public.templates','public.referrals','public.subscriptions','public.scan_reports','public.usage','public.project_workspaces','public.project_invites','public.credit_accounts','public.credit_ledger','public.credit_reservations','public.payment_orders','public.webhook_receipts','public.referral_codes','public.template_entitlements','public.marketplace_sales','public.project_sites','public.publish_jobs','public.recording_shares','public.asset_records','public.hosting_cleanup_jobs','public.project_datasets','public.platform_admins','public.platform_user_controls','public.platform_project_controls','public.site_configuration','public.platform_broadcasts','public.broadcast_reads','public.platform_audit','public.studio_bridges','public.runtime_rate_buckets','public.runtime_sandbox_slots','public.runtime_search_cache']) as candidate(name) where to_regclass(name) is not null) then
     raise exception 'PIWU_EXISTING_DATABASE: objek PiwuApp sudah ada. Jangan jalankan installer baru; periksa CHECK_INSTALLATION.sql dan jalankan hanya migration yang belum diterapkan.';
   end if;
   if exists(select 1 from storage.buckets where id='project-assets') then
@@ -892,7 +892,28 @@ end $$;
 revoke all on function public.piwu_admin_users(uuid,text,integer) from public,anon,authenticated;
 grant execute on function public.piwu_admin_users(uuid,text,integer) to service_role;
 
+-- =====================================================================
+-- 009_search_cache.sql | SHA256 7c0052f7d18ebb296d23b0b29110dc1e52ef7ca8338857a0899bb8cc95cd4045
+-- =====================================================================
+-- Shared search cache. Apply after 001–008. Service role only: no browser access.
+--
+-- Why a table and not Redis: search results are already stored server-side, the
+-- project already depends on Supabase, and a second instance that asks the same
+-- question within 15 minutes must not pay the vendor twice. Without this
+-- migration the app still works — it simply caches per process and says so in
+-- the admin diagnostics endpoint.
+create table if not exists public.runtime_search_cache (
+  key text primary key,
+  payload jsonb not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists runtime_search_cache_expiry on public.runtime_search_cache(expires_at);
+alter table public.runtime_search_cache enable row level security;
+revoke all on public.runtime_search_cache from public, anon, authenticated;
+grant select, insert, update, delete on public.runtime_search_cache to service_role;
+
 notify pgrst, 'reload schema';
 commit;
 
-select 'Instalasi skema 001–008 selesai. Jalankan CHECK_INSTALLATION.sql, lalu bootstrap admin secara terpisah.' as hasil;
+select 'Instalasi skema 001–009 selesai. Jalankan CHECK_INSTALLATION.sql, lalu bootstrap admin secara terpisah.' as hasil;

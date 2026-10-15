@@ -1,5 +1,10 @@
 import { HttpError, secretPattern, searchDisabled } from "./core.mjs";
 import { fetchReference } from "./references.mjs";
+import {
+  SEARCH_CACHE_TTL_MS,
+  cacheKey,
+  createSearchCache,
+} from "./search-cache.mjs";
 
 // Retrieval foundation for "Riset & Pencarian". One normalized result shape for
 // several providers, so a new vendor is a new entry in `providers` and an env
@@ -18,8 +23,6 @@ import { fetchReference } from "./references.mjs";
 export const SEARCH_KINDS = ["web", "code", "docs"];
 export const SEARCH_QUERIES_MAX = 3;
 export const SEARCH_RESULTS_MAX = 8;
-const CACHE_TTL_MS = 15 * 60 * 1000;
-const CACHE_MAX = 120;
 const SNIPPET_MAX = 320;
 
 const clean = (value, max = SNIPPET_MAX) =>
@@ -473,9 +476,41 @@ export function resolveProvider(env, kind, requested) {
   );
 }
 
-const cache = new Map();
+// One store per process: it holds the memory layer and, when a service-role
+// client is available, the shared table from migration 009.
+let store = null;
+const ensureStore = (ctx) => {
+  if (!store) store = createSearchCache({ admin: ctx?.admin || null, env: ctx?.env || {} });
+  else store.attach(ctx?.admin || null);
+  return store;
+};
+/** Test helper: forget everything, so the next call starts from a cold cache. */
 export function resetSearchCache() {
-  cache.clear();
+  store?.reset();
+}
+const EMPTY_STATS = {
+  hits: 0,
+  memoryHits: 0,
+  sharedHits: 0,
+  writes: 0,
+  errors: 0,
+};
+/** Read-only view for admin diagnostics — counts only, never cached results. */
+export function searchCacheInfo(ctx) {
+  const current = ctx ? ensureStore(ctx) : store;
+  if (!current)
+    return {
+      mode: "process",
+      entries: 0,
+      ttlMinutes: Math.round(SEARCH_CACHE_TTL_MS / 60000),
+      stats: { ...EMPTY_STATS },
+    };
+  return {
+    mode: current.mode(),
+    entries: current.size(),
+    ttlMinutes: Math.round(SEARCH_CACHE_TTL_MS / 60000),
+    stats: { ...EMPTY_STATS, ...current.stats },
+  };
 }
 
 /** One query against one provider, cached, with no secrets in the cache key. */
@@ -483,9 +518,11 @@ export async function searchOne(ctx, { query, kind = "web", provider } = {}) {
   const text = clean(query, 300);
   if (!text) throw new HttpError(400, "Kata kunci pencarian kosong.");
   const name = resolveProvider(ctx.env, kind, provider);
-  const key = `${name}:${kind}:${text.toLowerCase()}`;
-  const hit = cache.get(key);
-  if (hit && hit.expires > Date.now()) return { ...hit.value, cached: true };
+  const cache = ensureStore(ctx);
+  const key = cacheKey([name, kind, text.toLowerCase()]);
+  const hit = await cache.get(key);
+  if (hit)
+    return { ...hit.value, cached: true, cacheMode: hit.mode };
   const sources = await providers[name].run(ctx, text);
   const value = {
     provider: name,
@@ -494,10 +531,8 @@ export async function searchOne(ctx, { query, kind = "web", provider } = {}) {
     query: text,
     sources,
   };
-  cache.delete(key);
-  cache.set(key, { value, expires: Date.now() + CACHE_TTL_MS });
-  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
-  return { ...value, cached: false };
+  await cache.set(key, value);
+  return { ...value, cached: false, cacheMode: cache.mode() };
 }
 
 /**
@@ -625,6 +660,7 @@ export async function runSearch(ctx, { queries, kind = "web", provider } = {}) {
       provider: result.provider,
       label: result.label,
       cached: result.cached,
+      cache: result.cacheMode || "process",
       count: added,
       duplicates,
       error: "",
