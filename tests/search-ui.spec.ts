@@ -56,7 +56,31 @@ async function fixture(page: Page) {
       content: "Respons API pengujian diterima.",
       creditsUsed: 1,
     };
-    if (/retry/i.test(prompt)) {
+    if (/tanpa hasil/i.test(prompt)) {
+      result.content = "Saya belum menemukan sumber untuk pertanyaan itu.";
+      result.research = {
+        ...research,
+        rounds: [
+          {
+            query: "topik langka",
+            kind: "web",
+            provider: "",
+            label: "",
+            cached: false,
+            count: 0,
+            error:
+              "Pencarian web belum dikonfigurasi. Isi SEARCH_PROVIDER dan SEARCH_API_KEY di server.",
+          },
+        ],
+        sources: [],
+        read: 0,
+        notice: "Tidak ada sumber yang berhasil diambil.",
+        cited: [],
+        uncited: [],
+        invalid: [],
+        citationNotice: "Jawaban tidak mengutip nomor sumber mana pun.",
+      };
+    } else if (/retry/i.test(prompt)) {
       result.content = "Pakai pengulangan berjenjang [1], dan catat [7].";
       result.sources = sources;
       result.research = research;
@@ -134,6 +158,26 @@ test("the research toggle is off by default, persists and is sent as research:tr
   await expect(
     page.getByRole("button", { name: "Mode riset" }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a round that found nothing says so instead of showing an empty list", async ({
+  page,
+}) => {
+  await fixture(page);
+  await openProject(page);
+  await page.getByRole("button", { name: "Mode riset" }).click();
+  await sendMessage(page, "Cari bahan tentang topik langka tanpa hasil");
+  const panel = page.locator(".ai-sources").last();
+  await expect(panel.locator(".sources-headline")).toHaveText(
+    "Sumber · tidak ada hasil",
+  );
+  await expect(panel.locator("ol")).toHaveCount(0);
+  await expect(panel).toContainText("Tidak ada sumber yang berhasil diambil.");
+  // The failing query carries the server's own reason, so the user can act.
+  await expect(panel.locator("ul.sources-failed li")).toContainText(
+    "Kueri “topik langka” gagal: Pencarian web belum dikonfigurasi.",
+  );
+  await expect(panel).toContainText("tidak mengutip nomor sumber mana pun");
 });
 
 test("the chat lists the numbered sources and flags an invented citation", async ({

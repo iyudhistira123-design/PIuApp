@@ -1040,6 +1040,22 @@
 .ai-sources > small.warn {
   color: var(--ide-warning, #efcf87);
 }
+/* A query that failed is listed by its own wording, so "no sources" never
+   looks like "nothing exists on the internet". */
+.ai-sources ul.sources-failed {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 8px;
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid var(--ide-warning-bg, #3c3322);
+}
+.ai-sources ul.sources-failed li {
+  font-size: 7px;
+  line-height: 1.8;
+  color: var(--ide-warning, #efcf87);
+  overflow-wrap: anywhere;
+}
 /* The research toggle uses the shared icon button pressed state. */
 .ws-icon[aria-pressed="true"] {
   background: var(--ide-accent-bg, #243b55);

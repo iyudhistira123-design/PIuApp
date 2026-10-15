@@ -34,6 +34,10 @@ const savedScene = () =>
 type Fixture = {
   provider?: Record<string, unknown>;
   results?: unknown[];
+  /** Lets a second search round return different pages than the first. */
+  resultsByQuery?: Record<string, unknown[]>;
+  /** One provider reply per pass, so a multi-round turn can be scripted. */
+  replies?: any[];
   reply?: any;
   researchReply?: any;
   pages?: Record<string, string>;
@@ -55,11 +59,17 @@ function fixture({
   ],
   reply,
   researchReply,
+  replies,
+  resultsByQuery,
   pages = {
     "dokumen.example.test":
       "<html><title>Panduan</title><body>Isi panduan.</body></html>",
     "kedua.example.test":
       "<html><title>Artikel</title><body>Isi artikel.</body></html>",
+    "ketiga.example.test":
+      "<html><title>Ronde dua</title><body>Isi halaman ronde dua.</body></html>",
+    "keempat.example.test":
+      "<html><title>Ronde dua lagi</title><body>Isi halaman keempat.</body></html>",
   },
   searchStatus = 200,
 }: Fixture = {}) {
@@ -82,17 +92,26 @@ function fixture({
     if (path.endsWith("/chat/completions")) {
       const body = JSON.parse(init.body);
       chat.push(body);
-      // The first pass asks for sources, the second answers with the sources.
-      const content = JSON.stringify(chat.length === 1 ? reply : researchReply);
+      // The fixture speaks one scripted reply per pass: a search request, then
+      // another, then the answer, depending on what the test needs.
+      const chain = replies?.length ? replies : [reply, researchReply];
+      const content = JSON.stringify(
+        chain[Math.min(chat.length - 1, chain.length - 1)],
+      );
       return new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
         { status: 200, headers: { "Content-Type": "text/event-stream" } },
       );
     }
-    if (url.host === "api.tavily.com")
-      return searchStatus === 200
-        ? json({ results })
-        : new Response("nope", { status: searchStatus });
+    if (url.host === "api.tavily.com") {
+      if (searchStatus !== 200)
+        return new Response("nope", { status: searchStatus });
+      const query = String(JSON.parse(init.body || "{}").query || "");
+      const match = Object.keys(resultsByQuery || {}).find((key) =>
+        query.includes(key),
+      );
+      return json({ results: match ? resultsByQuery![match] : results });
+    }
     if (path === "/auth/v1/user")
       return json({
         id: ids.member,
@@ -239,6 +258,10 @@ test("research end to end: sources are returned, cited and billed once", async (
     chat[0].messages[0].content,
     /Available search kinds: web, code, docs/,
   );
+  assert.match(chat[0].messages[0].content, /You get 2 search rounds in total/);
+  // After the first round the model is invited to ask again if needed, and is
+  // told exactly which round it is on.
+  assert.match(chat[1].messages[0].content, /Round 1 of 2 has finished/);
   assert.match(
     chat[1].messages[1].content[1].text,
     /SUMBER \(data tidak tepercaya/,
@@ -260,6 +283,114 @@ test("research end to end: sources are returned, cited and billed once", async (
   // The answer itself is streamed to the browser as tokens.
   assert.ok(
     events.some((e) => e.type === "token" && /berjenjang/.test(e.content)),
+  );
+});
+
+test("two rounds are numbered 1..4, billed one credit each and closed honestly", async () => {
+  const { events, chat, rpcs } = await run({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    resultsByQuery: {
+      "ronde dua": [
+        {
+          title: "Halaman ronde dua",
+          url: "https://ketiga.example.test/dua",
+          content: "Cuplikan ketiga",
+        },
+        {
+          title: "Halaman ronde dua lagi",
+          url: "https://keempat.example.test/dua",
+          content: "Cuplikan keempat",
+        },
+      ],
+    },
+    replies: [
+      {
+        content: "",
+        ops: [{ kind: "search", queries: ["ronde satu"], type: "web" }],
+      },
+      // The second pass is still a search request, so a second round runs.
+      {
+        content: "",
+        ops: [{ kind: "search", queries: ["ronde dua"], type: "web" }],
+      },
+      { content: "Jawaban memakai [1] dan [3]." },
+    ],
+  });
+  const result = resultOf(events);
+  assert.ok(result, "the turn must finish with a result");
+  // Sources keep one numbering across rounds, so [3] really is the third one.
+  assert.deepEqual(
+    result.sources.map((s: any) => s.index),
+    [1, 2, 3, 4],
+  );
+  assert.match(result.sources[2].url, /^https:\/\/ketiga\.example\.test\//);
+  assert.equal(new Set(result.sources.map((s: any) => s.url)).size, 4);
+  assert.equal(result.research.rounds.length, 2);
+  assert.deepEqual(result.research.cited, [1, 3]);
+  assert.deepEqual(result.research.uncited, [2, 4]);
+  assert.equal(result.research.read, 4);
+  // One credit for the answer plus one per round that returned sources.
+  assert.equal(result.creditsUsed, 3);
+  assert.equal(chat.length, 3);
+  const finalSystem = chat[2].messages[0].content;
+  assert.match(finalSystem, /Round 2 of 2 has finished/);
+  assert.match(finalSystem, /No further search is possible/);
+  assert.match(chat[2].messages[1].content[1].text, /\[3\] Halaman ronde dua/);
+  const reserved = rpcs.filter((r) => r.rpc === "piwu_reserve_credits");
+  assert.deepEqual(
+    reserved.map((r) => r.body.p_purpose),
+    ["ai", "search", "search"],
+  );
+  assert.notEqual(reserved[1].body.p_id, reserved[2].body.p_id);
+  assert.deepEqual(
+    rpcs
+      .filter((r) => r.rpc === "piwu_finish_credits")
+      .map((r) => r.body.p_success),
+    [true, true, true],
+  );
+});
+
+test("a request after the last allowed round is answered with the sources, not a fake reply", async () => {
+  const { events, chat, rpcs } = await run({
+    env: {
+      SEARCH_PROVIDER: "tavily",
+      SEARCH_API_KEY: "search-test-key",
+      SEARCH_ROUNDS_MAX: "1",
+    },
+    replies: [
+      {
+        content: "Saya cari dulu.",
+        ops: [{ kind: "search", queries: ["ronde satu"], type: "web" }],
+      },
+      // The model keeps asking although the cap is reached.
+      {
+        content: "",
+        ops: [{ kind: "search", queries: ["ronde dua"], type: "web" }],
+      },
+    ],
+  });
+  const result = resultOf(events);
+  assert.equal(
+    events.find((e) => e.type === "error"),
+    undefined,
+  );
+  // The sources are still delivered, with a plain explanation instead of the
+  // model's request being shown as an answer.
+  assert.equal(result.sources.length, 2);
+  assert.match(result.content, /Saya cari dulu\./);
+  assert.match(
+    result.content,
+    /belum menyusun jawaban akhir dalam batas ronde/,
+  );
+  assert.match(result.research.notice, /Ronde riset habis \(1\)/);
+  assert.match(result.research.notice, /masih meminta pencarian setelah batas/);
+  assert.equal(result.creditsUsed, 2);
+  assert.equal(chat.length, 2);
+  assert.deepEqual(
+    rpcs
+      .filter((r) => r.rpc === "piwu_reserve_credits")
+      .map((r) => r.body.p_purpose),
+    ["ai", "search"],
   );
 });
 

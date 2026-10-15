@@ -503,7 +503,7 @@ function WorkspaceContent({ project }: { project: Project }) {
         });
         // The sources behind this answer are open straight away; the header
         // stays clickable to fold them back.
-        if (result.sources?.length) setSourcesOpen(answerId);
+        if (result.sources?.length || result.research) setSourcesOpen(answerId);
         if (currentMode === "Plan") {
           store.updateProject(id, {
             plan: result.plan!,
@@ -2017,70 +2017,92 @@ function WorkspaceContent({ project }: { project: Project }) {
                                 <small>{m.ops.note}</small>
                               </div>
                             )}
-                            {m.role === "assistant" && m.sources && (
-                              <div className="ai-sources">
-                                <button
-                                  className="sources-headline"
-                                  aria-expanded={sourcesOpen === m.id}
-                                  onClick={() =>
-                                    setSourcesOpen(
-                                      sourcesOpen === m.id ? "" : m.id,
-                                    )
-                                  }
-                                >
-                                  {sourcesOpen === m.id ? (
-                                    <ChevronDown size={11} />
-                                  ) : (
-                                    <ChevronRight size={11} />
+                            {m.role === "assistant" &&
+                              (m.sources?.length || m.research) && (
+                                <div className="ai-sources">
+                                  <button
+                                    className="sources-headline"
+                                    aria-expanded={sourcesOpen === m.id}
+                                    onClick={() =>
+                                      setSourcesOpen(
+                                        sourcesOpen === m.id ? "" : m.id,
+                                      )
+                                    }
+                                  >
+                                    {sourcesOpen === m.id ? (
+                                      <ChevronDown size={11} />
+                                    ) : (
+                                      <ChevronRight size={11} />
+                                    )}
+                                    {m.sources?.length
+                                      ? `Sumber · ${m.sources.length}${
+                                          m.research
+                                            ? ` dari ${m.research.rounds.filter((r) => r.provider).length} pencarian`
+                                            : ""
+                                        }`
+                                      : "Sumber · tidak ada hasil"}
+                                  </button>
+                                  {sourcesOpen === m.id && (
+                                    <>
+                                      {m.sources?.length ? (
+                                        <ol>
+                                          {m.sources.map((s) => (
+                                            <li key={s.index}>
+                                              <a
+                                                href={s.url}
+                                                target="_blank"
+                                                rel="noreferrer noopener"
+                                              >
+                                                {s.title || s.url}
+                                                <ExternalLink size={10} />
+                                              </a>
+                                              <small>
+                                                {s.kind} · {s.provider}
+                                                {m.research?.cited.includes(
+                                                  s.index,
+                                                )
+                                                  ? " · dikutip"
+                                                  : " · tidak dikutip"}
+                                              </small>
+                                              {s.snippet && (
+                                                <span>{s.snippet}</span>
+                                              )}
+                                            </li>
+                                          ))}
+                                        </ol>
+                                      ) : null}
+                                      <small>{m.research?.notice}</small>
+                                      {m.research?.rounds.some(
+                                        (r) => r.error,
+                                      ) && (
+                                        <ul className="sources-failed">
+                                          {m.research.rounds
+                                            .filter((r) => r.error)
+                                            .map((r) => (
+                                              <li key={r.query}>
+                                                Kueri “{r.query}” gagal:{" "}
+                                                {r.error}
+                                              </li>
+                                            ))}
+                                        </ul>
+                                      )}
+                                      {!!m.research?.invalid.length && (
+                                        <small className="warn">
+                                          Nomor sumber yang tidak pernah
+                                          dikembalikan:{" "}
+                                          {m.research.invalid.join(", ")} —
+                                          diabaikan, bukan dianggap sumber.
+                                        </small>
+                                      )}
+                                      {m.research?.citationNotice && (
+                                        <small className="warn">
+                                          {m.research.citationNotice}
+                                        </small>
+                                      )}
+                                    </>
                                   )}
-                                  Sumber · {m.sources.length}
-                                  {m.research
-                                    ? ` dari ${m.research.rounds.filter((r) => r.provider).length} pencarian`
-                                    : ""}
-                                </button>
-                                {sourcesOpen === m.id && (
-                                  <>
-                                    <ol>
-                                      {m.sources.map((s) => (
-                                        <li key={s.index}>
-                                          <a
-                                            href={s.url}
-                                            target="_blank"
-                                            rel="noreferrer noopener"
-                                          >
-                                            {s.title || s.url}
-                                            <ExternalLink size={10} />
-                                          </a>
-                                          <small>
-                                            {s.kind} · {s.provider}
-                                            {m.research?.cited.includes(s.index)
-                                              ? " · dikutip"
-                                              : " · tidak dikutip"}
-                                          </small>
-                                          {s.snippet && (
-                                            <span>{s.snippet}</span>
-                                          )}
-                                        </li>
-                                      ))}
-                                    </ol>
-                                    <small>{m.research?.notice}</small>
-                                    {!!m.research?.invalid.length && (
-                                      <small className="warn">
-                                        Nomor sumber yang tidak pernah
-                                        dikembalikan:{" "}
-                                        {m.research.invalid.join(", ")} —
-                                        diabaikan, bukan dianggap sumber.
-                                      </small>
-                                    )}
-                                    {m.research?.citationNotice && (
-                                      <small className="warn">
-                                        {m.research.citationNotice}
-                                      </small>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            )}
+                                </div>
+                              )}
                             {m.role === "assistant" && (
                               <div className="message-actions">
                                 <button

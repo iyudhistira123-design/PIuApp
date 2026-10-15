@@ -12,10 +12,15 @@ import {
   searchOne,
 } from "../server/lib/search.mjs";
 import {
+  SOURCES_TOTAL_MAX,
+  buildResearchReport,
   citationReport,
+  readBodies,
   researchInstruction,
   researchStatus,
+  runSearchRound,
   searchReservationId,
+  searchRoundsMax,
   sourcesPrompt,
   splitSearchOps,
 } from "../server/lib/research.mjs";
@@ -349,6 +354,21 @@ test("search rejects empty queries, unknown providers and secret-shaped provider
     searchReservationId("2b1f0a54-0000-4000-8000-000000000000"),
     searchReservationId("2b1f0a54-0000-4000-8000-000000000001"),
   );
+  // Each round gets its own deterministic id, so a retried round is not billed
+  // twice while a second round is still billed once.
+  assert.notEqual(
+    searchReservationId("2b1f0a54-0000-4000-8000-000000000000", 1),
+    searchReservationId("2b1f0a54-0000-4000-8000-000000000000", 2),
+  );
+  assert.equal(
+    searchReservationId("2b1f0a54-0000-4000-8000-000000000000", 2),
+    searchReservationId("2b1f0a54-0000-4000-8000-000000000000", 2),
+  );
+  // The rounds cap is bounded and never unbounded.
+  assert.equal(searchRoundsMax({}), 2);
+  assert.equal(searchRoundsMax({ SEARCH_ROUNDS_MAX: "1" }), 1);
+  assert.equal(searchRoundsMax({ SEARCH_ROUNDS_MAX: "5" }), 3);
+  assert.equal(searchRoundsMax({ SEARCH_ROUNDS_MAX: "abc" }), 2);
 });
 
 test("search ops are validated strictly and separated from scene ops", () => {
@@ -383,8 +403,22 @@ test("the research instruction is honest about what is available", () => {
   assert.match(none, /do not request a search/i);
   const web = researchInstruction({ web: true, code: false, docs: true });
   assert.match(web, /Available search kinds: web, docs/);
-  assert.match(web, /ONE search round/);
+  assert.match(web, /You get 1 search round in total/);
   assert.match(web, /untrusted reference data/);
+  // After the first of two rounds the model is told what it already has; once
+  // the cap is reached it is told to stop asking.
+  const second = researchInstruction(
+    { web: true, code: false, docs: false },
+    { round: 1, max: 2 },
+  );
+  assert.match(second, /Round 1 of 2 has finished/);
+  assert.doesNotMatch(second, /No further search is possible/);
+  const done = researchInstruction(
+    { web: true, code: false, docs: false },
+    { round: 2, max: 2 },
+  );
+  assert.match(done, /No further search is possible/);
+  assert.match(done, /say plainly if they are not enough/);
   assert.equal(researchStatus({ SEARCH_PROVIDER: "none" }).web, false);
   assert.equal(
     researchStatus({ SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "x" }).provider,
@@ -433,6 +467,48 @@ test("the sources block numbers every source and marks unreadable pages", () => 
   assert.match(prompt, /\[1\] A — https:\/\/a\.test/);
   assert.match(prompt, /isi halaman/);
   assert.match(prompt, /halaman tidak dapat dibaca/);
+});
+
+test("a round only returns new sources, and the report counts what was really read", async () => {
+  resetSearchCache();
+  const { ctx } = fixture();
+  const seen = new Set(["https://docs.example.test/a"]);
+  const round = await runSearchRound(ctx, {
+    searches: [{ queries: ["dokumen"], type: "web" }],
+    seen,
+  });
+  // `seen` started with the first fixture hit, so only the second one is new,
+  // and it arrives unnumbered: the caller owns the numbering.
+  assert.equal(round.sources.length, 1);
+  assert.equal(round.sources[0].url, "https://example.test/b");
+  assert.equal(round.sources[0].index, undefined);
+  assert.equal(seen.size, 2);
+  assert.equal(round.rounds.length, 1);
+
+  const numbered = [{ ...round.sources[0], index: 4 }];
+  const bodies = await readBodies(ctx, { sources: numbered as any, read: 5 });
+  // The read budget is exhausted, so nothing is fetched again.
+  assert.deepEqual(bodies, []);
+
+  const report = buildResearchReport({
+    rounds: [{ ...round.rounds[0], count: 1 }] as any,
+    sources: numbered as any,
+    bodies: [{ index: 4, text: "isi", url: numbered[0].url }] as any,
+    notes: ["Catatan operator ikut dilaporkan."],
+  });
+  assert.equal(report.sources.length, 1);
+  assert.deepEqual(Object.keys(report.sources[0]).sort(), [
+    "index",
+    "kind",
+    "provider",
+    "title",
+    "url",
+  ]);
+  assert.equal(report.read, 1);
+  assert.match(report.notice, /1 sumber dari 1 pencarian; 1 halaman dibaca/);
+  assert.match(report.notice, /data tidak tepercaya/);
+  assert.match(report.notice, /Catatan operator ikut dilaporkan\./);
+  assert.equal(SOURCES_TOTAL_MAX, 12);
 });
 
 test("citations are mapped to real sources; invented numbers are flagged, not resolved", () => {
