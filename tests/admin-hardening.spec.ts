@@ -52,6 +52,7 @@ test("admin searches server-wide, retains filters on failure, paginates, exports
                 errors: 0,
               },
             },
+            jobs: { jobs: 1, running: 0, ready: 1, ttlMinutes: 30, max: 20 },
             notice:
               "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
           },
@@ -147,6 +148,7 @@ test("admin searches server-wide, retains filters on failure, paginates, exports
   ).toBeVisible();
   await expect(page.getByText(/per-proses \(migration 009/)).toBeVisible();
   await expect(page.getByText(/2 hit/)).toBeVisible();
+  await expect(page.getByText(/1 tersimpan · 0 berjalan/)).toBeVisible();
   const diagnosticsText = await page.locator("#admin-content").innerText();
   expect(diagnosticsText).not.toContain("SEARCH_API_KEY=");
 });

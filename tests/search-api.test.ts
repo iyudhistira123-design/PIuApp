@@ -46,6 +46,8 @@ type Fixture = {
   searchStatus?: number;
   /** Shared fake of the `runtime_search_cache` table (migration 009). */
   cacheRows?: Map<string, any>;
+  /** Holds a vendor call open until the test releases it. */
+  gates?: { chat?: Promise<void>; search?: Promise<void> };
 };
 
 function fixture({
@@ -80,9 +82,32 @@ function fixture({
   },
   searchStatus = 200,
   cacheRows = new Map(),
+  gates = {},
 }: Fixture = {}) {
   const chat: any[] = [];
   const rpcs: any[] = [];
+  // Names of vendor calls whose request was aborted, so a test can prove that a
+  // closed tab cancels a normal turn but not a background research job.
+  const aborted: string[] = [];
+  // Names of gated vendor calls that were actually reached, so a test can wait
+  // for the exact moment worth acting on.
+  const gated: string[] = [];
+  const waitGate = (name: string, signal?: AbortSignal) => {
+    const gate = gates[name as keyof typeof gates];
+    if (!gate) return Promise.resolve();
+    gated.push(name);
+    return Promise.race([
+      gate,
+      new Promise<void>((_, reject) => {
+        const stop = () => {
+          aborted.push(name);
+          reject(new Error("aborted"));
+        };
+        if (signal?.aborted) return stop();
+        signal?.addEventListener("abort", stop, { once: true });
+      }),
+    ]);
+  };
   // Every outbound vendor call, so a test can assert the real HTTP contract
   // instead of trusting the provider wrapper.
   const vendor: any[] = [];
@@ -101,6 +126,7 @@ function fixture({
         headers: { "Content-Type": "application/json" },
       });
     if (path.endsWith("/chat/completions")) {
+      await waitGate("chat", init.signal);
       const body = JSON.parse(init.body);
       chat.push(body);
       // The fixture speaks one scripted reply per pass: a search request, then
@@ -115,6 +141,7 @@ function fixture({
       );
     }
     if (url.host === "api.tavily.com") {
+      await waitGate("search", init.signal);
       vendor.push({
         url: url.href,
         method: init.method || "GET",
@@ -192,10 +219,10 @@ function fixture({
       return json([{ revision: 1, value: defaultSite }]);
     throw new Error("Unexpected fixture query: " + path + url.search);
   };
-  return { fetcher, chat, rpcs, vendor, cacheRows };
+  return { fetcher, chat, rpcs, vendor, cacheRows, aborted, gated };
 }
 
-async function run(
+async function serve(
   options: Fixture & {
     env?: Record<string, string>;
     research?: boolean;
@@ -221,25 +248,38 @@ async function run(
   });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((ready) => server.once("listening", ready));
-  const url = "http://127.0.0.1:" + (server.address() as any).port;
-  const response = await fetch(
-    url + "/api/projects/" + crypto.randomUUID() + "/ai",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer member",
-      },
-      body: JSON.stringify({
-        requestId: crypto.randomUUID(),
-        prompt: "Cara menangani retry di Next.js App Router?",
-        mode: options.mode || "Ask",
-        model: "Otomatis",
-        research: options.research !== false,
-        files: { [SCENE_PATH]: savedScene() },
-      }),
+  const api =
+    "http://127.0.0.1:" +
+    (server.address() as any).port +
+    "/api/projects/" +
+    crypto.randomUUID();
+  return { fx, server, api };
+}
+
+async function run(
+  options: Fixture & {
+    env?: Record<string, string>;
+    research?: boolean;
+    mode?: string;
+    kind?: string;
+  } = {},
+) {
+  const { fx, server, api } = await serve(options);
+  const response = await fetch(api + "/ai", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer member",
     },
-  );
+    body: JSON.stringify({
+      requestId: crypto.randomUUID(),
+      prompt: "Cara menangani retry di Next.js App Router?",
+      mode: options.mode || "Ask",
+      model: "Otomatis",
+      research: options.research !== false,
+      files: { [SCENE_PATH]: savedScene() },
+    }),
+  });
   const text = await response.text();
   server.close();
   if (!response.ok && !text.startsWith("data:"))
@@ -367,6 +407,167 @@ test("a citation whose source says something else is flagged, never silently acc
   assert.deepEqual(result.research.unsupported, [1, 2]);
   assert.match(result.research.groundingNotice, /Pemeriksaan heuristik/);
   assert.match(result.research.groundingNotice, /1, 2/);
+});
+
+const waitFor = async (check: () => boolean, what: string, ms = 5000) => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("Batas waktu menunggu " + what);
+};
+
+// A research turn is long and paid for, so closing the tab must not throw it
+// away: the rounds keep running and the answer waits for the same account.
+test("research survives a closed tab and is delivered once when the client returns", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const requestId = crypto.randomUUID();
+  const { fx, server, api } = await serve({
+    env: { SEARCH_PROVIDER: "tavily", SEARCH_API_KEY: "search-test-key" },
+    gates: { search: gate },
+    reply: {
+      content: "Sebentar, saya cari dulu.",
+      ops: [{ kind: "search", queries: ["riset latar belakang"], type: "web" }],
+    },
+    researchReply: {
+      content: "Gunakan pengulangan berjenjang [1] dan catat kegagalan [2].",
+    },
+  });
+  const asMember = { Authorization: "Bearer member" };
+  try {
+    const controller = new AbortController();
+    const response = await fetch(api + "/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...asMember },
+      signal: controller.signal,
+      body: JSON.stringify({
+        requestId,
+        prompt: "Riset latar belakang soal retry",
+        mode: "Ask",
+        model: "Otomatis",
+        research: true,
+        files: { [SCENE_PATH]: savedScene() },
+      }),
+    });
+    assert.equal(response.status, 200);
+    await waitFor(() => fx.gated.includes("search"), "pencarian dimulai");
+    // The tab closes while the provider is still answering.
+    controller.abort();
+    release();
+    // The turn is not cancelled: the second pass still runs and settles.
+    await waitFor(() => fx.chat.length === 2, "pass kedua");
+    assert.equal(fx.aborted.includes("search"), false);
+
+    let job: any = null;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && !job) {
+      const listed = await (
+        await fetch(api + "/ai/jobs", { headers: asMember })
+      ).json();
+      job = listed.jobs.find(
+        (entry: any) =>
+          entry.requestId === requestId && entry.state === "ready",
+      );
+      if (!job) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (!job)
+      console.log(
+        "DBG",
+        JSON.stringify(
+          await (await fetch(api + "/ai/jobs", { headers: asMember })).json(),
+        ),
+        "chat",
+        fx.chat.length,
+        "rpcs",
+        JSON.stringify(fx.rpcs.map((r) => r.rpc + ":" + r.body.p_success)),
+      );
+    assert.ok(job, "riset latar belakang harus selesai sendiri");
+    assert.equal(job.result.sources.length, 2);
+    assert.deepEqual(job.result.research.cited, [1, 2]);
+    // One credit for the answer plus one for the round that added sources.
+    assert.equal(job.result.creditsUsed, 2);
+    assert.match(job.prompt, /^Riset latar belakang/);
+    assert.ok(
+      fx.rpcs.some(
+        (r) => r.rpc === "piwu_finish_credits" && r.body.p_success === true,
+      ),
+      "pekerjaan yang selesai tetap dibayar sekali",
+    );
+
+    // Collected exactly once: the answer cannot be applied twice.
+    const taken = await fetch(api + "/ai/jobs/" + requestId, {
+      method: "DELETE",
+      headers: asMember,
+    });
+    assert.equal(taken.status, 200);
+    assert.equal((await taken.json()).job.requestId, requestId);
+    const again = await fetch(api + "/ai/jobs/" + requestId, {
+      method: "DELETE",
+      headers: asMember,
+    });
+    assert.equal(again.status, 404);
+    const after = await (
+      await fetch(api + "/ai/jobs", { headers: asMember })
+    ).json();
+    assert.deepEqual(after.jobs, []);
+  } finally {
+    server.close();
+  }
+});
+
+test("a closed tab still stops an ordinary turn and refunds it", async () => {
+  // The provider never answers: the early keep-alive probe is what makes the
+  // dead socket surface, and that cancels the turn instead of paying for work
+  // nobody can receive.
+  const gate = new Promise<void>(() => {});
+  const { fx, server, api } = await serve({
+    gates: { chat: gate },
+    reply: { content: "Tidak akan pernah sampai." },
+  });
+  const asMember = { Authorization: "Bearer member" };
+  try {
+    const controller = new AbortController();
+    const response = await fetch(api + "/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...asMember },
+      signal: controller.signal,
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        prompt: "Perbaiki atap",
+        mode: "Ask",
+        model: "Otomatis",
+        research: false,
+        files: { [SCENE_PATH]: savedScene() },
+      }),
+    });
+    assert.equal(response.status, 200);
+    await waitFor(() => fx.gated.includes("chat"), "provider mulai menjawab");
+    controller.abort();
+    await waitFor(
+      () => fx.aborted.includes("chat"),
+      "panggilan provider dibatalkan",
+    );
+    await waitFor(
+      () =>
+        fx.rpcs.some(
+          (r) => r.rpc === "piwu_finish_credits" && r.body.p_success === false,
+        ),
+      "kredit dikembalikan",
+    );
+    assert.ok(
+      fx.rpcs.some(
+        (r) => r.rpc === "piwu_reserve_credits" && r.body.p_purpose === "ai",
+      ),
+    );
+    const listed = await (
+      await fetch(api + "/ai/jobs", { headers: asMember })
+    ).json();
+    assert.deepEqual(listed.jobs, []);
+  } finally {
+    server.close();
+  }
 });
 
 test("two server instances share one cached search instead of paying twice", async () => {

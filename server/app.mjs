@@ -21,6 +21,7 @@ import { registerRecordings } from "./routes/recordings.mjs";
 import { SandboxProvider } from "./providers/sandbox.mjs";
 import { NetlifyHosting } from "./providers/hosting.mjs";
 import { fetchReference } from "./lib/references.mjs";
+import { createResearchJobs } from "./lib/research-jobs.mjs";
 export function createApp({
   env = process.env,
   fetcher = fetch,
@@ -34,6 +35,9 @@ export function createApp({
     ctx = context || createContext(env, fetcher);
   // Tests inject a resolver so the SSRF guard can be exercised offline.
   if (resolver) ctx.resolver = resolver;
+  // Research keeps running when the tab closes; finished answers wait here for
+  // the same account and project. In-process and bounded by design.
+  ctx.researchJobs ||= createResearchJobs();
   const coordination = createCoordination(ctx);
   app.locals.coordination = coordination;
   sandbox ||= new SandboxProvider(env, coordination);

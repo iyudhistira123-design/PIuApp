@@ -167,6 +167,68 @@ test("the research toggle is off by default, persists and is sent as research:tr
   ).toHaveAttribute("aria-pressed", "true");
 });
 
+// Research that finished while the tab was closed: the workspace collects the
+// stored answer once, shows it like a normal reply, and never applies it twice.
+test("a background research answer is collected once when the project is opened", async ({
+  page,
+}) => {
+  await fixture(page);
+  const requestId = "8d2b0a3e-1111-4222-8333-444455556666";
+  const job = {
+    requestId,
+    state: "ready",
+    prompt: "Riset latar belakang soal retry",
+    mode: "Ask",
+    model: "deepseek-chat",
+    startedAt: Date.now() - 60000,
+    finishedAt: Date.now() - 50000,
+    creditsUsed: 2,
+    error: "",
+    result: {
+      content: "Pakai pengulangan berjenjang [1], dan catat [7].",
+      creditsUsed: 2,
+      sources,
+      research,
+      model: "deepseek-chat",
+      tier: "Seimbang",
+    },
+  };
+  const claimed: string[] = [];
+  let waiting = [job];
+  await page.route(/\/api\/projects\/[^/]+\/ai\/jobs(\/[^/]+)?$/, async (r) => {
+    if (r.request().method() === "DELETE") {
+      claimed.push(new URL(r.request().url()).pathname);
+      waiting = [];
+      return r.fulfill({ json: { job } });
+    }
+    return r.fulfill({ json: { jobs: waiting } });
+  });
+  await openProject(page);
+  await expect(
+    page.getByText("Pakai pengulangan berjenjang [1], dan catat [7]."),
+  ).toBeVisible();
+  const panel = page.locator(".ai-sources").last();
+  await expect(panel.locator(".sources-headline")).toHaveText(
+    "Sumber · 2 dari 1 pencarian",
+  );
+  // The user is told where the answer came from and what it cost.
+  await expect(page.getByRole("status")).toContainText(
+    "Riset yang Anda tinggalkan selesai di latar belakang",
+  );
+  await expect(page.getByRole("status")).toContainText(
+    "Kredit ronde yang selesai tetap terpakai",
+  );
+  expect(claimed).toHaveLength(1);
+  expect(claimed[0]).toContain(requestId);
+
+  // A reload finds nothing left to collect, so the answer is not repeated.
+  await page.reload();
+  await expect(
+    page.getByText("Pakai pengulangan berjenjang [1], dan catat [7]."),
+  ).toHaveCount(1);
+  expect(claimed).toHaveLength(1);
+});
+
 test("a round that found nothing says so instead of showing an empty list", async ({
   page,
 }) => {

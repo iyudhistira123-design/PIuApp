@@ -854,6 +854,12 @@ export function AdminPanel({
                             tabel) · {data.search.cache?.stats?.errors ?? 0}{" "}
                             galat
                           </dd>
+                          <dt>Riset latar</dt>
+                          <dd>
+                            {data.search.jobs
+                              ? `${data.search.jobs.jobs} tersimpan · ${data.search.jobs.running} berjalan · simpan ${data.search.jobs.ttlMinutes} menit`
+                              : "tidak tersedia"}
+                          </dd>
                           <dt>Kunci Context7</dt>
                           <dd>
                             {data.search.context7KeyConfigured

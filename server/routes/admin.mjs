@@ -360,6 +360,9 @@ export function registerAdmin(app, ctx) {
               language: ctx.env.SEARCH_LANGUAGE || "",
             },
             cache: searchCacheInfo(ctx),
+            // Research that outlived its tab: how many answers wait to be
+            // collected, with no prompt or credential in the count.
+            jobs: ctx.researchJobs?.stats?.() || null,
             notice:
               "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
           };

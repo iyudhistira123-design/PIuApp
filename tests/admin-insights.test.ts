@@ -334,6 +334,10 @@ test("diagnostics reports the search provider and cache without ever leaking the
     assert.ok(["process", "shared"].includes(body.search.cache.mode));
     assert.equal(typeof body.search.cache.entries, "number");
     assert.equal(typeof body.search.cache.stats.hits, "number");
+    // Background research: counts only, never a prompt or an answer.
+    assert.equal(body.search.jobs.jobs, 0);
+    assert.equal(body.search.jobs.running, 0);
+    assert.equal(body.search.jobs.ttlMinutes > 0, true);
     assert.match(body.search.notice, /verify:search/);
     // The key is a boolean fact, never a value.
     assert.ok(!JSON.stringify(body).includes(secret));

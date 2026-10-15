@@ -161,8 +161,27 @@ export function registerAI(app, ctx) {
       const cost = resolved.cost;
       await ctx.reserve(req.user.id, body.requestId, cost, "ai");
       let charged = false;
+      // Research outlives the tab that asked for it: the rounds keep running
+      // and the finished answer is stored for this account and project, so a
+      // closed tab never throws away paid work. Every other mode stops with
+      // the connection.
+      const background = body.research === true;
+      let detached = false;
+      const job = background
+        ? ctx.researchJobs.start({
+            requestId: body.requestId,
+            userId: req.user.id,
+            projectId: req.project.id,
+            prompt: body.prompt,
+            mode: body.mode,
+            model: resolved.model,
+          })
+        : null;
       const abort = new AbortController();
-      res.on("close", () => abort.abort());
+      res.on("close", () => {
+        detached = true;
+        if (!background) abort.abort();
+      });
       res.set({
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -170,14 +189,22 @@ export function registerAI(app, ctx) {
       });
       res.flushHeaders();
       const send = (data) => {
-        if (!res.destroyed) res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if (!detached && !res.destroyed)
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
-      const heartbeat = setInterval(() => {
-        if (!res.destroyed) res.write(": keep-alive\n\n");
-      }, 10000);
+      const keepAlive = () => {
+        if (!detached && !res.destroyed) res.write(": keep-alive\n\n");
+      };
+      const heartbeat = setInterval(keepAlive, 10000);
+      // A socket that died stays quiet until something is written to it, and
+      // then Node reports it. One early write means an abandoned ordinary turn
+      // is cancelled (and refunded) in about a second instead of running to
+      // the end for nobody. Research is not cancelled by this, on purpose.
+      const probe = setTimeout(keepAlive, 1000);
+      probe.unref?.();
       try {
         const modelName = resolved.model;
-        const research = body.research === true;
+        const research = background;
         const capability = research ? searchCapability(ctx.env) : null;
         const canSearch = Boolean(
           capability && (capability.web || capability.code || capability.docs),
@@ -482,37 +509,75 @@ export function registerAI(app, ctx) {
             // significant word with the sentence is reported, not hidden.
             ...groundingReport(result.content, sources, bodies),
           };
+        const payload = {
+          ...result,
+          ...(nextFiles ? { files: nextFiles } : {}),
+          ...(report ? { ops: report } : {}),
+          ...(sources.length ? { sources } : {}),
+          ...(researchReport ? { research: researchReport } : {}),
+          creditsUsed: cost + searchCredits,
+          model: modelName,
+          tier: resolved.tier,
+        };
         send({ type: "token", content: result.content.slice(sent) });
         await ctx.finish(body.requestId, true);
         charged = true;
-        send({
-          type: "result",
-          result: {
-            ...result,
-            ...(nextFiles ? { files: nextFiles } : {}),
-            ...(report ? { ops: report } : {}),
-            ...(sources.length ? { sources } : {}),
-            ...(researchReport ? { research: researchReport } : {}),
+        // The answer is always kept for the project, not just when the closed
+        // socket happened to be noticed: a socket goes quiet long before Node
+        // reports it, so the client is what confirms delivery by claiming the
+        // job after applying it. A tab that never came back finds it here.
+        if (job)
+          ctx.researchJobs.finish(body.requestId, {
+            result: payload,
             creditsUsed: cost + searchCredits,
-            model: modelName,
-            tier: resolved.tier,
-          },
-        });
+          });
+        send({ type: "result", result: payload });
       } catch (e) {
-        send({
-          type: "error",
-          message:
-            e instanceof HttpError
-              ? e.message
-              : abort.signal.aborted
-                ? "Permintaan dihentikan."
-                : "Layanan AI tidak merespons. Kredit dikembalikan jika proses gagal.",
-        });
+        const message =
+          e instanceof HttpError
+            ? e.message
+            : abort.signal.aborted
+              ? "Permintaan dihentikan."
+              : "Layanan AI tidak merespons. Kredit dikembalikan jika proses gagal.";
+        if (job) ctx.researchJobs.finish(body.requestId, { error: message });
+        send({ type: "error", message });
       } finally {
         clearInterval(heartbeat);
+        clearTimeout(probe);
         if (!charged) await ctx.finish(body.requestId, false).catch(() => {});
-        res.end();
+        if (!detached) res.end();
       }
+    }),
+  );
+  // Research that finished after the tab closed. Read-only list plus a claim
+  // that hands a job over exactly once, so an answer is never applied twice.
+  app.get(
+    "/api/projects/:id/ai/jobs",
+    ctx.auth,
+    ctx.project("Viewer"),
+    wrap(async (req, res) => {
+      res.set("Cache-Control", "no-store");
+      res.json({
+        jobs: ctx.researchJobs.list({
+          userId: req.user.id,
+          projectId: req.project.id,
+        }),
+      });
+    }),
+  );
+  app.delete(
+    "/api/projects/:id/ai/jobs/:requestId",
+    ctx.auth,
+    ctx.project("Viewer"),
+    wrap(async (req, res) => {
+      const job = ctx.researchJobs.claim({
+        requestId: req.params.requestId,
+        userId: req.user.id,
+        projectId: req.project.id,
+      });
+      if (!job)
+        throw new HttpError(404, "Riset latar tidak ditemukan atau sudah diambil.");
+      res.json({ job });
     }),
   );
 }

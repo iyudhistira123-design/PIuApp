@@ -91,8 +91,15 @@ import { Logo, Modal } from "../components/ui";
 import { compilePreview } from "../lib/preview";
 import { scopeFor } from "../lib/cloud/types";
 import { StorageStatus } from "../components/storage/StorageStatus";
-import { AI_TIERS, estimateCredits, fetchAiModels, streamAI } from "../lib/ai";
-import type { AiModelCatalog } from "../lib/ai";
+import {
+  AI_TIERS,
+  claimResearchJob,
+  estimateCredits,
+  fetchAiModels,
+  fetchResearchJobs,
+  streamAI,
+} from "../lib/ai";
+import type { AiModelCatalog, ResearchJob } from "../lib/ai";
 import AiModelPicker from "../components/ai/AiModelPicker";
 import type { CatalogStatus } from "../components/ai/AiModelPicker";
 import FileExplorer, { FileIcon } from "../workspace/FileExplorer";
@@ -106,6 +113,30 @@ const MODEL_PREFERENCE_KEY = "piwu-ai-model-v1";
 // Research mode is remembered per account too, so a user who wants sources
 // does not have to switch it on again in every session.
 const RESEARCH_PREFERENCE_KEY = "piwu-ai-research-v1";
+// Research answers already collected from the server, so a reload never shows
+// the same background answer twice even if the claim call was lost.
+const CLAIMED_JOBS_KEY = "piwu-ai-research-jobs-v1";
+const readClaimedJobs = (scope: string): string[] => {
+  try {
+    const stored = workspaceStorage.getItem(`${CLAIMED_JOBS_KEY}:${scope}`);
+    const list = typeof stored === "string" && stored ? JSON.parse(stored) : [];
+    return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+const rememberClaimedJob = (scope: string, requestId: string) => {
+  const list = readClaimedJobs(scope).filter((x) => x !== requestId);
+  list.push(requestId);
+  try {
+    workspaceStorage.setItem(
+      `${CLAIMED_JOBS_KEY}:${scope}`,
+      JSON.stringify(list.slice(-40)),
+    );
+  } catch {
+    /* memory only when storage is full or blocked */
+  }
+};
 const readStoredResearch = (scope: string): boolean =>
   workspaceStorage.getItem(`${RESEARCH_PREFERENCE_KEY}:${scope}`) === "1";
 const readStoredModel = (scope: string): Model => {
@@ -288,6 +319,9 @@ function WorkspaceContent({ project }: { project: Project }) {
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const started = useRef(false);
+  // Requests already being collected, so two visibility events cannot claim the
+  // same background answer twice.
+  const collecting = useRef(new Set<string>());
   const record = useCallback(
     (label: string) => {
       if (recording)
@@ -475,6 +509,9 @@ function WorkspaceContent({ project }: { project: Project }) {
       record("Pesan: " + text.slice(0, 80));
       const controller = new AbortController();
       abortRef.current = controller;
+      // The id travels with the request so a research turn that finished after
+      // the tab closed can be claimed from the background store.
+      const requestId = crypto.randomUUID();
       try {
         const result = await streamAI({
           projectId: id,
@@ -485,6 +522,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           mode: currentMode,
           model,
           research,
+          requestId,
           onToken: setStreaming,
           signal: controller.signal,
         });
@@ -556,6 +594,10 @@ function WorkspaceContent({ project }: { project: Project }) {
           }
           record("Perubahan file: " + Object.keys(result.files).join(", "));
         }
+        if (research) {
+          void claimResearchJob(id, requestId);
+          rememberClaimedJob(id, requestId);
+        }
       } catch (e) {
         setInput((current) => current || text);
         if (!controller.signal.aborted)
@@ -585,6 +627,93 @@ function WorkspaceContent({ project }: { project: Project }) {
       references,
     ],
   );
+  // Research keeps running on the server after the tab is closed. The finished
+  // answer is collected here exactly once — when the project is opened again or
+  // when the tab becomes visible — and shown like any other reply.
+  useEffect(() => {
+    if (initializing || provider !== "configured") return;
+    if (store.sync[id]?.phase !== "synced") return;
+    if (!store.user || store.user.demo) return;
+    let stopped = false;
+    const collect = async () => {
+      const jobs = await fetchResearchJobs(id);
+      if (stopped) return;
+      for (const job of jobs) {
+        if (job.state === "running") continue;
+        if (collecting.current.has(job.requestId)) continue;
+        if (readClaimedJobs(id).includes(job.requestId)) continue;
+        collecting.current.add(job.requestId);
+        const taken = await claimResearchJob(id, job.requestId);
+        if (stopped) return;
+        if (!taken) {
+          collecting.current.delete(job.requestId);
+          continue;
+        }
+        rememberClaimedJob(id, job.requestId);
+        if (taken.state === "failed") {
+          setAiError("Riset latar belakang gagal: " + taken.error);
+          continue;
+        }
+        const result = taken.result;
+        if (!result) continue;
+        const answerId = crypto.randomUUID();
+        store.addMessage(id, {
+          id: answerId,
+          role: "assistant",
+          content: result.content,
+          files: result.files ? Object.keys(result.files) : undefined,
+          summary: result.summary,
+          ops: result.ops,
+          sources: result.sources,
+          research: result.research,
+          model: result.model,
+          mode: (job.mode as Mode) || "Ask",
+          at: Date.now(),
+        });
+        if (result.sources?.length || result.research) setSourcesOpen(answerId);
+        store.notify(
+          "Riset yang Anda tinggalkan selesai di latar belakang. Kredit ronde yang selesai tetap terpakai.",
+        );
+        if (result.files && Object.keys(result.files).length) {
+          if (useReview) {
+            setReview(result.files);
+            setReviewPath(
+              kind === "roblox" && result.files[SCENE_PATH]
+                ? SCENE_PATH
+                : Object.keys(result.files)[0],
+            );
+            setView(
+              kind === "roblox" && result.files[SCENE_PATH]
+                ? "Preview"
+                : "Code",
+            );
+          } else {
+            if (kind === "roblox") validateSceneChanges(result.files);
+            store.applyFiles(
+              id,
+              result.files,
+              "Riset latar: " + job.prompt.slice(0, 30),
+            );
+            setChanged(Object.keys(result.files));
+            if (kind === "roblox" && result.files[SCENE_PATH]) {
+              setView("Preview");
+              setRail("files");
+              setRobloxPreviewRevision((n) => n + 1);
+            }
+          }
+        }
+      }
+    };
+    void collect();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void collect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [id, initializing, provider, kind, useReview, store.sync[id]?.phase]);
   useEffect(() => {
     if (started.current || initializing) return;
     const pendingState = useStore.getState();

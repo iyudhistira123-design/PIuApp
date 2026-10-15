@@ -101,6 +101,65 @@ export async function fetchAiModels({
     );
   return data as AiModelCatalog;
 }
+/** Session headers, or null when the account is not a verified one. */
+async function verifiedHeaders(): Promise<Record<string, string> | null> {
+  const session = supabase
+    ? (await supabase.auth.getSession()).data.session
+    : null;
+  const user = useStore.getState().user;
+  if (!session || !user || user.demo || session.user.id !== user.id) return null;
+  return { Authorization: "Bearer " + session.access_token };
+}
+
+export interface ResearchJob {
+  requestId: string;
+  state: "running" | "ready" | "failed";
+  prompt: string;
+  mode: string;
+  model: string;
+  startedAt: number;
+  finishedAt: number;
+  creditsUsed: number;
+  error: string;
+  result?: AIResult;
+}
+
+/**
+ * Research that finished after the tab closed, waiting for this account and
+ * project to collect it. A failure here is not worth breaking the workspace
+ * over: the job simply stays until the next attempt.
+ */
+export async function fetchResearchJobs(
+  projectId: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<ResearchJob[]> {
+  const headers = await verifiedHeaders();
+  if (!headers) return [];
+  const response = await fetch("/api/projects/" + projectId + "/ai/jobs", {
+    headers,
+    signal,
+  }).catch(() => null);
+  if (!response?.ok) return [];
+  const data = await response.json().catch(() => ({}));
+  return Array.isArray(data.jobs) ? (data.jobs as ResearchJob[]) : [];
+}
+
+/** Takes a finished job exactly once, so an answer is never applied twice. */
+export async function claimResearchJob(
+  projectId: string,
+  requestId: string,
+): Promise<ResearchJob | null> {
+  const headers = await verifiedHeaders();
+  if (!headers) return null;
+  const response = await fetch(
+    "/api/projects/" + projectId + "/ai/jobs/" + requestId,
+    { method: "DELETE", headers },
+  ).catch(() => null);
+  if (!response?.ok) return null;
+  const data = await response.json().catch(() => ({}));
+  return (data.job as ResearchJob) || null;
+}
+
 export async function streamAI({
   projectId,
   attachments,
@@ -110,6 +169,7 @@ export async function streamAI({
   mode,
   model,
   research = false,
+  requestId,
   onToken,
   signal,
 }: {
@@ -122,24 +182,20 @@ export async function streamAI({
   model: string;
   /** Opt-in: the reply may run one bounded search round and cite sources. */
   research?: boolean;
+  /** Caller-owned id: the same id claims the background job after delivery. */
+  requestId?: string;
   onToken: (s: string) => void;
   signal?: AbortSignal;
 }): Promise<AIResult> {
-  const session = supabase
-    ? (await supabase.auth.getSession()).data.session
-    : null;
-  const user = useStore.getState().user;
-  if (!session || !user || user.demo || session.user.id !== user.id)
+  const headers = await verifiedHeaders();
+  if (!headers)
     throw new Error("Masuk dengan akun terverifikasi untuk menjalankan AI.");
-  const accountId = user.id;
+  const accountId = useStore.getState().user!.id;
   const response = await fetch("/api/projects/" + projectId + "/ai", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(session ? { Authorization: "Bearer " + session.access_token } : {}),
-    },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify({
-      requestId: crypto.randomUUID(),
+      requestId: requestId || crypto.randomUUID(),
       prompt,
       files,
       mode,
