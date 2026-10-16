@@ -28,6 +28,11 @@ import {
 } from "../src/lib/dashboard/quality";
 import { activityWhen, buildActivity } from "../src/lib/dashboard/activity";
 import {
+  SEARCH_CHARS_MAX,
+  searchProjects,
+  snippet,
+} from "../src/lib/dashboard/search";
+import {
   backupReport,
   buildBackup,
   readBackup,
@@ -559,6 +564,113 @@ test("restored names never collide with what is already there", () => {
     "Alpha (pulih 2)",
   );
   assert.equal(restoreName("Beta", taken), "Beta (pulih 2)");
+});
+
+test("search reads names, then files, then the conversation — and says where", () => {
+  const alpha = project({
+    id: "p-a",
+    name: "Katalog produk",
+    files: {
+      "src/App.tsx": "const judul = 'Toko Roti';",
+      "src/styles.css": "body{color:#2857aa}",
+    },
+    messages: [
+      {
+        id: "m",
+        role: "assistant",
+        content: "Sudah ditambahkan filtur pencarian.",
+        mode: "Builder",
+      } as any,
+    ],
+  });
+  const beta = project({
+    id: "p-b",
+    name: "Portfolio biru",
+    kind: "roblox",
+    files: { "scene.roblox.json": '{"version":1,"objects":[]}' },
+    comments: [{ id: "c", selector: ".hero", body: "geser", resolved: false }],
+  });
+  const projects = [alpha, beta];
+
+  // A name match does not pretend to know which file matched.
+  assert.deepEqual(searchProjects(projects, "portofolio").hits.length, 0);
+  const byName = searchProjects(projects, "portfolio");
+  assert.deepEqual(
+    byName.hits.map((hit) => [hit.project.name, hit.where]),
+    [["Portfolio biru", ""]],
+  );
+
+  // File contents, then the conversation, each named.
+  const byFile = searchProjects(projects, "2857aa");
+  assert.deepEqual(
+    byFile.hits.map((hit) => [hit.project.name, hit.where]),
+    [["Katalog produk", "src/styles.css"]],
+  );
+  const byConversation = searchProjects(projects, "filtur");
+  assert.deepEqual(
+    byConversation.hits.map((hit) => [hit.project.name, hit.where]),
+    [["Katalog produk", "percakapan"]],
+  );
+
+  // One letter would match half the files, so below two characters only names
+  // are matched: "5" is inside a file and must not pull that project in.
+  assert.deepEqual(searchProjects(projects, "5").hits.length, 0);
+  assert.deepEqual(
+    searchProjects(projects, "5").notFullySearched,
+    0,
+    "query pendek bukan alasan menyatakan sesuatu tidak diperiksa",
+  );
+  // …while a short query that really is in a name still works.
+  assert.deepEqual(
+    searchProjects(projects, "r")
+      .hits.map((hit) => hit.project.name)
+      .sort(),
+    ["Katalog produk", "Portfolio biru"],
+  );
+
+  // Filters narrow by kind and by an open comment, and compose with the query.
+  assert.deepEqual(
+    searchProjects(projects, "", { kind: "roblox" }).hits.map(
+      (hit) => hit.project.name,
+    ),
+    ["Portfolio biru"],
+  );
+  assert.deepEqual(
+    searchProjects(projects, "katalog", { kind: "roblox" }).hits.length,
+    0,
+  );
+  assert.deepEqual(
+    searchProjects(projects, "", { commentsOnly: true }).hits.map(
+      (hit) => hit.project.name,
+    ),
+    ["Portfolio biru"],
+  );
+  assert.deepEqual(searchProjects(undefined, "apa pun").hits, []);
+});
+
+test("a project too big to read is reported, never silently dropped", () => {
+  const huge = project({
+    id: "p-huge",
+    name: "Project besar",
+    files: { "big.txt": "x".repeat(SEARCH_CHARS_MAX + 1) },
+  });
+  const result = searchProjects([huge], "jarum");
+  assert.deepEqual(result.hits, []);
+  assert.equal(result.notFullySearched, 1);
+  // The same project matches normally when the budget can hold it.
+  const small = project({
+    id: "p-small",
+    name: "Kecil",
+    files: { "big.txt": "x".repeat(1000) + "jarum" },
+  });
+  const found = searchProjects([small], "jarum");
+  assert.deepEqual(
+    found.hits.map((hit) => [hit.project.name, hit.where]),
+    [["Kecil", "big.txt"]],
+  );
+  assert.equal(found.notFullySearched, 0);
+  assert.match(snippet("aaa bbb jarum ccc", "jarum"), /jarum/);
+  assert.equal(snippet("tidak ada", "jarum"), "");
 });
 
 test("sizes are written the way a person reads them", () => {

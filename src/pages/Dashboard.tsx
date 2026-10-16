@@ -1,7 +1,7 @@
 import ProjectKindPicker from "../components/projects/ProjectKindPicker";
 import type { ProjectKind } from "../lib/project-kinds";
 import { PlatformNotices, AdminLink } from "../components/admin/Platform";
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Cloud,
@@ -51,6 +51,7 @@ import {
   restoreName,
   type Backup,
 } from "../lib/dashboard/backup";
+import { searchProjects } from "../lib/dashboard/search";
 import {
   continueLine,
   formatBytes,
@@ -102,6 +103,11 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("latest");
   const [filter, setFilter] = useState("all");
+  // Second axis of filtering: what the project *is* (kind) and whether it still
+  // has an open comment. Kept apart from the template select so neither
+  // overrides the other.
+  const [scopeKind, setScopeKind] = useState("all");
+  const [commentsOnly, setCommentsOnly] = useState(false);
   const [dialog, setDialog] = useState("");
   const [selected, setSelected] = useState("");
   const [newName, setNewName] = useState("");
@@ -134,12 +140,25 @@ export default function Dashboard() {
       navigate("/project/" + id);
     }
   }, [store.user]);
-  const projects = store.projects
+  // Searching reads inside the projects, so the text the matcher sees is
+  // deferred: typing stays immediate while the heavy pass catches up.
+  const deferredSearch = useDeferredValue(search);
+  const found = useMemo(
+    () =>
+      searchProjects(store.projects, deferredSearch, {
+        kind: scopeKind,
+        commentsOnly,
+      }),
+    [store.projects, deferredSearch, scopeKind, commentsOnly],
+  );
+  const matchOf = useMemo(
+    () => new Map(found.hits.map((hit) => [hit.project.id, hit.where])),
+    [found],
+  );
+  const projects = found.hits
+    .map((hit) => hit.project)
     .filter(
       (p) =>
-        (p.name + " " + p.description)
-          .toLowerCase()
-          .includes(search.toLowerCase()) &&
         (filter === "all" || p.template === filter) &&
         (tab !== "shared" ||
           (store.sync[p.id] && store.sync[p.id].role !== "Owner")),
@@ -476,6 +495,38 @@ export default function Dashboard() {
                       </option>
                     ))}
                   </select>
+                  <div
+                    className="project-scope"
+                    role="group"
+                    aria-label="Saring project"
+                  >
+                    {(
+                      [
+                        ["all", "Semua"],
+                        ["webapp", "Web"],
+                        ["mobile", "Mobile"],
+                        ["roblox", "Roblox"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={scopeKind === value}
+                        className={scopeKind === value ? "active" : ""}
+                        onClick={() => setScopeKind(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      aria-pressed={commentsOnly}
+                      className={commentsOnly ? "active" : ""}
+                      onClick={() => setCommentsOnly(!commentsOnly)}
+                    >
+                      Komentar terbuka
+                    </button>
+                  </div>
                   <select
                     aria-label="Urutkan project"
                     value={sort}
@@ -517,6 +568,11 @@ export default function Dashboard() {
                           <span className="project-footprint">
                             {footprintLine(p, photos[p.id])}
                           </span>
+                          {matchOf.get(p.id) && (
+                            <span className="project-match">
+                              <Search size={10} /> cocok di {matchOf.get(p.id)}
+                            </span>
+                          )}
                         </Link>
                         <div className="project-menu">
                           <button
@@ -586,9 +642,11 @@ export default function Dashboard() {
                     <p>Beri ruang untuk tumbuh.</p>
                   </button>
                 </div>
-              ) : search || filter !== "all" ? (
+              ) : search || filter !== "all" || commentsOnly || scopeKind !== "all" ? (
                 <EmptyState icon={Search} title="Tidak ada project yang cocok">
-                  Coba kata kunci atau filter lainnya.
+                  {found.notFullySearched
+                    ? `Isi ${found.notFullySearched} project terlalu besar untuk diperiksa seluruhnya — coba kata kunci lain.`
+                    : "Cari di nama, isi file, dan percakapan. Coba kata kunci atau saringan lain."}
                 </EmptyState>
               ) : tab === "shared" ? (
                 <EmptyState icon={Users} title="Belum ada project bersama">

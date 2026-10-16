@@ -314,6 +314,69 @@ test("the dashboard says so when the account endpoint is unreachable", async ({
   await expect(credit.getByRole("link", { name: /Akun/ })).toBeVisible();
 });
 
+test("search looks inside files and conversations, and the chips narrow the list", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await loginRealFixture(page);
+  await page
+    .getByRole("button", { name: "Buat project pertama", exact: true })
+    .click();
+  await page
+    .getByPlaceholder("Buat website portfolio untuk studio desain saya…")
+    .fill("Buat dashboard toko roti");
+  await page.getByRole("button", { name: "Buat project", exact: true }).click();
+  await expect(page).toHaveURL(/\/project\//);
+  // Wait for the first turn to finish and the project to reach the cloud: the
+  // same order the workflow spec uses before asking for another change.
+  await expect(
+    page.getByText("Respons API pengujian diterima.", { exact: true }),
+  ).toBeVisible({ timeout: 20000 });
+  await expect(
+    page
+      .getByRole("button", { name: "Penyimpanan: Tersinkron ke cloud" })
+      .first(),
+  ).toBeVisible({ timeout: 20000 });
+  // A change the fixture really writes into src/styles.css (`biru`).
+  await page
+    .getByRole("button", { name: "Ubah warna jadi biru", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Terima semua", exact: true }),
+  ).toBeVisible({ timeout: 30000 });
+  await page
+    .getByRole("button", { name: "Terima semua", exact: true })
+    .click({ timeout: 30000 });
+  await page.getByRole("link", { name: "Kembali ke dashboard" }).click();
+
+  // The colour only exists inside a file, never in the project's name.
+  await page.getByLabel("Cari project", { exact: true }).fill("2857aa");
+  await expect(page.locator(".project-card")).toHaveCount(1);
+  await expect(page.locator(".project-card").first()).toContainText(
+    "cocok di src/styles.css",
+  );
+
+  // The conversation is searched too, and says that is where it found it.
+  await page
+    .getByLabel("Cari project", { exact: true })
+    .fill("Respons API pengujian");
+  await expect(page.locator(".project-card").first()).toContainText(
+    "cocok di percakapan",
+  );
+
+  // Chips narrow by kind and by open comments, without touching the query.
+  await page.getByLabel("Cari project", { exact: true }).fill("");
+  await page.getByRole("button", { name: "Roblox", exact: true }).click();
+  await expect(page.getByText("Tidak ada project yang cocok")).toBeVisible();
+  await page.getByRole("button", { name: "Web", exact: true }).click();
+  await expect(page.locator(".project-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "Komentar terbuka" }).click();
+  await expect(page.getByText("Tidak ada project yang cocok")).toBeVisible();
+  await page.getByRole("button", { name: "Semua", exact: true }).click();
+  await page.getByRole("button", { name: "Komentar terbuka" }).click();
+  await expect(page.locator(".project-card")).toHaveCount(1);
+});
+
 test("a backup downloads, and restoring it adds projects instead of overwriting them", async ({
   page,
 }) => {
@@ -346,13 +409,11 @@ test("a backup downloads, and restoring it adds projects instead of overwriting 
   expect(Object.keys(backup.projects[0].files).length).toBeGreaterThan(0);
 
   // Restoring the very same file must not touch the project it came from.
-  await page
-    .getByLabel("Berkas cadangan PiwuApp")
-    .setInputFiles({
-      name: "cadangan.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(backup)),
-    });
+  await page.getByLabel("Berkas cadangan PiwuApp").setInputFiles({
+    name: "cadangan.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backup)),
+  });
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Pulihkan dari cadangan?");
   await expect(dialog).toContainText("1 project");

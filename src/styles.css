@@ -2702,6 +2702,37 @@ section h2 {
   line-height: 1.5;
   color: #a8b39f;
 }
+.project-card-footer > a > span.project-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #eef2e6;
+  font-size: 8px;
+  color: #55613f;
+}
+
+/* "Saring project": what the project is, next to the template select. */
+.project-scope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.project-scope button {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: #fff;
+  font-size: 10px;
+  color: #7c8767;
+}
+.project-scope button.active {
+  border-color: #a8b58f;
+  background: #eef2e6;
+  color: #455638;
+}
 .sidebar-settings {
   display: flex;
   align-items: center;
