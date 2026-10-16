@@ -59,6 +59,31 @@ export async function saveProjectPhotos(
   };
 }
 
+/**
+ * Every photo stored for this account, grouped by project, with the bytes —
+ * used by the backup file. `key` is dropped: it is derived from the account and
+ * project, so a restored photo gets a fresh one.
+ */
+export async function exportAllProjectPhotos(
+  account: string,
+): Promise<Record<string, Omit<ProjectPhoto, "key">[]>> {
+  const prefix = `${account}:`;
+  const records = (await (await database()).getAll("photos")).filter(
+    (record: any) => isStoredPhoto(record),
+  ) as ProjectPhoto[];
+  const out: Record<string, Omit<ProjectPhoto, "key">[]> = {};
+  for (const record of records) {
+    if (!record.key.startsWith(prefix)) continue;
+    // key = account:project:id, and only the account part has a known shape.
+    const rest = record.key.slice(prefix.length);
+    const cut = rest.indexOf(":");
+    const project = cut === -1 ? rest : rest.slice(0, cut);
+    const { key: _key, ...photo } = record;
+    (out[project] ||= []).push(photo);
+  }
+  return out;
+}
+
 export async function listProjectPhotos(
   account: string,
   project: string,

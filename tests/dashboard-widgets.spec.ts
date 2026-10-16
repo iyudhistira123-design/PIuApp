@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { realAccountFixture, loginRealFixture } from "./helpers-real";
 import { test, expect } from "@playwright/test";
 
@@ -311,6 +312,65 @@ test("the dashboard says so when the account endpoint is unreachable", async ({
   await expect(credit).toContainText("Belum bisa dimuat");
   await expect(credit).toContainText("Server tidak menjawab");
   await expect(credit.getByRole("link", { name: /Akun/ })).toBeVisible();
+});
+
+test("a backup downloads, and restoring it adds projects instead of overwriting them", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await loginRealFixture(page);
+  await page
+    .getByRole("button", { name: "Buat project pertama", exact: true })
+    .click();
+  await page
+    .getByPlaceholder("Buat website portfolio untuk studio desain saya…")
+    .fill("Buat katalog produk");
+  await page.getByRole("button", { name: "Buat project", exact: true }).click();
+  await expect(page).toHaveURL(/\/project\//);
+  await page.getByRole("link", { name: "Kembali ke dashboard" }).click();
+  await expect(page.locator(".project-card")).toHaveCount(1);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Unduh semua project" }).click(),
+  ]);
+  const file = await download.path();
+  expect(download.suggestedFilename()).toMatch(
+    /^piwuapp-cadangan-\d{4}-\d{2}-\d{2}\.json$/,
+  );
+  const backup = JSON.parse(readFileSync(file, "utf8"));
+  expect(backup.app).toBe("PiwuApp");
+  expect(backup.version).toBe(1);
+  expect(backup.projects).toHaveLength(1);
+  expect(backup.projects[0].name).toBe("katalog produk");
+  expect(Object.keys(backup.projects[0].files).length).toBeGreaterThan(0);
+
+  // Restoring the very same file must not touch the project it came from.
+  await page
+    .getByLabel("Berkas cadangan PiwuApp")
+    .setInputFiles({
+      name: "cadangan.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(backup)),
+    });
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Pulihkan dari cadangan?");
+  await expect(dialog).toContainText("1 project");
+  await expect(dialog).toContainText("tidak ada project Anda yang ditimpa");
+  await dialog.getByRole("button", { name: "Tambahkan 1 project" }).click();
+  await expect(page.locator(".project-card")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "Menu katalog produk (pulih)" }),
+  ).toBeVisible();
+
+  // A file that is not a backup is refused with words, not a silent no-op.
+  await page.getByLabel("Berkas cadangan PiwuApp").setInputFiles({
+    name: "salah.json",
+    mimeType: "application/json",
+    buffer: Buffer.from('{"halo":1}'),
+  });
+  await expect(page.getByText(/bukan cadangan PiwuApp/).first()).toBeVisible();
+  await expect(page.locator(".project-card")).toHaveCount(2);
 });
 
 test("a dashboard where every project service fails says it could not check, not that nothing waits", async ({

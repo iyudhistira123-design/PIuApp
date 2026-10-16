@@ -27,6 +27,12 @@ import {
   trendText,
 } from "../src/lib/dashboard/quality";
 import { activityWhen, buildActivity } from "../src/lib/dashboard/activity";
+import {
+  backupReport,
+  buildBackup,
+  readBackup,
+  restoreName,
+} from "../src/lib/dashboard/backup";
 import { SCENE_PATH } from "../src/lib/roblox/scene";
 import type { Project } from "../src/lib/types";
 
@@ -439,6 +445,120 @@ test("the continue line is the newest real message, trimmed and bounded", () => 
   );
   assert.equal(long.length, 69);
   assert.ok(long.endsWith("…"));
+});
+
+test("a backup file keeps the real projects and drops what it does not know", () => {
+  const backup = buildBackup(
+    [
+      project({
+        id: "p-1",
+        name: "Alpha",
+        kind: "roblox",
+        files: { "src/App.tsx": "x" },
+        messages: [
+          { id: "m", role: "user", content: "hi", mode: "Builder" } as any,
+        ],
+        versions: [{ id: "v", label: "Project dibuat", files: {}, at: NOW }],
+      }),
+      // Junk with no id or name is not a project.
+      { name: "", files: {} } as any,
+    ],
+    {
+      "p-1": [
+        {
+          id: "ph",
+          name: "foto.png",
+          mime: "image/png",
+          bytes: 10,
+          at: NOW,
+          data: "AAAA",
+        },
+      ],
+    },
+    new Date(NOW),
+  );
+  assert.equal(backup.app, "PiwuApp");
+  assert.equal(backup.version, 1);
+  assert.equal(backup.projects.length, 1);
+  assert.equal(backup.projects[0].kind, "roblox");
+  assert.equal(backup.photos["p-1"].length, 1);
+
+  const text = JSON.stringify(backup);
+  const read = readBackup(text, text.length);
+  assert.equal(read.ok, true);
+  if (!read.ok) return;
+  assert.equal(read.skipped, 0);
+  assert.deepEqual(read.backup.projects[0], backup.projects[0]);
+  assert.equal(read.backup.photos["p-1"][0].data, "AAAA");
+  const report = backupReport(read.backup);
+  assert.deepEqual(report, { projects: 1, photos: 1, files: 1, withPhotos: 1 });
+});
+
+test("a backup file that is not one is refused, with a reason a person can act on", () => {
+  const refuse = (raw: unknown, bytes?: number) => {
+    const result = readBackup(
+      typeof raw === "string" ? raw : JSON.stringify(raw),
+      bytes,
+    );
+    assert.equal(result.ok, false);
+    return result.ok === false ? result.error : "";
+  };
+  assert.match(refuse("bukan json"), /bukan JSON/);
+  assert.match(refuse([1, 2, 3]), /bukan objek JSON/);
+  assert.match(
+    refuse({ app: "Lain", kind: "project-backup" }),
+    /bukan cadangan PiwuApp/,
+  );
+  assert.match(
+    refuse({ app: "PiwuApp", kind: "project-backup", version: 99 }),
+    /Versi cadangan 99 belum dikenal/,
+  );
+  assert.match(
+    refuse({ app: "PiwuApp", kind: "project-backup", version: 1 }),
+    /tidak memuat daftar project/,
+  );
+  assert.match(
+    refuse({
+      app: "PiwuApp",
+      kind: "project-backup",
+      version: 1,
+      projects: [{}, {}],
+    }),
+    /Tidak ada project yang bisa dibaca/,
+  );
+  assert.match(refuse("{}", 300 * 1024 * 1024), /terlalu besar/);
+  // A partly broken file is still useful: good projects come in, junk is
+  // reported, not silently treated as a project.
+  const partial = readBackup(
+    JSON.stringify({
+      app: "PiwuApp",
+      kind: "project-backup",
+      version: 1,
+      projects: [{ id: "p-1", name: "Alpha", files: {} }, { id: "x" }],
+      photos: { "p-1": [{ id: "ph", mime: "text/plain", data: "AAAA" }] },
+    }),
+  );
+  assert.equal(partial.ok, true);
+  if (!partial.ok) return;
+  assert.equal(partial.backup.projects.length, 1);
+  assert.equal(partial.skipped, 1);
+  assert.deepEqual(
+    partial.backup.photos,
+    {},
+    "mime di luar daftar tidak diambil",
+  );
+});
+
+test("restored names never collide with what is already there", () => {
+  const taken = new Set(["Alpha", "Beta", "Beta (pulih)"]);
+  assert.equal(restoreName("Gamma", taken), "Gamma");
+  assert.equal(restoreName("Alpha", taken), "Alpha (pulih)");
+  // "Alpha (pulih)" is free in this set, so it is used as is.
+  assert.equal(
+    restoreName("Alpha", new Set(["Alpha", "Alpha (pulih)"])),
+    "Alpha (pulih 2)",
+  );
+  assert.equal(restoreName("Beta", taken), "Beta (pulih 2)");
 });
 
 test("sizes are written the way a person reads them", () => {
