@@ -21,6 +21,9 @@ import {
   aiOverview,
   accountDetail,
   runtimeOverview,
+  storageOverview,
+  studioOverview,
+  LOW_BALANCE,
 } from "../lib/admin-insights.mjs";
 import { paymentProvider } from "../providers/payments.mjs";
 export const siteSchema = z
@@ -139,18 +142,52 @@ export function registerAdmin(app, ctx) {
         platformResult(r);
         return r.count || 0;
       };
-      const [projects, pending, templates, broadcasts, cleanup] =
-        await Promise.all([
-          count("projects"),
-          count("payment_orders", (q) =>
-            q.in("status", ["created", "pending", "checkout_error", "review"]),
-          ),
-          count("templates", (q) => q.eq("status", "published")),
-          count("platform_broadcasts", (q) => q.eq("status", "published")),
-          count("hosting_cleanup_jobs"),
-        ]);
+      // Credits and cloud copies joined the product, so the top of the panel
+      // shows the two states an operator has to act on: accounts about to run
+      // out (the same threshold the dashboard uses) and copies that stopped
+      // syncing. Both are read-only counts.
+      const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+      const optionalCount = async (table, filter) => {
+        try {
+          return await count(table, filter);
+        } catch (error) {
+          // A migration that has not been applied yet (ADMIN_SETUP) must not
+          // take the whole overview down with it; every other failure is real
+          // and still surfaces to the caller.
+          if (error?.code === "ADMIN_SETUP") return null;
+          throw error;
+        }
+      };
+      const [
+        projects,
+        pending,
+        templates,
+        broadcasts,
+        cleanup,
+        lowBalance,
+        dormantWorkspaces,
+      ] = await Promise.all([
+        count("projects"),
+        count("payment_orders", (q) =>
+          q.in("status", ["created", "pending", "checkout_error", "review"]),
+        ),
+        count("templates", (q) => q.eq("status", "published")),
+        count("platform_broadcasts", (q) => q.eq("status", "published")),
+        count("hosting_cleanup_jobs"),
+        optionalCount("credit_accounts", (q) => q.lt("balance", LOW_BALANCE)),
+        optionalCount("project_workspaces", (q) => q.lt("updated_at", cutoff)),
+      ]);
       res.json({
-        metrics: { projects, pending, templates, broadcasts, cleanup },
+        metrics: {
+          projects,
+          pending,
+          templates,
+          broadcasts,
+          cleanup,
+          lowBalance,
+          dormantWorkspaces,
+          lowBalanceThreshold: LOW_BALANCE,
+        },
         recent: platformResult(
           await ctx.admin
             .from("platform_audit")
@@ -376,6 +413,11 @@ export function registerAdmin(app, ctx) {
               "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
           };
         })(),
+        // The two features added after the first panel: cloud copies with the
+        // backup story behind them, and the Roblox Studio bridge with the
+        // plugin version the server hands out.
+        storage: await storageOverview(ctx),
+        studio: await studioOverview(ctx),
         liveVerified: false,
         notice:
           "Probe read-only: bukan bukti transaksi, inference, deployment, uji perangkat, atau kelulusan pentest.",

@@ -23,6 +23,7 @@ function fixture({
   models = ["deepseek-chat", "claude-sonnet-4-20250514", "glm-4.6"],
   providerDown = false,
   runtimeSchema = true,
+  storageSchema = true,
 } = {}) {
   const now = Date.now();
   const state = {
@@ -96,6 +97,61 @@ function fixture({
         expires_at: new Date(now - 60_000).toISOString(),
       },
     ],
+    // Storage and Studio, as the platform keeps them: copies with their last
+    // write, datasets, and bridge rows whose token hash must never be projected.
+    workspaces: [
+      { project_id: "w1", updated_at: new Date(now - 3600_000).toISOString() },
+      {
+        project_id: "w2",
+        updated_at: new Date(now - 10 * 86_400_000).toISOString(),
+      },
+      {
+        project_id: "w3",
+        updated_at: new Date(now - 40 * 86_400_000).toISOString(),
+      },
+    ],
+    datasets: [{ id: "d1" }, { id: "d2" }],
+    projects: [
+      {
+        id: "p1",
+        owner_id: ids.member,
+        updated_at: new Date(now - 3 * 3600_000).toISOString(),
+      },
+    ],
+    counts: {
+      payment_orders: [{ status: "pending" }, { status: "paid" }],
+      templates: [{ status: "published" }, { status: "draft" }],
+      platform_broadcasts: [{ status: "published" }],
+      hosting_cleanup_jobs: [{}, {}, {}],
+      credit_accounts: [
+        { user_id: ids.member, balance: 4 },
+        { user_id: ids.root, balance: 128 },
+      ],
+    },
+    audit: [
+      {
+        id: "a1",
+        actor_id: ids.root,
+        action: "admin_role",
+        target_id: ids.member,
+        reason: "fixture",
+        created_at: new Date(now - 60_000).toISOString(),
+      },
+    ],
+    bridges: [
+      {
+        user_id: ids.member,
+        state: "idle",
+        expires_at: new Date(now + 600_000).toISOString(),
+        token_hash: "sha256-fixture-token-must-not-be-projected",
+      },
+      {
+        user_id: ids.member,
+        state: "applied",
+        expires_at: new Date(now - 600_000).toISOString(),
+        token_hash: "sha256-fixture-token-must-not-be-projected",
+      },
+    ],
     calls: [] as string[],
   };
   const fetcher = async (input: any, init: any = {}) => {
@@ -138,8 +194,6 @@ function fixture({
     if (path === "/rest/v1/platform_admins")
       return json([{ role: "superadmin" }]);
     if (path === "/rest/v1/platform_user_controls") return json([]);
-    if (path === "/rest/v1/credit_accounts")
-      return json({ balance: 128, updated_at: "2026-03-04" });
     // Honor the filters the routes rely on, as a real PostgREST would.
     const apply = (rows: any[]) => {
       let out = rows;
@@ -148,15 +202,68 @@ function fixture({
         const [op, ...tail] = raw.split(".");
         const value = tail.join(".");
         if (op === "eq") out = out.filter((r) => String(r[key]) === value);
-        if (op === "gte")
-          out = out.filter((r) => Date.parse(r[key]) >= Date.parse(value));
+        // Numbers compare as numbers (a credit balance), everything else as a
+        // date (created_at, updated_at, expires_at).
+        const compare = (row: any) => {
+          const numeric = Number(row);
+          if (Number.isFinite(numeric) && /^-?\d+(\.\d+)?$/.test(value))
+            return numeric - Number(value);
+          return Date.parse(row) - Date.parse(value);
+        };
+        if (op === "gte") out = out.filter((r) => compare(r[key]) >= 0);
+        if (op === "lt") out = out.filter((r) => compare(r[key]) < 0);
+        if (op === "in")
+          out = out.filter((r) =>
+            value
+              .replace(/^[(]|[)]$/g, "")
+              .split(",")
+              .includes(String(r[key])),
+          );
       }
       return out;
     };
+    // A `head: true` count query answers from the same rows, with the exact
+    // total in Content-Range — which is where supabase-js reads `count`.
+    const countJson = (rows: any[]) => {
+      const matched = apply(rows);
+      return new Response(null, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Range": `0-${Math.max(matched.length - 1, 0)}/${matched.length}`,
+        },
+      });
+    };
+    const isCount = (init?.method || "").toUpperCase() === "HEAD";
+    if (isCount && Object.hasOwn(state.counts, path.split("/").at(-1)!))
+      return countJson((state.counts as any)[path.split("/").at(-1)!]);
+    if (
+      !storageSchema &&
+      [
+        "/rest/v1/project_workspaces",
+        "/rest/v1/project_datasets",
+        "/rest/v1/studio_bridges",
+      ].includes(path)
+    )
+      return json(
+        { code: "PGRST205", message: "relation does not exist" },
+        404,
+      );
+    if (path === "/rest/v1/project_workspaces")
+      return isCount
+        ? countJson(state.workspaces)
+        : json(apply(state.workspaces));
+    if (path === "/rest/v1/project_datasets")
+      return isCount ? countJson(state.datasets) : json(apply(state.datasets));
+    if (path === "/rest/v1/studio_bridges") return json(apply(state.bridges));
+    if (path === "/rest/v1/credit_accounts")
+      return json(apply(state.counts.credit_accounts));
+    if (path === "/rest/v1/platform_audit") return json(apply(state.audit));
     if (path === "/rest/v1/credit_ledger") return json(apply(state.ledger));
     if (path === "/rest/v1/credit_reservations")
       return json(apply(state.reservations));
-    if (path === "/rest/v1/projects") return json([], 200);
+    if (path === "/rest/v1/projects")
+      return isCount ? countJson(state.projects) : json(apply(state.projects));
     if (path === "/rest/v1/runtime_sandbox_slots")
       return runtimeSchema
         ? json(state.slots)
@@ -271,7 +378,7 @@ test("account detail shows balance, ledger, reservations and controls for one id
   try {
     const { status, body } = await get(url + "/admin/users/" + ids.member);
     assert.equal(status, 200);
-    assert.equal(body.balance, 128);
+    assert.equal(body.balance, 4);
     assert.equal(body.account.email, "member@example.test");
     assert.equal(body.adminRole, "superadmin");
     assert.equal(body.ledger.length, 3);
@@ -281,6 +388,93 @@ test("account detail shows balance, ledger, reservations and controls for one id
     // Unknown accounts and malformed ids are refused, not treated as empty.
     assert.equal((await get(url + "/admin/users/" + ids.root)).status, 404);
     assert.equal((await get(url + "/admin/users/tidak-uuid")).status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test("the overview counts the two states the credit and storage features created", async () => {
+  const { server, url } = await serve();
+  try {
+    const { status, body } = await get(url + "/admin/overview");
+    assert.equal(status, 200);
+    // One account below the threshold the dashboard itself warns about.
+    assert.equal(body.metrics.lowBalance, 1);
+    assert.equal(body.metrics.lowBalanceThreshold, 10);
+    // Two copies have not been written to for more than a week.
+    assert.equal(body.metrics.dormantWorkspaces, 2);
+    assert.equal(body.metrics.projects, 1);
+    assert.equal(body.metrics.pending, 1);
+    assert.equal(body.metrics.templates, 1);
+    assert.equal(body.metrics.broadcasts, 1);
+    assert.equal(body.metrics.cleanup, 3);
+  } finally {
+    server.close();
+  }
+});
+
+test("account detail flags a low balance and reports storage and Studio counts only", async () => {
+  const { server, url } = await serve();
+  try {
+    const { body } = await get(url + "/admin/users/" + ids.member);
+    assert.equal(body.lowBalance, true);
+    assert.equal(body.lowBalanceThreshold, 10);
+    assert.equal(body.projects, 1);
+    assert.ok(body.storage.lastProjectUpdateAt);
+    // Both bridges belong to this account; one token is still valid.
+    assert.equal(body.studio.bridges, 2);
+    assert.equal(body.studio.active, 1);
+    assert.equal(body.studio.lastState, "idle");
+    assert.equal(body.studio.pluginVersion, "2.1.0");
+    // A token hash exists in the table and must never reach the response.
+    assert.ok(!JSON.stringify(body).includes("sha256-fixture-token"));
+  } finally {
+    server.close();
+  }
+});
+
+test("diagnostics reports storage, backup and the served plugin version without leaking tokens", async () => {
+  const { server, url } = await serve();
+  try {
+    const { status, body } = await get(url + "/admin/diagnostics");
+    assert.equal(status, 200);
+    assert.equal(body.storage.available, true);
+    assert.equal(body.storage.workspaces.total, 3);
+    assert.equal(body.storage.workspaces.dormant, 2);
+    assert.equal(body.storage.dormantDays, 7);
+    assert.equal(body.storage.datasets.total, 2);
+    assert.match(body.storage.backup, /peramban/);
+    assert.match(body.storage.notice, /tidak pernah diproyeksikan/);
+    // The plugin version comes from shared/studio.mjs, not from a literal here.
+    assert.equal(body.studio.plugin.version, "2.1.0");
+    assert.equal(body.studio.plugin.bundle, "PiwuStudio.rbxmx");
+    assert.equal(body.studio.bridges.total, 2);
+    assert.equal(body.studio.bridges.active, 1);
+    assert.deepEqual(body.studio.bridges.states, [
+      { state: "applied", count: 1 },
+      { state: "idle", count: 1 },
+    ]);
+    // The panel says what it cannot know: the installed plugin version.
+    assert.match(body.studio.notice, /tidak dilaporkan ke server/);
+    assert.ok(!JSON.stringify(body).includes("sha256-fixture-token"));
+  } finally {
+    server.close();
+  }
+});
+
+test("storage and Studio blocks state a missing migration instead of failing the probe", async () => {
+  const { server, url } = await serve({ storageSchema: false });
+  try {
+    const { status, body } = await get(url + "/admin/diagnostics");
+    assert.equal(status, 200);
+    assert.equal(body.storage.available, false);
+    assert.equal(body.storage.reason, "schema_missing");
+    assert.match(body.storage.notice, /002_workspace_sync\.sql/);
+    assert.equal(body.studio.available, false);
+    assert.equal(body.studio.reason, "schema_missing");
+    assert.match(body.studio.notice, /006_studio_bridge\.sql/);
+    // The plugin version is known even when the bridge table is not.
+    assert.equal(body.studio.plugin.version, "2.1.0");
   } finally {
     server.close();
   }

@@ -26,11 +26,20 @@ import {
   Cpu,
   Gauge,
   Wallet,
+  Database,
+  Puzzle,
 } from "lucide-react";
 import { Logo, Modal } from "../components/ui";
 import { useStore } from "../lib/store";
 import { api } from "../services/api";
 import "./admin.css";
+/**
+ * The "credits are running out" line, matching src/lib/dashboard/credits.ts
+ * CREDIT_LOW and server/lib/admin-insights.mjs LOW_BALANCE. The server sends
+ * its own number with the overview payload; this is the fallback for older
+ * servers and for the per-account panel.
+ */
+const LOW_BALANCE = 10;
 const sections = [
   ["overview", "Ringkasan", LayoutDashboard],
   ["users", "Pengguna", Users],
@@ -68,6 +77,10 @@ const names: Record<string, string> = {
   expired: "Kedaluwarsa",
   checkout_error: "Checkout gagal",
   queued: "Antrean",
+  // Roblox Studio bridge states (studio_bridges.state).
+  idle: "Siaga",
+  applying: "Menerapkan",
+  applied: "Diterapkan",
   building: "Memproses",
   active: "Aktif",
   admin_role: "Perubahan peran",
@@ -622,18 +635,64 @@ export function AdminPanel({
                   <>
                     <div className="ad-metrics">
                       {[
-                        ["projects", "Total project", FolderKanban],
-                        ["pending", "Transaksi perlu perhatian", CreditCard],
-                        ["templates", "Template tayang", Store],
-                        ["broadcasts", "Broadcast dipublikasikan", Megaphone],
-                      ].map(([key, text, Icon]: any) => (
+                        [
+                          "projects",
+                          "Total project",
+                          FolderKanban,
+                          "Data platform saat ini",
+                        ],
+                        [
+                          "pending",
+                          "Transaksi perlu perhatian",
+                          CreditCard,
+                          "Data platform saat ini",
+                        ],
+                        [
+                          "templates",
+                          "Template tayang",
+                          Store,
+                          "Data platform saat ini",
+                        ],
+                        [
+                          "broadcasts",
+                          "Broadcast dipublikasikan",
+                          Megaphone,
+                          "Data platform saat ini",
+                        ],
+                        [
+                          "lowBalance",
+                          "Akun kredit menipis",
+                          Wallet,
+                          `Saldo di bawah ${
+                            data.metrics.lowBalanceThreshold ?? LOW_BALANCE
+                          } — ambang yang sama dengan peringatan di dashboard pengguna`,
+                        ],
+                        [
+                          "dormantWorkspaces",
+                          "Salinan cloud diam",
+                          Database,
+                          "Salinan tersimpan yang tidak diperbarui 7 hari terakhir; bukan kegagalan sync",
+                        ],
+                        [
+                          "cleanup",
+                          "Pekerjaan pembersihan hosting",
+                          Server,
+                          "Antrean hapus situs lama, termasuk yang sudah selesai",
+                        ],
+                      ].map(([key, text, Icon, note]: any) => (
                         <div className="ad-metric" key={key}>
                           <div>
                             <span>{text}</span>
                             <Icon size={18} />
                           </div>
-                          <strong>{data.metrics[key] ?? "—"}</strong>
-                          <small>Data platform saat ini</small>
+                          <strong>
+                            {data.metrics[key] ?? "—"}
+                            {key === "lowBalance" &&
+                              data.metrics[key] === null && (
+                                <small> tidak terbaca</small>
+                              )}
+                          </strong>
+                          <small>{note}</small>
                         </div>
                       ))}
                     </div>
@@ -901,6 +960,73 @@ export function AdminPanel({
                           : "Lokal satu proses"}
                       </dd>
                     </dl>
+                    <h3>Penyimpanan &amp; cadangan (baca-saja)</h3>
+                    {data.storage ? (
+                      <>
+                        <dl>
+                          <dt>Salinan cloud</dt>
+                          <dd>
+                            {data.storage.available
+                              ? `${data.storage.workspaces?.total ?? 0} salinan project`
+                              : "tidak terbaca — periksa migration 002"}
+                            {data.storage.available
+                              ? ` · ${data.storage.workspaces?.dormant ?? 0} diam ≥ ${
+                                  data.storage.dormantDays ?? 7
+                                } hari`
+                              : ""}
+                          </dd>
+                          <dt>Dataset project</dt>
+                          <dd>
+                            {data.storage.datasets?.reported === false
+                              ? "tidak terbaca (migration 004 belum diterapkan)"
+                              : (data.storage.datasets?.total ?? 0)}
+                          </dd>
+                          <dt>Cadangan</dt>
+                          <dd>{data.storage.backup}</dd>
+                        </dl>
+                        <p>{data.storage.notice}</p>
+                      </>
+                    ) : (
+                      <p>
+                        Blok penyimpanan tidak ada pada respons ini; server yang
+                        lebih lama tidak melaporkannya.
+                      </p>
+                    )}
+                    <h3>Roblox Studio &amp; plugin (baca-saja)</h3>
+                    {data.studio ? (
+                      <>
+                        <dl>
+                          <dt>Versi plugin yang disediakan</dt>
+                          <dd>
+                            {data.studio.plugin?.version || "—"} ·{" "}
+                            <code>{data.studio.plugin?.bundle || "—"}</code>
+                          </dd>
+                          <dt>Bridge terpasang</dt>
+                          <dd>
+                            {data.studio.available
+                              ? `${data.studio.bridges?.total ?? 0} project · ${
+                                  data.studio.bridges?.active ?? 0
+                                } token masih berlaku`
+                              : "tidak terbaca — periksa migration 006"}
+                            {data.studio.bridges?.truncated
+                              ? " (batas baca tercapai)"
+                              : ""}
+                          </dd>
+                          <dt>Status terakhir</dt>
+                          <dd>
+                            {(data.studio.bridges?.states || [])
+                              .map((s: Row) => `${label(s.state)}: ${s.count}`)
+                              .join(" · ") || "belum ada bridge"}
+                          </dd>
+                        </dl>
+                        <p>{data.studio.notice}</p>
+                      </>
+                    ) : (
+                      <p>
+                        Blok Studio tidak ada pada respons ini; server yang
+                        lebih lama tidak melaporkannya.
+                      </p>
+                    )}
                     <button
                       className="ad-secondary"
                       onClick={() => {
@@ -927,7 +1053,18 @@ export function AdminPanel({
                             <small>{r.email}</small>
                             <code title={r.id}>{r.id}</code>
                           </td>
-                          <td>{r.balance ?? "Belum dibuat"}</td>
+                          <td>
+                            {r.balance === null || r.balance === undefined ? (
+                              "Belum dibuat"
+                            ) : (
+                              <>
+                                {r.balance}
+                                {r.balance < LOW_BALANCE && (
+                                  <Badge warn>Menipis</Badge>
+                                )}
+                              </>
+                            )}
+                          </td>
                           <td>
                             <Badge warn={r.suspended}>
                               {r.suspended ? "Ditangguhkan" : "Aktif"}
@@ -1313,6 +1450,7 @@ export function AdminPanel({
                         {[
                           "cloud",
                           "ai",
+                          "search",
                           "sandbox",
                           "publish",
                           "payments",
@@ -1911,7 +2049,9 @@ function SettingsForm({
         <h2>Layanan platform</h2>
         <p className="ad-muted">
           Sakelar ini mengizinkan layanan, bukan memasang kredensial provider.
-          Kesiapan koneksi tersedia di Operasional.
+          Kesiapan koneksi tersedia di Operasional, termasuk pencarian web —
+          fitur itu tidak punya sakelar di sini karena statusnya ditentukan env
+          server (<code>SEARCH_ENABLED</code>, <code>SEARCH_PROVIDER</code>).
         </p>
         {Object.entries({
           ai: "AI builder",
@@ -2211,6 +2351,24 @@ function CreditDetail({
               <strong>Project</strong>
               <Badge>{data.projects}</Badge>
             </div>
+            <div>
+              <strong>Kredit menipis</strong>
+              <Badge warn={data.lowBalance === true}>
+                {data.lowBalance === null || data.lowBalance === undefined
+                  ? "Belum dibuat"
+                  : data.lowBalance
+                    ? `Ya (< ${data.lowBalanceThreshold ?? LOW_BALANCE})`
+                    : "Tidak"}
+              </Badge>
+            </div>
+            <div>
+              <strong>Bridge Studio</strong>
+              <Badge warn={data.studio?.active > 0}>
+                {data.studio
+                  ? `${data.studio.bridges} terpasang · ${data.studio.active} aktif`
+                  : "Tidak dilaporkan"}
+              </Badge>
+            </div>
           </div>
           <dl>
             <dt>Email</dt>
@@ -2228,6 +2386,17 @@ function CreditDetail({
             <dt>Verifikasi</dt>
             <dd>
               {data.account?.verified ? "Terverifikasi" : "Belum terverifikasi"}
+            </dd>
+            <dt>Salinan cloud terakhir diperbarui (project)</dt>
+            <dd>
+              {data.storage?.lastProjectUpdateAt
+                ? date(data.storage.lastProjectUpdateAt)
+                : "Belum ada project tersimpan"}
+            </dd>
+            <dt>Plugin Studio yang disediakan server</dt>
+            <dd>
+              {data.studio?.pluginVersion || "—"} · versi yang terpasang di
+              Studio tidak dilaporkan ke server
             </dd>
             <dt>{data.window?.days || 30} hari terakhir</dt>
             <dd>

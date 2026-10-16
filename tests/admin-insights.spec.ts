@@ -74,6 +74,74 @@ const runtimePayload = {
   notice: "Lease kedaluwarsa tidak dihitung aktif.",
 };
 
+// What /admin/diagnostics answers after the storage and Studio features: the
+// copy counts, the backup story, and the plugin version the server serves.
+const diagnosticsPayload = {
+  readiness: {
+    auth: "reachable",
+    database: "reachable",
+    checkedAt: "2026-03-03T10:00:00.000Z",
+  },
+  runtime: {
+    rateLimitMode: "database",
+    coordinationSchema: "reachable",
+    sandboxRouting: "sticky-owner-lease",
+  },
+  search: {
+    provider: "tavily",
+    selected: "tavily",
+    selectedAvailable: true,
+    disabled: false,
+    keyConfigured: true,
+    web: true,
+    summary: true,
+    rounds: 2,
+    tools: { names: ["cari_web"], rounds: 2 },
+    locale: { country: "", language: "" },
+    cache: {
+      mode: "process",
+      entries: 0,
+      stats: { hits: 0, sharedHits: 0, errors: 0 },
+    },
+    jobs: { jobs: 0, running: 0, ttlMinutes: 30 },
+    notice: "Status konfigurasi, bukan bukti panggilan vendor berhasil.",
+  },
+  storage: {
+    available: true,
+    reason: "",
+    dormantDays: 7,
+    workspaces: { total: 12, dormant: 3 },
+    datasets: { total: 5, reported: true },
+    backup:
+      "Cadangan project dibuat di peramban sebagai unduhan JSON oleh pemiliknya. Server tidak menyimpan salinan cadangan.",
+    notice:
+      "Hitungan baris tabel. Isi project tidak pernah diproyeksikan ke panel ini.",
+  },
+  studio: {
+    available: true,
+    reason: "",
+    plugin: {
+      version: "2.1.0",
+      file: "PiwuStudio.luau",
+      bundle: "PiwuStudio.rbxmx",
+    },
+    bridges: {
+      total: 2,
+      active: 1,
+      states: [
+        { state: "applied", count: 1 },
+        { state: "idle", count: 1 },
+      ],
+      truncated: false,
+    },
+    notice:
+      "Token bridge disimpan hanya sebagai hash dan tidak pernah ditampilkan. Versi plugin yang terpasang tidak dilaporkan ke server, jadi panel tidak bisa memastikan salinan pengguna sudah 2.1.0.",
+  },
+  liveVerified: false,
+  notice:
+    "Probe read-only: bukan bukti transaksi, inference, deployment, uji perangkat, atau kelulusan pentest.",
+};
+
 const accountPayload = {
   account: {
     id: USER_ID,
@@ -131,6 +199,8 @@ type Overrides = {
   runtime?: any;
   account?: any;
   users?: any[];
+  overview?: any;
+  diagnostics?: any;
   onRequest?: (path: string, body?: unknown) => void;
 };
 
@@ -179,7 +249,9 @@ async function mount(page: Page, overrides: Overrides = {}) {
         if (path.startsWith("/admin/users"))
           return { page: 1, hasMore: false, items: options.users };
         if (path.startsWith("/admin/overview"))
-          return { metrics: {}, recent: [] };
+          return options.overview ?? { metrics: {}, recent: [] };
+        if (path.startsWith("/admin/diagnostics"))
+          return options.diagnostics ?? { notice: "", readiness: {} };
         if (path.startsWith("/admin/operations"))
           return {
             jobs: [],
@@ -188,6 +260,7 @@ async function mount(page: Page, overrides: Overrides = {}) {
             capabilities: {
               cloud: true,
               ai: true,
+              search: true,
               sandbox: false,
               publish: true,
               payments: true,
@@ -220,6 +293,8 @@ async function mount(page: Page, overrides: Overrides = {}) {
       runtime: overrides.runtime ?? runtimePayload,
       account: overrides.account ?? accountPayload,
       users: overrides.users ?? [],
+      overview: overrides.overview,
+      diagnostics: overrides.diagnostics,
     },
   );
 }
@@ -384,4 +459,121 @@ test("admin operations shows sandbox slots and rate buckets, or the missing migr
       .first(),
   ).toBeVisible();
   await expect(page.getByText("1 / 50")).toHaveCount(0);
+});
+
+test("admin overview shows the credit and storage states the new features created", async ({
+  page,
+}) => {
+  await mount(page, {
+    tab: "overview",
+    overview: {
+      metrics: {
+        projects: 12,
+        pending: 3,
+        templates: 5,
+        broadcasts: 2,
+        cleanup: 4,
+        lowBalance: 6,
+        dormantWorkspaces: 9,
+        lowBalanceThreshold: 10,
+      },
+      recent: [],
+    },
+  });
+  const metric = (name: string) =>
+    page.locator("#admin-fixture .ad-metric", { hasText: name });
+  await expect(metric("Akun kredit menipis").getByText("6")).toBeVisible();
+  // The note quotes the threshold the server sent, not a number in the UI.
+  await expect(metric("Akun kredit menipis")).toContainText(
+    "Saldo di bawah 10",
+  );
+  await expect(metric("Salinan cloud diam").getByText("9")).toBeVisible();
+  await expect(metric("Salinan cloud diam")).toContainText(
+    "tidak diperbarui 7 hari",
+  );
+  await expect(
+    metric("Pekerjaan pembersihan hosting").getByText("4"),
+  ).toBeVisible();
+
+  // A server that does not report them shows a dash, never a zero.
+  await mount(page, {
+    tab: "overview",
+    overview: {
+      metrics: {
+        projects: 12,
+        pending: 3,
+        templates: 5,
+        broadcasts: 2,
+        cleanup: 4,
+        lowBalance: null,
+        dormantWorkspaces: null,
+      },
+      recent: [],
+    },
+  });
+  await expect(metric("Akun kredit menipis")).toContainText("—");
+  await expect(metric("Akun kredit menipis")).toContainText("tidak terbaca");
+  await expect(metric("Salinan cloud diam")).toContainText("—");
+});
+
+test("admin users list flags a balance below the dashboard threshold", async ({
+  page,
+}) => {
+  const row = (email: string, balance: number) => ({
+    id: USER_ID,
+    email,
+    name: email,
+    balance,
+    suspended: false,
+    verified: true,
+    admin_role: "",
+  });
+  await mount(page, {
+    tab: "users",
+    users: [row("menipis@example.test", 4), row("aman@example.test", 128)],
+  });
+  const low = page.getByRole("row", { name: /menipis@example\.test/ });
+  const ok = page.getByRole("row", { name: /aman@example\.test/ });
+  await expect(low.locator(".ad-badge", { hasText: "Menipis" })).toBeVisible();
+  await expect(ok.locator(".ad-badge", { hasText: "Menipis" })).toHaveCount(0);
+});
+
+test("admin diagnostics reports storage, backup and the plugin version without overclaiming", async ({
+  page,
+}) => {
+  await mount(page, { tab: "diagnostics", diagnostics: diagnosticsPayload });
+  const panel = page.locator("#admin-fixture");
+  await expect(
+    panel.getByRole("heading", { name: /Penyimpanan & cadangan/ }),
+  ).toBeVisible();
+  await expect(panel).toContainText("12 salinan project");
+  await expect(panel).toContainText("3 diam ≥ 7 hari");
+  await expect(panel).toContainText("unduhan JSON oleh pemiliknya");
+  await expect(panel).toContainText("tidak pernah diproyeksikan");
+
+  await expect(
+    panel.getByRole("heading", { name: /Roblox Studio & plugin/ }),
+  ).toBeVisible();
+  await expect(panel).toContainText("2.1.0");
+  await expect(panel).toContainText("PiwuStudio.rbxmx");
+  await expect(panel).toContainText("2 project · 1 token masih berlaku");
+  await expect(panel).toContainText("Diterapkan: 1");
+  // The panel says what it cannot know: the copy installed in Studio.
+  await expect(panel).toContainText("tidak dilaporkan ke server");
+
+  // An older server without these blocks says so instead of rendering blanks.
+  await mount(page, {
+    tab: "diagnostics",
+    diagnostics: { notice: "Probe read-only.", readiness: {} },
+  });
+  await expect(
+    page
+      .locator("#admin-fixture")
+      .getByText(/Blok penyimpanan tidak ada pada respons ini/),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator("#admin-fixture")
+      .getByText(/Blok Studio tidak ada pada respons ini/),
+  ).toBeVisible();
 });

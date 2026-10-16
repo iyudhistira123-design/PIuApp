@@ -1,6 +1,7 @@
 import { capabilities, HttpError } from "./core.mjs";
 import { platformResult } from "./platform.mjs";
 import { listProviderModels, modelCatalog, tierModels } from "./ai-models.mjs";
+import { STUDIO_PLUGIN } from "../../shared/studio.mjs";
 
 // Read-only admin insight for the AI provider, per-account credits, and runtime
 // coordination. Nothing here writes: actions still go through
@@ -10,6 +11,15 @@ import { listProviderModels, modelCatalog, tierModels } from "./ai-models.mjs";
 const DAY = 86400000;
 const WINDOW_DAYS = 30;
 const MAX_ROWS = 5000;
+
+/**
+ * The same "credits are running out" threshold the dashboard shows a user, so
+ * an operator looking at the panel sees the account at the moment its owner
+ * does. Keep the two numbers together: src/lib/dashboard/credits.ts CREDIT_LOW.
+ */
+export const LOW_BALANCE = 10;
+/** A cloud copy nobody has saved to for this long is dormant, not broken. */
+const DORMANT_DAYS = 7;
 
 /** Host and path of LLM_BASE_URL, with credentials, query, and hash dropped. */
 export function maskBaseUrl(value) {
@@ -198,6 +208,23 @@ export async function accountDetail(ctx, id) {
     if (row.delta > 0) added += row.delta;
     else spent += -row.delta;
   }
+  // Storage and Studio, per account: when the cloud copy was last written and
+  // whether a plugin is paired right now. Both are counts/dates, never content.
+  const lastProject = await ctx.admin
+    .from("projects")
+    .select("updated_at")
+    .eq("owner_id", id)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (lastProject.error && !schemaMissing(lastProject.error))
+    platformResult(lastProject);
+  const bridges = await ctx.admin
+    .from("studio_bridges")
+    .select("state,expires_at")
+    .eq("user_id", id)
+    .limit(20);
+  if (bridges.error && !schemaMissing(bridges.error)) platformResult(bridges);
+  const bridgeRows = bridges.error ? [] : bridges.data || [];
   return {
     account: {
       id,
@@ -215,6 +242,25 @@ export async function accountDetail(ctx, id) {
     suspendedReason: controls?.reason || "",
     adminRole: role?.role || "",
     projects: projects.count || 0,
+    // The same "running out" line the dashboard draws for this account.
+    lowBalance:
+      balance?.balance === null || balance?.balance === undefined
+        ? null
+        : balance.balance < LOW_BALANCE,
+    lowBalanceThreshold: LOW_BALANCE,
+    storage: {
+      lastProjectUpdateAt: lastProject.error
+        ? ""
+        : lastProject.data?.[0]?.updated_at || "",
+    },
+    studio: {
+      bridges: bridgeRows.length,
+      active: bridgeRows.filter(
+        (row) => Date.parse(row.expires_at) > Date.now(),
+      ).length,
+      lastState: bridgeRows[0]?.state || "",
+      pluginVersion: STUDIO_PLUGIN.version,
+    },
     ledger,
     reservations,
     window: {
@@ -286,5 +332,112 @@ export async function runtimeOverview(ctx, coordination) {
       result.buckets.hits += row.hits || 0;
     }
   }
+  return result;
+}
+
+/**
+ * Storage and backup, as the platform sees it. Counts only: no project payload,
+ * no file content, no user text ever leaves the database for this panel.
+ */
+export async function storageOverview(ctx, { now = Date.now() } = {}) {
+  const result = {
+    available: true,
+    reason: "",
+    dormantDays: DORMANT_DAYS,
+    workspaces: { total: 0, dormant: 0 },
+    datasets: { total: 0, reported: true },
+    // The feature that exists for this: a project backup is downloaded by its
+    // owner as JSON. The server keeps no second copy.
+    backup:
+      "Cadangan project dibuat di peramban sebagai unduhan JSON oleh pemiliknya. Server tidak menyimpan salinan cadangan.",
+    notice:
+      "Hitungan baris tabel. Isi project tidak pernah diproyeksikan ke panel ini.",
+  };
+  if (!ctx.admin) {
+    result.available = false;
+    result.reason = "not_configured";
+    return result;
+  }
+  const count = async (table, filter) => {
+    let query = ctx.admin
+      .from(table)
+      .select("*", { count: "exact", head: true });
+    if (filter) query = filter(query);
+    const answer = await query;
+    if (answer.error) {
+      if (schemaMissing(answer.error)) return null;
+      platformResult(answer);
+    }
+    return answer.count || 0;
+  };
+  const cutoff = new Date(now - DORMANT_DAYS * DAY).toISOString();
+  const [total, dormant, datasets] = await Promise.all([
+    count("project_workspaces"),
+    count("project_workspaces", (q) => q.lt("updated_at", cutoff)),
+    count("project_datasets"),
+  ]);
+  if (total === null) {
+    result.available = false;
+    result.reason = "schema_missing";
+    result.notice =
+      "Tabel salinan cloud belum ada. Terapkan migration 002_workspace_sync.sql (dan 004 untuk dataset), lalu muat ulang.";
+    return result;
+  }
+  result.workspaces = { total, dormant: dormant ?? 0 };
+  result.datasets = { total: datasets ?? 0, reported: datasets !== null };
+  return result;
+}
+
+/**
+ * The Roblox Studio bridge and the plugin version the server hands out.
+ *
+ * This reports the version the app serves. It cannot report the version a
+ * person has installed: the plugin never sends it, so a mismatch is only
+ * visible inside Studio when the plugin compares itself against /studio/status.
+ */
+export async function studioOverview(ctx, { now = Date.now() } = {}) {
+  const result = {
+    available: true,
+    reason: "",
+    plugin: {
+      version: STUDIO_PLUGIN.version,
+      file: STUDIO_PLUGIN.file,
+      bundle: STUDIO_PLUGIN.bundle,
+    },
+    bridges: { total: 0, active: 0, states: [], truncated: false },
+    notice:
+      "Token bridge disimpan hanya sebagai hash dan tidak pernah ditampilkan. Versi plugin yang terpasang tidak dilaporkan ke server, jadi panel tidak bisa memastikan salinan pengguna sudah " +
+      STUDIO_PLUGIN.version +
+      ".",
+  };
+  if (!ctx.admin) {
+    result.available = false;
+    result.reason = "not_configured";
+    return result;
+  }
+  const rows = await ctx.admin
+    .from("studio_bridges")
+    .select("state,expires_at")
+    .limit(MAX_ROWS / 10);
+  if (rows.error) {
+    if (schemaMissing(rows.error)) {
+      result.available = false;
+      result.reason = "schema_missing";
+      result.notice =
+        "Tabel bridge Studio belum ada. Terapkan migration 006_studio_bridge.sql, lalu muat ulang.";
+      return result;
+    }
+    platformResult(rows);
+  }
+  const states = new Map();
+  for (const row of rows.data || []) {
+    result.bridges.total += 1;
+    if (Date.parse(row.expires_at) > now) result.bridges.active += 1;
+    states.set(row.state, (states.get(row.state) || 0) + 1);
+  }
+  result.bridges.states = [...states.entries()]
+    .map(([state, count]) => ({ state, count }))
+    .sort((a, b) => a.state.localeCompare(b.state));
+  result.bridges.truncated = (rows.data || []).length === MAX_ROWS / 10;
   return result;
 }
