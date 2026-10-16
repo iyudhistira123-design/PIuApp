@@ -41,6 +41,7 @@ import { scopeFor } from "../lib/cloud/types";
 import { listProjectPhotos } from "../services/project-photos";
 import CreditSummary from "../components/dashboard/CreditSummary";
 import WaitingForYou from "../components/dashboard/WaitingForYou";
+import QualityPanel from "../components/dashboard/QualityPanel";
 import {
   continueLine,
   formatBytes,
@@ -366,6 +367,7 @@ export default function Dashboard() {
           {(tab === "projects" || tab === "shared") && (
             <>
               <WaitingForYou projects={store.projects} />
+              <QualityPanel projects={store.projects} />
               <div className="dashboard-banner">
                 <div>
                   <span className="banner-label">

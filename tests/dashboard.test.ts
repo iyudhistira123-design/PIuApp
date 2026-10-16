@@ -20,6 +20,12 @@ import {
   spendByReason,
   spendLabel,
 } from "../src/lib/dashboard/credits";
+import {
+  qualityOf,
+  scoreLabel,
+  scoreTone,
+  trendText,
+} from "../src/lib/dashboard/quality";
 import { SCENE_PATH } from "../src/lib/roblox/scene";
 import type { Project } from "../src/lib/types";
 
@@ -272,6 +278,69 @@ test("the Roblox scene is read cheaply, and a broken file is not guessed at", ()
     projectFootprint(project({ kind: "roblox", files: {} })).scene,
     undefined,
   );
+});
+
+test("quality is the newest score, its movement, and the parts behind it", () => {
+  const report = (
+    score: number,
+    at: string,
+    parts = {},
+    findings: unknown[] = [],
+  ) => ({
+    id: `r-${at}`,
+    type: "lighthouse",
+    score,
+    created_at: at,
+    findings: { scores: parts, findings },
+  });
+  const quality = qualityOf([
+    report(72, days(-7), { performance: 72, accessibility: 95 }),
+    report(
+      92,
+      days(-1),
+      { performance: 92, accessibility: 88, "best-practices": 100, seo: 90 },
+      [{ id: "a" }, { id: "b" }],
+    ),
+  ]);
+  assert.equal(quality.latest, 92);
+  assert.equal(quality.previous, 72);
+  assert.equal(quality.delta, 20);
+  assert.equal(quality.label, "Bagus");
+  assert.equal(quality.tone, "ok");
+  assert.equal(trendText(quality), "naik 20 poin dari audit sebelumnya");
+  assert.deepEqual(
+    quality.parts.map((part) => `${part.key} ${part.score}`),
+    ["Performa 92", "Aksesibilitas 88", "Praktik 100", "SEO 90"],
+  );
+  assert.equal(quality.findings, 2);
+});
+
+test("no audit is said plainly, and a falling score is not dressed up", () => {
+  assert.equal(qualityOf([]).latest, null);
+  assert.equal(qualityOf(undefined).label, "Belum pernah diaudit");
+  assert.equal(qualityOf([]).tone, "none");
+  assert.equal(trendText(qualityOf([])), "");
+  // A report without a numeric score (a crashed run) is not a score of zero.
+  assert.equal(qualityOf([{ id: "x", score: null }]).latest, null);
+  const falling = qualityOf([
+    { score: 40, created_at: days(-2) },
+    { score: 55, created_at: days(-9) },
+  ]);
+  assert.equal(falling.delta, -15);
+  assert.equal(falling.tone, "warn");
+  assert.equal(falling.label, "Bermasalah");
+  assert.match(trendText(falling), /^turun 15 poin/);
+  const flat = qualityOf([
+    { score: 80, created_at: days(-1) },
+    { score: 80, created_at: days(-3) },
+  ]);
+  assert.equal(trendText(flat), "sama dengan audit sebelumnya");
+  // One audit is a score, not a trend: nothing is invented from a single run.
+  const single = qualityOf([{ score: 80, created_at: days(-1) }]);
+  assert.equal(single.delta, null);
+  assert.equal(trendText(single), "");
+  assert.equal(scoreTone(70), "wait");
+  assert.equal(scoreLabel(69), "Bermasalah");
 });
 
 test("the continue line is the newest real message, trimmed and bounded", () => {

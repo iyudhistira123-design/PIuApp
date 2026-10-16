@@ -519,7 +519,7 @@ export default function ServicePanel({
             async () => {
               await request("audit", {});
             },
-            editor && webRuntime && status?.capabilities?.audit,
+            editor && webRuntime && status?.capabilities?.sandbox,
           )}
           {data?.reports?.map((r: any) => (
             <div key={r.id}>

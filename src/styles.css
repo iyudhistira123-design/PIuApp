@@ -2505,6 +2505,80 @@ section h2 {
   color: #b4553f;
 }
 
+/* "Kualitas project": a score with its movement, and nothing when there is none. */
+.dashboard-quality {
+  padding: 16px 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.dashboard-quality header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-quality h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.dashboard-quality header .icon-button {
+  margin-left: auto;
+}
+.dashboard-quality > ul {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-quality li > .quality-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.dashboard-quality li > .quality-head > a {
+  font-size: 11px;
+  color: var(--ink);
+}
+.dashboard-quality .quality-score {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+}
+.dashboard-quality .quality-score small {
+  font-size: 8px;
+  color: var(--muted);
+}
+.dashboard-quality .quality-score.tone-ok {
+  color: #4d7a3f;
+}
+.dashboard-quality .quality-score.tone-wait {
+  color: #b9852f;
+}
+.dashboard-quality .quality-score.tone-warn {
+  color: #b4553f;
+}
+.dashboard-quality .quality-score.tone-none {
+  font-weight: 400;
+  color: var(--muted);
+}
+.dashboard-quality .quality-note {
+  margin-top: 4px;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.dashboard-quality .quality-button {
+  margin-top: 8px;
+  font-size: 10px;
+}
+
 /* The card's second half: what the project holds and where you stopped. */
 .project-card-footer > a > span.project-sync {
   display: inline-flex;

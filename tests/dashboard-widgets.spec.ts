@@ -96,6 +96,71 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
+  // Two audits, so the panel has a score and a movement to report.
+  let audits: Record<string, unknown>[] = [
+    {
+      id: "a-1",
+      type: "lighthouse",
+      score: 72,
+      created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+      findings: {
+        scores: { performance: 72, accessibility: 95 },
+        findings: [],
+      },
+    },
+    {
+      id: "a-2",
+      type: "lighthouse",
+      score: 92,
+      created_at: new Date(Date.now() - 86400000).toISOString(),
+      findings: {
+        scores: {
+          performance: 92,
+          accessibility: 88,
+          "best-practices": 100,
+          seo: 90,
+        },
+        findings: [{ id: "f-1" }],
+      },
+    },
+  ];
+  await page.route("**/api/projects/*/audits", (route) =>
+    route.fulfill({ json: { reports: audits } }),
+  );
+  // This deployment has a sandbox, which is what makes an audit runnable.
+  await page.unroute("**/api/status");
+  await page.route("**/api/status", (route) =>
+    route.fulfill({
+      json: {
+        mode: "real",
+        ai: "configured",
+        storage: "supabase-configured",
+        capabilities: {
+          auth: true,
+          cloud: true,
+          ai: true,
+          sandbox: true,
+          publish: false,
+          payments: false,
+        },
+        verification: "configuration-only",
+      },
+    }),
+  );
+  await page.route("**/api/projects/*/audit", (route) => {
+    audits = [
+      {
+        id: "a-3",
+        type: "lighthouse",
+        score: 95,
+        created_at: new Date().toISOString(),
+        findings: { scores: { performance: 95 }, findings: [] },
+      },
+      ...audits,
+    ];
+    return route.fulfill({ json: { report: audits[0] } });
+  });
+
   // A web app has no Studio bridge: the panel must skip it, not invent one.
   await page.route("**/api/projects/*/studio", (route) =>
     route.fulfill({
@@ -149,7 +214,28 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(waiting).not.toContainText("Studio");
   await expect(waiting).toContainText("Diperiksa dari 1 project terbaru");
 
-  // 3. The project card: where you stopped, and what the project holds.
+  // 3. "Kualitas project": the score, where it came from, and its movement.
+  const quality = page.locator(".dashboard-quality");
+  await expect(quality).toContainText("Kualitas project");
+  await expect(quality).toContainText("92");
+  await expect(quality).toContainText("/100 · Bagus");
+  await expect(quality).toContainText("naik 20 poin dari audit sebelumnya");
+  await expect(quality).toContainText("Performa 92");
+  await expect(quality).toContainText("1 temuan");
+  // The audit button is offered because this server has a sandbox and the role
+  // may edit; running it refreshes the score without a page reload.
+  const auditButton = quality.getByRole("button", {
+    name: "Audit ulang (3 kredit)",
+  });
+  // The button only appears once the latest revision is on the server, because
+  // that is the copy the audit builds.
+  await expect(auditButton).toBeEnabled({ timeout: 20000 });
+  await auditButton.click();
+  await expect(quality).toContainText("selesai", { timeout: 10000 });
+  await expect(quality).toContainText("95");
+  await expect(quality).toContainText("naik 3 poin dari audit sebelumnya");
+
+  // 4. The project card: where you stopped, and what the project holds.
   const card = page.locator(".project-card").first();
   await expect(card).toContainText("Terakhir: Respons API pengujian diterima.");
   await expect(card).toContainText(/\d+ file · \d+ riwayat · \d+ (B|KB|MB)/);
