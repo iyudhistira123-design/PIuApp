@@ -4,7 +4,12 @@ import { Logo } from "../components/ui";
 import { api } from "../services/api";
 import { useStore } from "../lib/store";
 import { requestCloudSync } from "../lib/cloud/sync";
-import { count, lastsLabel, usageProfile } from "../lib/dashboard/plans";
+import {
+  count,
+  dailyLine,
+  lastsLabel,
+  usageProfile,
+} from "../lib/dashboard/plans";
 const ReplayPlayer = lazy(() => import("../components/services/ReplayPlayer"));
 import "../components/services/services.css";
 const money = (n: number) =>
@@ -138,6 +143,7 @@ export default function Services({
                       )
                     : "Paket gratis"}
                 </p>
+                <small>{dailyLine(data.plan.plan)}</small>
               </div>
             </div>
             <h2>Paket & top-up</h2>

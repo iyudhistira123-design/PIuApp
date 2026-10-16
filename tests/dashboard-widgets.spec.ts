@@ -210,6 +210,11 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit.locator(".credit-lasts")).toContainText(
     "kredit paket & top-up ada masa berlaku",
   );
+  // The daily allowance and the countdown to its reset, where the balance is
+  // read: the plan in this fixture is Free, so the line says 20 kredit/hari.
+  await expect(credit.locator(".credit-daily")).toContainText(
+    "20 kredit/hari · direset 00:00 UTC",
+  );
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 
   // 2. The readiness list: this deployment has no publish and no payments, and

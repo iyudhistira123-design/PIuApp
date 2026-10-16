@@ -1,4 +1,5 @@
 import { realAccountFixture, loginRealFixture } from "./helpers-real";
+import { signedIn } from "./helpers-account";
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 async function workspace(page: any) {
@@ -86,6 +87,24 @@ test("snapshot recording has isolated playback, scrubber and persistent local li
     dialog.getByLabel("Rekaman tersimpan").locator("option"),
   ).toHaveCount(2);
 });
+test("the account page states the plan's daily allowance and its reset clock", async ({
+  page,
+}) => {
+  await signedIn(page, {});
+  await page.goto("/account");
+  const planCard = page.locator(".service-card", { hasText: "Paket gratis" });
+  // The allowance and the countdown come from the same constant migration 010
+  // uses, so the card cannot promise a reset the database does not do.
+  await expect(planCard.locator("small")).toContainText(
+    "20 kredit/hari · direset 00:00 UTC (dalam",
+  );
+  await expect(planCard.locator("small")).toContainText("jam)");
+  // The balance card keeps the deadlines, not a promise that credits never end.
+  await expect(
+    page.locator(".service-card").first().locator("small"),
+  ).toContainText("kredit paket & top-up ada masa berlaku");
+});
+
 test("account requires real auth; marketplace gives honest unavailable state; login form a11y", async ({
   page,
 }) => {

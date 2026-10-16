@@ -30,10 +30,14 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 | 006    | [006_studio_bridge.sql](006_studio_bridge.sql)               | Bridge Roblox Studio yang hanya diakses server                  |
 | 007    | [007_runtime_coordination.sql](007_runtime_coordination.sql) | Rate limit dan admission sandbox bersama                        |
 | 008    | [008_admin_directory.sql](008_admin_directory.sql)           | Pencarian akun admin melalui RPC service-only                   |
+| 009    | [009_search_cache.sql](009_search_cache.sql)                 | Cache pencarian bersama di atas tabel service-only              |
+| 010    | [010_credit_lots.sql](010_credit_lots.sql)                   | Kredit bentuk lot: jatah harian, rollover paket, kedaluwarsa    |
 
-Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 lalu 008. Jika baru 001–005, jalankan 006, 007, lalu 008. File 001–006 tidak didesain untuk dijalankan berulang.
+Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007, 008, 009, lalu 010. Jika baru 001–005, jalankan 006 sampai 010. File 001–006 tidak didesain untuk dijalankan berulang.
 
-File gabungan tetap menjalankan isi kanonis di atas; hanya transaksi terluarnya digabung dan ditambahkan guard instalasi baru serta notifikasi reload schema. Ini bukan migration 009. Paket ini ditujukan untuk SQL Editor, bukan mengganti histori internal Supabase CLI.
+**Migration 010 mengubah cara kredit bekerja dan sebaiknya direncanakan, bukan dijalankan diam-diam:** setelah dipasang, saldo yang ada dipindahkan menjadi satu lot dengan masa berlaku 12 bulan (referensi `migrasi-010:<user_id>`), kredit baru masuk sebagai lot bertanggal (harian hangus di akhir hari UTC, paket 2 bulan, top-up 12 bulan), dan `piwu_ensure_credits` tidak lagi memberi jatah sekali — ia mengisi jatah harian 20 (Free/Pro) atau 40 (Team) kredit. Artinya janji lama "kredit tidak kedaluwarsa" berhenti berlaku tepat saat 010 dijalankan, dan saldo akun yang menganggur lebih dari 12 bulan akan hangus. Jalankan 010 pada jendela yang Anda pantau, lalu periksa hasilnya dengan `CHECK_INSTALLATION.sql` (marker `010` harus `MARKER_TERDETEKSI`).
+
+File gabungan tetap menjalankan isi kanonis di atas; hanya transaksi terluarnya digabung dan ditambahkan guard instalasi baru serta notifikasi reload schema. Paket ini ditujukan untuk SQL Editor, bukan mengganti histori internal Supabase CLI.
 
 ## C. Aktifkan superadmin pertama
 

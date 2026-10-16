@@ -5,7 +5,7 @@ import { api } from "../../services/api";
 import { useStore } from "../../lib/store";
 import { scopeFor } from "../../lib/cloud/types";
 import { creditSpend } from "../../lib/dashboard/attention";
-import { lastsLabel, usageProfile } from "../../lib/dashboard/plans";
+import { dailyLine, lastsLabel, usageProfile } from "../../lib/dashboard/plans";
 import {
   LEDGER_DAYS,
   isLowBalance,
@@ -115,9 +115,9 @@ export default function CreditSummary() {
       </small>
       <small className="credit-lasts">
         {lastsLabel(state.balance, usageProfile("normal"))} pada pemakaian
-        normal · jatah harian direset, kredit paket &amp; top-up ada masa
-        berlaku
+        normal · kredit paket &amp; top-up ada masa berlaku
       </small>
+      <small className="credit-daily">{dailyLine(state.plan)}</small>
       {!!state.split.length && (
         <ul className="credit-split">
           {state.split.map((row) => (

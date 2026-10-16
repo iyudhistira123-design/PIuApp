@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PLAN_DAYS,
+  dailyLine,
   expiryLine,
+  hoursToReset,
+  nextResetAt,
   offerExpiry,
   paymentsNotice,
   periodLeft,
@@ -178,6 +181,42 @@ test("the page states what is true about plans instead of implying gating", () =
     assert.ok(fact.title.length > 3);
     assert.ok(fact.detail.length > 20);
   }
+});
+
+test("the daily allowance line counts down to the real reset, in UTC", () => {
+  const noon = Date.parse("2026-10-16T12:00:00.000Z");
+  assert.equal(
+    new Date(nextResetAt(noon)).toISOString(),
+    "2026-10-17T00:00:00.000Z",
+  );
+  assert.equal(hoursToReset(noon), 12);
+  // A minute before the reset the next one is still the coming midnight, not
+  // two days away, and never a negative count.
+  assert.equal(
+    new Date(nextResetAt(Date.parse("2026-10-16T23:59:00.000Z"))).toISOString(),
+    "2026-10-17T00:00:00.000Z",
+  );
+  assert.equal(hoursToReset(Date.parse("2026-10-16T23:59:00.000Z")), 1);
+  // Exactly at midnight the allowance has just been refilled: the countdown
+  // names the next midnight, and a Jakarta evening (UTC+7) is the same clock.
+  assert.equal(
+    new Date(nextResetAt(Date.parse("2026-10-16T00:00:00.000Z"))).toISOString(),
+    "2026-10-17T00:00:00.000Z",
+  );
+  assert.equal(
+    new Date(nextResetAt(Date.parse("2026-10-16T18:00:00.000Z"))).toISOString(),
+    "2026-10-17T00:00:00.000Z",
+  );
+  // The line names the plan's own allowance from the ladder, and stays empty
+  // for a name the ladder does not know instead of inventing a number.
+  assert.match(
+    dailyLine("Free", noon),
+    /^20 kredit\/hari · direset 00:00 UTC \(dalam 12 jam\)$/,
+  );
+  assert.match(dailyLine("Pro", noon), /^20 kredit\/hari/);
+  assert.match(dailyLine("Team", noon), /^40 kredit\/hari/);
+  assert.equal(dailyLine("Enterprise", noon), "");
+  assert.equal(dailyLine("", noon), "");
 });
 
 test("prices are written as rupiah without hidden decimals", () => {

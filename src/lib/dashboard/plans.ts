@@ -1,12 +1,14 @@
 import {
   CREDIT_COSTS,
   CREDIT_EXPIRY_MONTHS,
+  DAILY_RESET_UTC_HOUR,
   FREE_PLAN,
   PLAN_LADDER,
   PLAN_PERIOD_DAYS,
   TOPUP_LADDER,
   USAGE_PROFILES,
   costLine,
+  dailyAllowance,
   durationDays,
   expiryLabel,
   lastsLabel,
@@ -269,6 +271,38 @@ export function expiryLine() {
   const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro");
   const team = PLAN_LADDER[PLAN_LADDER.length - 1];
   return `Jatah harian ${count(free?.daily || 0)} kredit (Pro ${count(pro?.daily || 0)}, Team ${count(team.daily)}) direset setiap hari pukul 00:00 UTC dan tidak menumpuk; kredit paket ${expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up berlaku ${CREDIT_EXPIRY_MONTHS.topup} bulan sejak pembelian.`;
+}
+
+/**
+ * When the daily allowance next refills (00:00 UTC by default), as a timestamp.
+ * The hour comes from the same constant migration 010 uses, so a card cannot
+ * count down to a reset the database does not do.
+ */
+export function nextResetAt(now = Date.now()) {
+  const date = new Date(now);
+  const today = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    DAILY_RESET_UTC_HOUR,
+  );
+  return today > now ? today : today + 86400000;
+}
+
+/** Whole hours to that reset, never negative. */
+export function hoursToReset(now = Date.now()) {
+  return Math.max(0, Math.ceil((nextResetAt(now) - now) / 3600000));
+}
+
+/**
+ * "20 kredit/hari · direset 00:00 UTC (dalam 9 jam)" for one plan name. Empty
+ * for a name the ladder does not know, so a card never prints a number the
+ * account would not receive.
+ */
+export function dailyLine(planName: string, now = Date.now()) {
+  const daily = dailyAllowance(planName);
+  if (!daily) return "";
+  return `${count(daily)} kredit/hari · direset 00:00 UTC (dalam ${hoursToReset(now)} jam)`;
 }
 
 /** The deadline sentence for one card, from the ladder row it came from. */
