@@ -42,6 +42,7 @@ import { listProjectPhotos } from "../services/project-photos";
 import CreditSummary from "../components/dashboard/CreditSummary";
 import WaitingForYou from "../components/dashboard/WaitingForYou";
 import QualityPanel from "../components/dashboard/QualityPanel";
+import ActivityFeed from "../components/dashboard/ActivityFeed";
 import {
   continueLine,
   formatBytes,
@@ -663,6 +664,9 @@ export default function Dashboard() {
               </EmptyState>
             ))}
         </div>
+        {(tab === "projects" || tab === "shared") && (
+          <ActivityFeed projects={store.projects} />
+        )}
         <footer className="dashboard-footer">
           <span>PiwuApp · Sedikit demi sedikit, jadi sesuatu.</span>
           <span>Versi pengembangan</span>

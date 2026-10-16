@@ -26,6 +26,7 @@ import {
   scoreTone,
   trendText,
 } from "../src/lib/dashboard/quality";
+import { activityWhen, buildActivity } from "../src/lib/dashboard/activity";
 import { SCENE_PATH } from "../src/lib/roblox/scene";
 import type { Project } from "../src/lib/types";
 
@@ -35,6 +36,13 @@ import type { Project } from "../src/lib/types";
 // what these functions returned.
 
 const NOW = Date.parse("2026-10-16T10:00:00.000Z");
+// Local midnight, so the day arithmetic in the tests does not depend on the
+// machine's timezone.
+const DAY_START = (() => {
+  const date = new Date(NOW);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+})();
 const days = (count: number) => new Date(NOW + count * 86400000).toISOString();
 
 const project = (over: Partial<Project> = {}) =>
@@ -158,6 +166,68 @@ test("sync wording tells the four states apart, and only real trouble counts as 
     0,
     "menunggu sinkronisasi bukan keputusan pengguna",
   );
+});
+
+test("the activity feed is newest first, bounded, and honest about its source", () => {
+  const alpha = project({
+    id: "p-a",
+    name: "Alpha",
+    createdAt: NOW - 10 * 86400000,
+    versions: [
+      { id: "v1", label: "Project dibuat", files: {}, at: NOW - 10 * 86400000 },
+      { id: "v2", label: "Ubah hero", files: {}, at: NOW - 3600000 },
+    ],
+  });
+  const beta = project({
+    id: "p-b",
+    name: "Beta",
+    createdAt: NOW - 2 * 86400000,
+    versions: [
+      { id: "v9", label: "Snapshot otomatis", files: {}, at: NOW - 7200000 },
+    ],
+  });
+  const feed = buildActivity([alpha, beta], 3);
+  assert.deepEqual(
+    feed.map((item) => [item.projectName, item.label]),
+    [
+      ["Alpha", "Ubah hero"],
+      ["Beta", "Snapshot otomatis"],
+      ["Beta", "Project dibuat"],
+    ],
+  );
+  // A version with no timestamp is not placed by guesswork.
+  const undated = buildActivity([
+    project({ versions: [{ id: "x", label: "?", files: {}, at: 0 } as any] }),
+  ]);
+  assert.deepEqual(
+    undated.map((item) => item.kind),
+    ["created"],
+    "versi tanpa waktu dilewati",
+  );
+  assert.deepEqual(buildActivity(undefined), []);
+  assert.deepEqual(buildActivity([]), []);
+  // Labels and ids survive duplicates inside one project.
+  const many = buildActivity([
+    project({
+      versions: [
+        { id: "", label: "a", files: {}, at: NOW - 1 },
+        { id: "", label: "b", files: {}, at: NOW - 2 },
+      ] as any,
+    }),
+  ]);
+  assert.equal(new Set(many.map((item) => item.id)).size, many.length);
+});
+
+test("activity times are written in days, then in dates", () => {
+  const at = (offsetDays: number, hour = 14, minute = 5) => {
+    const date = new Date(DAY_START + offsetDays * 86400000);
+    date.setHours(hour, minute, 0, 0);
+    return date.getTime();
+  };
+  const now = at(0, 20, 0);
+  assert.equal(activityWhen(at(0), now), "Hari ini · 14.05");
+  assert.equal(activityWhen(at(-1), now), "Kemarin · 14.05");
+  assert.match(activityWhen(at(-3), now), /^\d{1,2} \w{3} · 14.05$/);
 });
 
 test("credit spend counts only what was actually spent inside the window", () => {

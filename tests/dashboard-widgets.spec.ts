@@ -235,7 +235,15 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(quality).toContainText("95");
   await expect(quality).toContainText("naik 3 poin dari audit sebelumnya");
 
-  // 4. The project card: where you stopped, and what the project holds.
+  // 4. The activity log: what just happened, from the version history.
+  const activity = page.locator(".dashboard-activity");
+  await expect(activity).toContainText("Aktivitas terbaru");
+  await expect(activity).toContainText("Project dibuat");
+  await expect(activity).toContainText("dashboard toko roti");
+  await expect(activity).toContainText("Hari ini");
+  await expect(activity).toContainText("pesan chat belum punya stempel waktu");
+
+  // 5. The project card: where you stopped, and what the project holds.
   const card = page.locator(".project-card").first();
   await expect(card).toContainText("Terakhir: Respons API pengujian diterima.");
   await expect(card).toContainText(/\d+ file · \d+ riwayat · \d+ (B|KB|MB)/);

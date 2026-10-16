@@ -2579,6 +2579,67 @@ section h2 {
   font-size: 10px;
 }
 
+/* "Aktivitas terbaru": a short log, one line per thing that happened. */
+.dashboard-activity {
+  padding: 16px 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.dashboard-activity header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.dashboard-activity h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.dashboard-activity .activity-note {
+  font-size: 9px;
+  color: var(--muted);
+}
+.dashboard-activity ol {
+  display: grid;
+  gap: 1px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-activity li > a {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  align-items: baseline;
+}
+.dashboard-activity li > a:hover {
+  background: #f6f7f2;
+}
+.dashboard-activity .activity-when {
+  font-size: 9px;
+  color: var(--muted);
+}
+.dashboard-activity li b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.dashboard-activity .activity-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: #8b9a76;
+}
+
 /* The card's second half: what the project holds and where you stopped. */
 .project-card-footer > a > span.project-sync {
   display: inline-flex;
