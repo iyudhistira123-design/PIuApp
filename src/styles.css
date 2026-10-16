@@ -2820,6 +2820,13 @@ section h2 {
 .sidebar-user > div {
   flex: 1;
 }
+.sidebar-user-link {
+  display: block;
+  color: inherit;
+}
+.sidebar-user-link:hover b {
+  color: #5c7040;
+}
 .sidebar-user b {
   font-size: 10px;
   font-weight: 500;

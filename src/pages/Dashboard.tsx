@@ -294,13 +294,18 @@ export default function Dashboard() {
           <Link className="sidebar-settings" to="/marketplace">
             Marketplace komunitas
           </Link>
+          <Link className="sidebar-settings" to="/profile">
+            Profil saya
+          </Link>
           <div className="sidebar-user">
             <span className="avatar">
               {store.user?.name?.[0]?.toUpperCase() || "P"}
             </span>
             <div>
-              <b>{store.user?.name || "Pengunjung"}</b>
-              <small>{store.user ? "Workspace pribadi" : "Belum masuk"}</small>
+              <Link className="sidebar-user-link" to="/profile">
+                <b>{store.user?.name || "Pengunjung"}</b>
+                <small>{store.user ? "Lihat profil" : "Belum masuk"}</small>
+              </Link>
             </div>
             <button
               className="icon-button"
