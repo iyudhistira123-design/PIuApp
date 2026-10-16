@@ -202,6 +202,14 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit.locator(".credit-split")).toContainText("30");
   await expect(credit).not.toContainText("Pembayaran");
   await expect(credit.locator(".credit-low")).toHaveCount(0);
+  // How long the balance lasts, at the stated usage, right where the session
+  // starts — and that credits do not expire.
+  await expect(credit.locator(".credit-lasts")).toContainText(
+    "pada pemakaian normal",
+  );
+  await expect(credit.locator(".credit-lasts")).toContainText(
+    "kredit tidak kedaluwarsa",
+  );
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 
   // 2. The readiness list: this deployment has no publish and no payments, and

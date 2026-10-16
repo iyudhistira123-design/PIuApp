@@ -2387,6 +2387,9 @@ section h2 {
   line-height: 1.5;
   color: #8b9a76;
 }
+.dashboard-credit .credit-lasts {
+  color: #5f6b53;
+}
 .dashboard-credit a {
   display: inline-flex;
   align-items: center;
