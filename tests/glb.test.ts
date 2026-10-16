@@ -18,6 +18,8 @@ import {
 } from "../src/lib/roblox/glb.ts";
 import { sceneSchema } from "../src/lib/roblox/scene.ts";
 import { applySceneOps } from "../server/lib/ai-ops.mjs";
+import { rotateVector } from "../server/lib/lowpoly.mjs";
+import * as THREE from "three";
 
 // A texture needs two halves to line up: the atlas pixels and the UV coordinates
 // that point into them. These tests pin the arithmetic (the browser-only canvas
@@ -348,6 +350,44 @@ test("the object's size and rotation are baked in, so Studio needs no scaling", 
   assert.ok(Math.abs(corner[0] - 0) < 1e-9);
   assert.ok(Math.abs(corner[1] - 1) < 1e-9);
   assert.ok(Math.abs(corner[2] - 0) < 1e-9);
+});
+
+test("rotation means the same thing here, in the server and in the renderer", () => {
+  // One rotation touching all three axes: with a single axis a wrong product
+  // order still looks right, which is exactly how the export drifted from the
+  // preview before this test existed. The server generator and the Three.js
+  // renderer both use RX·RY·RZ, so the exported mesh must too.
+  const rotation = [20, 30, 40];
+  const point = [1, 2, 3];
+  const baked = faceVertexGeometry(
+    { vertices: [point, [0, 0, 0], [0, 1, 0]], faces: [[0, 1, 2]] },
+    { size: [1, 1, 1], rotation },
+  ).positions.slice(0, 3);
+  const server = rotateVector(point, rotation);
+  const three = new THREE.Vector3(...(point as [number, number, number]))
+    .applyEuler(
+      new THREE.Euler(
+        ...(rotation.map((d) => (d * Math.PI) / 180) as [
+          number,
+          number,
+          number,
+        ]),
+        "XYZ",
+      ),
+    )
+    .toArray();
+  for (let at = 0; at < 3; at++) {
+    assert.ok(
+      Math.abs(baked[at] - server[at]) < 1e-3,
+      `server: ${baked[at]} vs ${server[at]}`,
+    );
+    assert.ok(
+      Math.abs(baked[at] - three[at]) < 1e-6,
+      `renderer: ${baked[at]} vs ${three[at]}`,
+    );
+  }
+  // A wrong order is not a rounding difference: it moves the corner far away.
+  assert.ok(Math.abs(baked[0] - 1.4567) > 0.1);
 });
 
 test("broken input is refused instead of written as a broken file", () => {

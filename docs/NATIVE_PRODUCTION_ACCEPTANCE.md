@@ -19,7 +19,7 @@ Prasyarat: project hasil ekspor, Node kompatibel SDK 57, perangkat dengan Expo G
 
 ## Roblox Studio
 
-Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTPS yang dapat dijangkau Studio, cloud/migration 001–009, akun terverifikasi, plugin `public/plugins/PiwuStudio.luau`. Jangan memakai place produksi pertama kali.
+Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTPS yang dapat dijangkau Studio, cloud/migration 001–009, akun terverifikasi, plugin `public/plugins/PiwuStudio.rbxmx` (atau `.luau` sebagai cadangan). Jangan memakai place produksi pertama kali.
 
 - [ ] Catat versi Studio/plugin, commit, place uji privat dan peran akun (tanpa token).
 - [ ] Pairing memakai token terbatas/berumur pendek; verifikasi penolakan token kedaluwarsa/dicabut.

@@ -187,7 +187,7 @@ Aktivasi Studio memerlukan migration **006_studio_bridge.sql**, koneksi backend/
 - **65 tes unit/integrasi lulus**, **48 tes browser lulus** (termasuk target selector/login, Expo scaffold, native preview boundary, scene/mesh/OBJ/Luau, import snapshot, review dan antrean bridge), dan **production build berhasil**. Sintaks plugin berhasil dikompilasi Luau WASM; ini bukan uji API Roblox Studio.
 - Build pertama berjalan bersamaan dengan browser suite dan dihentikan karena tekanan memori sandbox; build diulang secara serial dan berhasil (39,53 detik). Peringatan ukuran chunk Monaco lama masih ada. Roblox renderer/bridge dipisahkan dalam chunk lazy, tidak dimuat di landing.
 - Bukti: `.artifacts/multitarget-unit-final.log`, `.artifacts/multitarget-browser-final.log`, `.artifacts/multitarget-build-final.log`, `.artifacts/project-selector-{desktop,mobile}.png`, `.artifacts/roblox-builder-desktop.png`, `.artifacts/studio-bridge-mobile.png`.
-- File plugin siap diunduh dari `/plugins/PiwuStudio.luau`. Migration 006 **belum diterapkan ke database live**. Sinkronisasi ke Studio asli, native device build, dan inference provider live **belum diklaim berhasil**.
+- File plugin siap diunduh dari `/plugins/PiwuStudio.rbxmx` (sekali pasang ke folder Plugins; `.luau` tetap tersedia untuk jalur tempel manual). Migration 006 **belum diterapkan ke database live**. Sinkronisasi ke Studio asli, native device build, dan inference provider live **belum diklaim berhasil**.
 
 ## Penyesuaian preview hasil AI & Canvas Map Roblox
 

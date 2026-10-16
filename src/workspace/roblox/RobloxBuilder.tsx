@@ -39,9 +39,22 @@ import {
   readProjectPhoto,
 } from "../../services/project-photos";
 import { scopeFor } from "../../lib/cloud/types";
+import { projectApi } from "../../services/api";
 import StudioBridge from "./StudioBridge";
 import "./roblox.css";
 const SceneViewport = lazy(() => import("./SceneViewport"));
+/**
+ * base64 for a binary .glb, in chunks. A single String.fromCharCode(...bytes)
+ * on a multi-megabyte mesh would overflow the call stack, and this file is
+ * uploaded as JSON.
+ */
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  return btoa(binary);
+}
+
 /**
  * Export with a texture. Roblox's importer reads textures from glTF, not from
  * OBJ, so a .glb is what makes the photo colours arrive as a real texture — and
@@ -71,20 +84,23 @@ function TextureExport({
     void load();
   }, [projectId, user]);
   const groups = object.mesh?.groups || [];
+  const build = async (withTexture: boolean) => {
+    let texturePng: Uint8Array | undefined;
+    let atlas: Awaited<ReturnType<typeof bakeAtlas>>["plan"] | undefined;
+    if (withTexture) {
+      const photo = await readProjectPhoto(scopeFor(user), projectId, chosen);
+      if (!photo) throw new Error("Foto itu sudah tidak ada di browser ini.");
+      const baked = await bakeAtlas(photo, object.mesh!);
+      texturePng = baked.png;
+      atlas = baked.plan;
+    }
+    return { file: objectGLB(object, { texturePng }), atlas };
+  };
   const run = async (withTexture: boolean) => {
     setError("");
     setBusy(withTexture ? "Menyiapkan atlas…" : "Menyiapkan GLB…");
     try {
-      let texturePng: Uint8Array | undefined;
-      let atlas: Awaited<ReturnType<typeof bakeAtlas>>["plan"] | undefined;
-      if (withTexture) {
-        const photo = await readProjectPhoto(scopeFor(user), projectId, chosen);
-        if (!photo) throw new Error("Foto itu sudah tidak ada di browser ini.");
-        const baked = await bakeAtlas(photo, object.mesh!);
-        texturePng = baked.png;
-        atlas = baked.plan;
-      }
-      const file = objectGLB(object, { texturePng });
+      const { file, atlas } = await build(withTexture);
       downloadBytes(
         `${(object.name || "model").replace(/[^a-zA-Z0-9_-]/g, "-")}${withTexture ? "-bertekstur" : ""}.glb`,
         file,
@@ -97,6 +113,31 @@ function TextureExport({
       );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Ekspor gagal.");
+    } finally {
+      setBusy("");
+    }
+  };
+  // The optional route: only a server that holds an Open Cloud key with the
+  // asset:write scope can upload for you. Without one the answer is a refusal,
+  // and the manual download above stays the way in.
+  const upload = async (withTexture: boolean) => {
+    setError("");
+    setBusy(withTexture ? "Menyiapkan atlas…" : "Menyiapkan GLB…");
+    try {
+      const { file } = await build(withTexture);
+      setBusy("Mengunggah ke Roblox…");
+      const uploaded = await projectApi(projectId, "studio/assets", {
+        name: object.name || "Mesh",
+        objectId: object.id,
+        glb: toBase64(file),
+      });
+      notify(
+        `Terunggah ke Roblox sebagai aset ${uploaded.assetId} (${uploaded.bytes} byte). ${uploaded.note || ""} Id-nya tersimpan di studio.assets.json untuk objek ini, jadi impor scene di plugin akan memakai MeshPart aset tersebut.`,
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Unggahan ke Roblox gagal.",
+      );
     } finally {
       setBusy("");
     }
@@ -143,6 +184,19 @@ function TextureExport({
       <button type="button" disabled={!!busy} onClick={() => void run(false)}>
         <Download size={14} /> GLB warna saja
       </button>
+      <button
+        type="button"
+        disabled={!photos.length || !!busy}
+        onClick={() => void upload(true)}
+        title="Butuh kunci Open Cloud (scope asset:write) di server PiwuApp"
+      >
+        <Upload size={14} /> Unggah ke Roblox (Open Cloud)
+      </button>
+      <small className="rb-glb-note">
+        Unggah otomatis hanya jalan bila server PiwuApp punya kunci Open Cloud
+        dengan scope <code>asset:write</code>. Kalau tidak, tombol ini
+        menjelaskan kenapa dan jalur 3D Importer tetap tersedia.
+      </small>
       {groups.length ? (
         <small className="rb-glb-note">
           {groups.length} grup sisi, {groups.filter((g) => g.region).length} di

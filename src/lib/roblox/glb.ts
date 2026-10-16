@@ -49,23 +49,27 @@ export function faceVertexGeometry(
 ) {
   const radians = (degrees: number) => (degrees * Math.PI) / 180;
   const [rx, ry, rz] = rotation.map(radians);
+  // Rotation is RX·RY·RZ, the same product three.js builds for an XYZ Euler
+  // angle — so the exported mesh faces the same way as the preview. The vector
+  // meets RZ first (rightmost factor), then RY, then RX. `rotateVector` in
+  // server/lib/lowpoly.mjs is the same math for the server-built geometry and
+  // tests/glb.test.ts pins the two together.
   const rotate = (point: number[]) => {
     const [x, y, z] = point;
-    // Same order as the renderer and the server: RZ · RY · RX.
-    const afterX = [
-      x,
-      y * Math.cos(rx) - z * Math.sin(rx),
-      y * Math.sin(rx) + z * Math.cos(rx),
+    const afterZ = [
+      x * Math.cos(rz) - y * Math.sin(rz),
+      x * Math.sin(rz) + y * Math.cos(rz),
+      z,
     ];
     const afterY = [
-      afterX[0] * Math.cos(ry) + afterX[2] * Math.sin(ry),
-      afterX[1],
-      -afterX[0] * Math.sin(ry) + afterX[2] * Math.cos(ry),
+      afterZ[0] * Math.cos(ry) + afterZ[2] * Math.sin(ry),
+      afterZ[1],
+      -afterZ[0] * Math.sin(ry) + afterZ[2] * Math.cos(ry),
     ];
     return [
-      afterY[0] * Math.cos(rz) - afterY[1] * Math.sin(rz),
-      afterY[0] * Math.sin(rz) + afterY[1] * Math.cos(rz),
-      afterY[2],
+      afterY[0],
+      afterY[1] * Math.cos(rx) - afterY[2] * Math.sin(rx),
+      afterY[1] * Math.sin(rx) + afterY[2] * Math.cos(rx),
     ];
   };
   const scale = (point: number[]) => point.map((value, at) => value * size[at]);

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"node --watch server/dev.mjs\" \"vite --host 0.0.0.0\"",
+    "prebuild": "npm run plugin:rbxmx",
     "build": "tsc -b && vite build",
+    "plugin:rbxmx": "node scripts/build-plugin-rbxmx.mjs",
+    "plugin:check": "node scripts/build-plugin-rbxmx.mjs --check",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --import ./tests/storage-setup.mjs --test --test-concurrency=2 tests/*.test.ts",
     "test:e2e": "playwright test",

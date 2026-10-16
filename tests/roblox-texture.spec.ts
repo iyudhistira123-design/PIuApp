@@ -340,6 +340,13 @@ test("a photo becomes a textured .glb whose atlas really holds the photo", async
   const seventhFace = uvs[6 * 2];
   expect(firstFace).toBeLessThan(0.5);
   expect(seventhFace).toBeGreaterThanOrEqual(0.5);
+  // The optional Open Cloud upload: this fixture answers 503 for project routes,
+  // and the panel has to surface that refusal instead of pretending the mesh
+  // reached Roblox.
+  await exportBox.getByRole("button", { name: /Unggah ke Roblox/ }).click();
+  await expect(exportBox.getByRole("alert")).toContainText(
+    "belum dikonfigurasi",
+  );
   expect(errors).toEqual([]);
 });
 

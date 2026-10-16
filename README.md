@@ -120,7 +120,7 @@ State/sinkronisasi dan kebijakan SQL diuji dengan PostgreSQL PGlite; UI impor/ko
 
 Composer landing dan formulir project menyediakan **Web App / Aplikasi Mobile (Expo) / Roblox Game**. Target project mengikuti login dan penyimpanan cloud, bukan sekadar label. Lihat [jenis project](docs/PROJECT_KINDS.md).
 
-Roblox menyediakan editor Luau, scene builder Three.js, vertex/face mesh dasar, impor/ekspor OBJ dan plugin lokal Studio berbasis snapshot/review. [Panduan dan batas Roblox](docs/ROBLOX.md). Aktifkan bridge dengan migration `006_studio_bridge.sql` setelah 001–005; plugin tersedia di `public/plugins/PiwuStudio.luau`. Belum ada klaim pengujian terhadap Studio asli atau publikasi game.
+Roblox menyediakan editor Luau, scene builder Three.js, vertex/face mesh dasar, impor/ekspor OBJ dan plugin lokal Studio berbasis snapshot/review. [Panduan dan batas Roblox](docs/ROBLOX.md). Aktifkan bridge dengan migration `006_studio_bridge.sql` setelah 001–005; plugin dipasang sekali dari `public/plugins/PiwuStudio.rbxmx` (isi identik dengan `public/plugins/PiwuStudio.luau`), dan unggah aset otomatis hanya aktif bila server diberi kunci Open Cloud `asset:write`. Belum ada klaim pengujian terhadap Studio asli atau publikasi game.
 
 ## Tema IDE
 

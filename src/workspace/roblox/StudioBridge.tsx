@@ -3,6 +3,7 @@ import { projectApi } from "../../services/api";
 import type { Project } from "../../lib/types";
 import { useStore } from "../../lib/store";
 import {
+  STUDIO_PLUGIN,
   snapshotSchema,
   buildBundle,
   validateBundle,
@@ -217,14 +218,60 @@ export default function StudioBridge({
         diam-diam. Setiap bundle wajib ditinjau di web dan diterapkan secara
         eksplisit di Studio.
       </p>
-      <a href="/plugins/PiwuStudio.luau" download="PiwuStudio.luau">
-        Unduh plugin PiwuApp (.luau)
+      <a
+        className="rb-primary"
+        href="/plugins/PiwuStudio.rbxmx"
+        download="PiwuStudio.rbxmx"
+      >
+        Unduh plugin PiwuApp .rbxmx · v{STUDIO_PLUGIN.version}
       </a>
+      <ol className="rb-steps">
+        <li>
+          Simpan <code>PiwuStudio.rbxmx</code> ke folder Plugins Studio —
+          Windows <code>%LOCALAPPDATA%\Roblox\Plugins</code>, macOS{" "}
+          <code>~/Documents/Roblox/Plugins</code>. Buat foldernya bila belum
+          ada.
+        </li>
+        <li>
+          Buka place ini di Studio, lalu <strong>Plugins</strong> →{" "}
+          <strong>PiwuApp Bridge</strong>. Hentikan Play/Run: plugin hanya
+          bekerja di Edit Mode.
+        </li>
+        <li>
+          Klik <strong>Buat token pasangan</strong> di bawah, lalu tempel token
+          dan alamat ini ke panel plugin dan klik{" "}
+          <strong>Simpan koneksi di memori</strong>.
+        </li>
+        <li>
+          Kalau Studio bertanya “Allow PiwuStudio to access …?” pilih{" "}
+          <strong>Allow</strong>. Pernah ditolak? View →{" "}
+          <strong>Plugin Management</strong> → izinkan alamat ini, lalu klik{" "}
+          <strong>Tes koneksi</strong> lagi.
+        </li>
+        <li>
+          <strong>Kirim snapshot</strong> di Studio,{" "}
+          <strong>Impor snapshot</strong> di sini, review bundle, lalu Terapkan
+          di plugin (dua klik konfirmasi).
+        </li>
+      </ol>
       <p>
-        Pasang sebagai plugin lokal di Studio. Gunakan Edit Mode, izinkan HTTP
-        bila diminta, lalu hubungkan ke alamat HTTPS aplikasi ini. Maksimal 750
-        instance / 140 script / 4 MB per snapshot; jika terlampaui, ekspor
-        ditolak, bukan dipotong.
+        Plugin tidak bisa memasang dirinya sendiri dan tidak bisa mengimpor
+        berkas mesh — dua hal itu tetap dilakukan di Studio oleh Anda. Sumber
+        plugin bisa diperiksa atau ditempel manual:{" "}
+        <a href="/plugins/PiwuStudio.rbxmx" download="PiwuStudio.rbxmx">
+          .rbxmx
+        </a>{" "}
+        (sekali pasang) atau{" "}
+        <a href="/plugins/PiwuStudio.luau" download="PiwuStudio.luau">
+          .luau
+        </a>{" "}
+        (Script → Save as Local Plugin, seperti panduan lama di docs/ROBLOX.md).
+      </p>
+      <p>
+        Maksimal 750 instance / 140 script / 4 MB per snapshot; jika terlampaui,
+        ekspor ditolak, bukan dipotong. Panel plugin memeriksa antrean tiap 20
+        detik dan hanya <em>memberi tahu</em> bila ada perubahan menunggu —
+        tidak menerapkan apa pun tanpa klik Anda.
       </p>
       <pre>{location.origin}</pre>
       <button

@@ -6,24 +6,46 @@
 - Roblox memakai Luau: `ServerScriptService`, `ReplicatedStorage/Shared`, `StarterPlayer/StarterPlayerScripts`, `default.project.json` (pemetaan Rojo), dan `PIWU.md`. Editor memakai syntax highlight Lua; belum LSP/type checker Luau/Roblox autocomplete.
 - Builder 3D Three.js: Part balok/bola/silinder, grup Model, posisi/rotasi/ukuran/warna/Anchored, parent hierarchy, pilih objek dengan mouse atau daftar, orbit/zoom. Ukuran dalam stud, rotasi derajat, posisi lokal terhadap Model parent. Penghapusan descendants dikonfirmasi.
 - Mesh dasar: vertex/face segitiga dapat ditulis dari nol melalui editor koordinat, impor OBJ, ekspor OBJ. Maksimal 512 vertex/1024 face per mesh dan 250 objek scene. Ini **bukan** Blender, sculpting, CSG, terrain editor, rigging, atau animasi. OBJ hanya geometri (bukan material/tekstur).
+- **Ekspor GLB bertesktur** (panel Properti): atlas ≤1024×1024 dari piksel foto project yang tersimpan di browser, UV per sisi (proyeksi kotak, **bukan** unwrap), satu berkas `.glb` dengan gambar tertanam. Jalur manualnya selalu ada: unduh `.glb` → **3D Importer** di Studio.
+- **Unggah aset otomatis (opsional)**: tombol _Unggah ke Roblox (Open Cloud)_ di panel Properti memakai server PiwuApp. Hanya jalan bila server punya `ROBLOX_OPEN_CLOUD_KEY` (scope `asset:write`) + `ROBLOX_ASSET_CREATOR_ID`/`ROBLOX_ASSET_CREATOR_TYPE`; tanpa itu jawabannya penolakan jujur dan jalur 3D Importer tetap dipakai. Id aset yang berhasil disimpan di `studio.assets.json` project, lalu dipakai impor scene untuk membuat MeshPart.
 - Semua perubahan builder disimpan dalam `scene.roblox.json` melalui versi project; gunakan Riwayat untuk pemulihan. Preview browser adalah renderer geometri, **bukan engine/Play Test Roblox**.
 - Bridge HTTPS berpasangan melalui token acak, berlaku 30 menit, hash SHA-256 di database. Snapshot Studio diimpor ke file project; AI provider membaca file dan manifest tersebut (bukan mengakses Studio tanpa plugin). Provider AI tetap harus diaktifkan secara terpisah.
 - Explorer instance, rename, tambah Folder/Model/Part/Script/LocalScript/ModuleScript, reparent melalui draft JSON, dan hapus descendants menghasilkan bundle eksplisit. Modifikasi file script menjadi operasi update Source. Menghapus file saja tidak dianggap izin menghapus instance.
-- Hanya Part/Model dari builder dapat dimasukkan ke draft Explorer. Mesh kustom harus diekspor OBJ dan diimpor/diunggah sebagai aset melalui Studio. Bridge menolak menganggap mesh mentah sudah menjadi MeshPart.
+- Hanya Part/Model dari builder dapat dimasukkan ke draft Explorer. Mesh kustom harus diekspor GLB/OBJ dan diimpor/diunggah sebagai aset melalui Studio. Bridge menolak menganggap mesh mentah sudah menjadi MeshPart.
 
-## Aktivasi (belum dijalankan pada Studio asli di lingkungan ini)
+## Pemasangan plugin di Studio (sekali pasang, `.rbxmx`)
+
+Versi plugin yang diharapkan dicatat di `shared/studio.mjs` (`STUDIO_PLUGIN.version`), ditampilkan di tombol unduh, dan diperiksa plugin saat **Tes koneksi** — beda versi = unduh ulang berkasnya.
 
 1. Backend harus dapat menjangkau Supabase. Terapkan **sekali** `supabase/006_studio_bridge.sql` setelah 001–005. Jangan ulang migration yang sudah terpasang. Tabel hanya bisa diakses service-role server, bukan browser/anon; RLS tetap aktif.
 2. Buat project Roblox dan tunggu tersinkron ke cloud. Buka **3D Builder → Hubungkan Studio**.
-3. Unduh `/plugins/PiwuStudio.luau`. Di Studio, buat Script sementara, tempel source plugin, pilih **Save as Local Plugin** (menu Studio dapat berbeda menurut versi), lalu **hapus Script sementara dari place**. Jangan menjalankan plugin sebagai Script game. Buka plugin PiwuApp dari toolbar Plugins.
-4. Simpan backup place. Hentikan Play/Run. Plugin hanya mengizinkan Edit Mode.
-5. Klik **Buat token pasangan** di PiwuApp. Masukkan origin HTTPS aplikasi dan token tersebut di dock plugin, klik **Simpan koneksi di memori**. Token plugin tidak sama dengan key Supabase/Roblox dan tidak boleh dibagikan. Plugin tidak menyimpan token melalui Plugin Settings. Izinkan HTTP untuk domain aplikasi jika Studio meminta izin. Jangan memasukkan URL pihak yang tidak Anda percaya: snapshot berisi source script Anda.
-6. Klik **Kirim snapshot** di Studio, lalu **Impor snapshot Studio** di PiwuApp. Proses memberi atribut `PiwuBridgeId` pada descendants saat ekspor eksplisit agar objek bernama sama tetap dapat dibedakan. Snapshot tidak diam-diam dipotong ketika mencapai batas.
-7. Edit source Luau di IDE atau minta perubahan dari provider AI. Tinjau diff dan terima di IDE. Gunakan draft Explorer untuk tambah/rename/delete. Perubahan ini **belum** mengubah Studio.
-8. Klik **Tinjau perubahan Studio**; periksa daftar, source, serta penghapusan. Centang konfirmasi lalu **Kirim bundle ke Studio**.
-9. Di plugin, klik **Ambil & tinjau perubahan**, baca ringkasan, lalu **Terapkan** dua kali untuk konfirmasi dalam 12 detik. Server membandingkan snapshot terkini dengan baseline; perubahan lokal Studio menyebabkan konflik, bukan overwrite.
-10. Periksa hasil di Explorer Studio dan gunakan Undo jika diperlukan. **Script baru tetap Disabled** sampai diaktifkan secara manual setelah review. Lakukan Play Test di Studio sendiri. Receipt menandakan operasi plugin selesai, bukan game sudah benar/aman atau telah dipublikasikan.
-11. Kirim snapshot baru setelah setiap penerapan. Gunakan **Cabut akses plugin** di web untuk mencabut token server; tombol putus di plugin hanya menghapus token dari memori lokal.
+3. Klik **Unduh plugin PiwuApp .rbxmx**. Simpan berkas ke folder Plugins Studio: Windows `%LOCALAPPDATA%\Roblox\Plugins`, macOS `~/Documents/Roblox/Plugins`. Buat foldernya bila belum ada. Berkas itu satu `Script` terbungkus XML; isinya persis `public/plugins/PiwuStudio.luau`.
+   - Cara lama (isi identik, kalau folder Plugins tidak bisa ditulis): salin `public/plugins/PiwuStudio.luau`, buat Script sementara di place, tempel, **Plugins → Save as Local Plugin**, lalu **hapus Script sementara** dari place. Jangan menjalankan plugin sebagai Script game.
+   - Plugin **tidak bisa memasang dirinya sendiri**: langkah ini memang milik pengguna.
+4. Buka place di Studio, klik **Plugins → PiwuApp Bridge**. Hentikan Play/Run: plugin hanya bekerja di Edit Mode. Simpan salinan/backup place sebelum menerapkan perubahan.
+5. Klik **Buat token pasangan** di PiwuApp (berlaku 30 menit). Tempel origin HTTPS aplikasi dan token itu di dock plugin, klik **Simpan koneksi di memori**. Token tidak ditulis ke Plugin Settings, project, chat, atau localStorage; plugin putus/`plugin.Unloading` menghapusnya dari memori.
+6. **Izin HTTP milik plugin, bukan setelan place.** Saat plugin pertama kali menghubungi alamat baru, Studio menampilkan pertanyaan izin untuk domain itu → pilih **Allow**. Kalau pernah ditolak atau ingin mencabut: **View → Plugin Management** → atur alamat tersebut. Setelan _File → Experience Settings → Security → Allow HTTP Requests_ hanya mengatur script in-game; jangan jadikan syarat pertama untuk kegagalan plugin. Plugin tidak pernah menulis `HttpService.HttpEnabled` sendiri — baris Command Bar yang bisa disalin di panel hanya jalan terakhir bila mesin Anda menolak permintaan plugin.
+7. Klik **Tes koneksi & lihat status project**. Panel menyebut versi plugin yang terpasang, versi server, nama/kind project, masa berlaku token, jumlah perubahan menunggu, ringkasan scene, dan apakah unggah aset otomatis aktif. Permintaan yang ditolak akan menjelaskan izin/manajemen plugin, bukan "HTTP dimatikan".
+8. Klik **Kirim snapshot** di Studio, lalu **Impor snapshot Studio** di PiwuApp. Proses memberi atribut `PiwuBridgeId` pada descendants saat ekspor eksplisit agar objek bernama sama tetap dapat dibedakan. Snapshot tidak diam-diam dipotong ketika mencapai batas.
+9. Edit source Luau di IDE atau minta perubahan dari provider AI. Tinjau diff dan terima di IDE. Gunakan draft Explorer untuk tambah/rename/delete. Perubahan ini **belum** mengubah Studio.
+10. Klik **Tinjau perubahan Studio**; periksa daftar, source, serta penghapusan. Centang konfirmasi lalu **Kirim bundle ke Studio**.
+11. Di plugin, klik **Ambil & tinjau perubahan**, baca ringkasan, lalu **Terapkan** dua kali untuk konfirmasi dalam 12 detik. Server membandingkan snapshot terkini dengan baseline; perubahan lokal Studio menyebabkan konflik, bukan overwrite.
+12. Periksa hasil di Explorer Studio dan gunakan Undo jika diperlukan. **Script baru tetap Disabled** sampai diaktifkan secara manual setelah review. Lakukan Play Test di Studio sendiri. Receipt menandakan operasi plugin selesai, bukan game sudah benar/aman atau telah dipublikasikan.
+13. Kirim snapshot baru setelah setiap penerapan. Gunakan **Cabut akses plugin** di web untuk mencabut token server; tombol putus di plugin hanya menghapus token dari memori lokal.
+
+## Impor `scene.roblox.json` ke Studio (satu klik per tinjauan)
+
+1. Di plugin klik **Impor scene project (Part/Model) ke Studio**. Plugin meminta `GET /api/studio/scene` lalu memeriksa skema scene sebelum menampilkan apa pun: id unik, vektor 3 angka, warna `#rrggbb`, parent hanya boleh menunjuk Model, dan tidak boleh ada siklus parent.
+2. Ringkasan menampilkan jumlah objek, mesh kustom, dan mesh yang sudah punya aset Roblox, plus catatan server (mis. `1 mesh kustom belum punya aset Roblox: …`). Tidak ada yang dibangun pada langkah ini.
+3. Klik **Bangun scene hasil tinjauan** dua kali (konfirmasi 12 detik). Hasilnya di `Workspace/PiwuScene` (atau di objek terpilih bila opsi induk dinyalakan), **satu recording Undo**: satu `Ctrl+Z` membatalkan seluruh impor.
+4. Hierarki mengikuti scene: anak dari sebuah Model menjadi bagian dalam Model itu di Explorer, jadi memindahkan Model memindahkan partnya. Part memakai CFrame absolut, mesh memakai `PivotTo` relatif terhadap induknya.
+5. Objek yang tidak bisa dipastikan **dilewati, tidak dikarang**: mesh kustom tanpa aset Roblox, atau aset yang gagal dimuat (`InsertService:LoadAsset`) akan dilaporkan satu per satu. Untuk itu: ekspor GLB di panel Properti lalu impor lewat 3D Importer, atau pakai unggah Open Cloud agar impor berikutnya mendapat MeshPart.
+6. Atribut `PiwuBridgeId = "scene:<id>"` dipasang di setiap instance hasil impor supaya objek bisa dikenali lagi setelah diedit di Studio.
+
+## Pemberitahuan perubahan menunggu
+
+- Panel plugin memeriksa antrean tiap **20 detik** (nyala secara default) dan **hanya memberi tahu**: tombol toolbar menyala dan judul panel menulis `· perubahan menunggu`. Tidak ada claim/apply otomatis — menerapkan tetap dua klik.
+- **Tidak ada push dari server ke Studio** (plugin hanya bisa menarik). Jadi notifikasi selalu berupa polling di dalam Studio, bukan pesan yang muncul sendiri saat Studio tidak dibuka.
 
 ## Batas dan kegagalan
 
@@ -36,12 +58,15 @@
 - Plugin preflight dilakukan sebelum mutasi dan memakai ChangeHistoryService recording. Roblox tidak menyediakan transaksi lintas semua instance: kegagalan parsial dilaporkan, riwayat dipertahankan untuk Undo, dan bundle tidak diulang otomatis. Jangan klaim operasi atomik. Jika crash setelah claim, inspeksi place lalu cabut/pasangkan ulang; jangan replay tanpa memastikan hasil.
 - Mencabut token tidak bisa membatalkan mutasi yang sudah di-claim dan sedang berjalan di Studio. Receipt gagal tidak berarti perubahan gagal; plugin mengingatkan pengguna agar tidak menerapkan ulang.
 - Plugin tidak memakai `loadstring`, `require` remote, menjalankan source AI, memulai Play Test atau mempublikasikan game. Script yang diterima tetap memerlukan review keamanan oleh pembuat game.
+- Plugin **tidak bisa** mengimpor berkas mesh/`.glb` sendiri (tidak ada API importer untuk plugin) dan **tidak bisa** memasang dirinya sendiri atau menyalakan izin HTTP untuk dirinya. Batas 21.000 tri/1024 px tekstur/model Roblox tetap berlaku untuk mesh yang diimpor.
+- Unggah aset otomatis memakai kredensial server (`ROBLOX_OPEN_CLOUD_KEY`), memperlakukan hasil sebagai moderasi Roblox (`Reviewing`/`Approved`), dan tidak pernah menyimpan kunci itu di browser. Tanpa kunci, jalur manual tetap satu-satunya cara.
 
 ## Verifikasi yang bisa dilakukan di sini
 
-Pengujian browser memakai fixture jaringan terisolasi untuk project cloud/bridge; renderer 3D berjalan di Chromium. Unit menguji mesh/topologi, schema snapshot, operasi terlindungi, stale bundle, CAS claim, expiry/role/lock, dan privilege tabel pada PostgreSQL PGlite. Plugin dan starter scripts dikompilasi dengan Luau WASM untuk memeriksa sintaks, **bukan menjalankan API Studio**.
-
-Uji Studio nyata wajib: pairing, duplicate instance names, unsaved script editor, local edit conflict, partial failure/Undo, revoked access, interrupted receipt, and Play Test. Belum ada keberhasilan sinkronisasi ke place live yang diklaim.
+- `tests/studio-plugin.test.ts` menjalankan **berkas plugin yang sama** (`public/plugins/PiwuStudio.luau`) di Luau WASM di atas test double Studio (`tests/support/studio-fake.luau`): skema snapshot, izin HTTP yang ditolak, impor scene (hierarki + posisi setelah rotasi Model + `skipped` yang jujur), bundle/draft, satu recording Undo, penanda perubahan menunggu, dan berkas `.rbxmx` (dibungkus sekali, XML-nya bisa diparse, isinya identik dengan `.luau`).
+- Rute bridge diuji lewat express asli di `tests/studio-api.test.ts`; unggah aset Open Cloud diuji dengan `fetcher` palsu (tanpa kunci → 503 jujur; dengan kunci → multipart ke `apis.roblox.com`, hasil moderasi dilaporkan).
+- Plugin dan starter scripts dikompilasi dengan Luau WASM untuk memeriksa sintaks, **bukan menjalankan API Studio**. Pengujian browser memakai fixture jaringan terisolasi untuk project cloud/bridge; renderer 3D berjalan di Chromium.
+- Uji Studio nyata wajib: pemasangan `.rbxmx` + izin Plugin Management, pairing, duplicate instance names, unsaved script editor, local edit conflict, partial failure/Undo, revoked access, interrupted receipt, impor scene di place nyata, dan Play Test. Belum ada keberhasilan sinkronisasi ke place live yang diklaim.
 
 ## Preview hasil AI dan Canvas Map
 
