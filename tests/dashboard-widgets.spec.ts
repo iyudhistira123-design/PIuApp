@@ -204,7 +204,27 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit.locator(".credit-low")).toHaveCount(0);
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 
-  // 2. "Menunggu Anda": four real items from four real endpoints.
+  // 2. The readiness list: this deployment has no publish and no payments, and
+  // it must say which exact switch is off instead of leaving a dead button.
+  const readiness = page.locator(".dashboard-readiness");
+  await expect(readiness).toContainText("fitur belum aktif di server ini");
+  await expect(readiness).toContainText("Publish ke web");
+  await expect(readiness).toContainText("NETLIFY_TOKEN");
+  await expect(readiness).toContainText("Top up kredit");
+  await expect(readiness).toContainText("Pencarian web");
+  // The parts that are already on are named when the list is opened.
+  await readiness.getByRole("button", { name: "Lihat daftar lengkap" }).click();
+  await expect(readiness).toContainText("Percakapan AI");
+  await expect(readiness).toContainText("Audit Lighthouse");
+  await readiness.getByRole("button", { name: "Ringkas daftar" }).click();
+  await readiness.getByRole("button", { name: "Sembunyikan" }).click();
+  await expect(page.locator(".dashboard-ready-warn")).toContainText(
+    "lihat apa yang kurang",
+  );
+  await page.locator(".dashboard-ready-warn").click();
+  await expect(readiness).toBeVisible();
+
+  // 3. "Menunggu Anda": four real items from four real endpoints.
   const waiting = page.locator(".dashboard-waiting");
   await expect(waiting).toContainText("Menunggu Anda");
   await expect(waiting).toContainText("1 komentar belum diselesaikan");
@@ -216,7 +236,7 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(waiting).not.toContainText("Studio");
   await expect(waiting).toContainText("Diperiksa dari 1 project terbaru");
 
-  // 3. "Kualitas project": the score, where it came from, and its movement.
+  // 4. "Kualitas project": the score, where it came from, and its movement.
   const quality = page.locator(".dashboard-quality");
   await expect(quality).toContainText("Kualitas project");
   await expect(quality).toContainText("92");
@@ -237,7 +257,7 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(quality).toContainText("95");
   await expect(quality).toContainText("naik 3 poin dari audit sebelumnya");
 
-  // 4. The activity log: what just happened, from the version history.
+  // 5. The activity log: what just happened, from the version history.
   const activity = page.locator(".dashboard-activity");
   await expect(activity).toContainText("Aktivitas terbaru");
   await expect(activity).toContainText("Project dibuat");
@@ -245,7 +265,7 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(activity).toContainText("Hari ini");
   await expect(activity).toContainText("pesan chat belum punya stempel waktu");
 
-  // 5. The project card: where you stopped, and what the project holds.
+  // 6. The project card: where you stopped, and what the project holds.
   const card = page.locator(".project-card").first();
   await expect(card).toContainText("Terakhir: Respons API pengujian diterima.");
   await expect(card).toContainText(/\d+ file · \d+ riwayat · \d+ (B|KB|MB)/);
@@ -394,9 +414,17 @@ test("a backup downloads, and restoring it adds projects instead of overwriting 
   await page.getByRole("link", { name: "Kembali ke dashboard" }).click();
   await expect(page.locator(".project-card")).toHaveCount(1);
 
+  // Backup lives in the storage dialog, next to the status of local data.
+  await page
+    .getByRole("button", { name: /^Penyimpanan:/ })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Cadangan", exact: true }).click();
+  const storage = page.getByRole("dialog");
+  await expect(storage).toContainText("semua project, riwayatnya, dan foto");
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("button", { name: "Unduh semua project" }).click(),
+    storage.getByRole("button", { name: "Unduh semua project" }).click(),
   ]);
   const file = await download.path();
   expect(download.suggestedFilename()).toMatch(
@@ -415,23 +443,32 @@ test("a backup downloads, and restoring it adds projects instead of overwriting 
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(backup)),
   });
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Pulihkan dari cadangan?");
-  await expect(dialog).toContainText("1 project");
-  await expect(dialog).toContainText("tidak ada project Anda yang ditimpa");
-  await dialog.getByRole("button", { name: "Tambahkan 1 project" }).click();
+  const confirm = storage.getByRole("group", { name: "Konfirmasi pemulihan" });
+  await expect(confirm).toContainText("Berkas memuat 1 project");
+  await expect(confirm).toContainText("(pulih)");
+  await confirm.getByRole("button", { name: "Tambahkan 1 project" }).click();
+  await expect(confirm).toBeHidden();
+  await page.getByRole("button", { name: "Tutup", exact: true }).click();
   await expect(page.locator(".project-card")).toHaveCount(2);
   await expect(
     page.getByRole("button", { name: "Menu katalog produk (pulih)" }),
   ).toBeVisible();
 
   // A file that is not a backup is refused with words, not a silent no-op.
+  await page
+    .getByRole("button", { name: /^Penyimpanan:/ })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Cadangan", exact: true }).click();
   await page.getByLabel("Berkas cadangan PiwuApp").setInputFiles({
     name: "salah.json",
     mimeType: "application/json",
     buffer: Buffer.from('{"halo":1}'),
   });
-  await expect(page.getByText(/bukan cadangan PiwuApp/).first()).toBeVisible();
+  await expect(
+    page.getByRole("dialog").getByText(/bukan cadangan PiwuApp/),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Tutup", exact: true }).click();
   await expect(page.locator(".project-card")).toHaveCount(2);
 });
 

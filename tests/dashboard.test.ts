@@ -28,6 +28,11 @@ import {
 } from "../src/lib/dashboard/quality";
 import { activityWhen, buildActivity } from "../src/lib/dashboard/activity";
 import {
+  pluginItem,
+  readinessItems,
+  readinessSummary,
+} from "../src/lib/dashboard/readiness";
+import {
   SEARCH_CHARS_MAX,
   searchProjects,
   snippet,
@@ -671,6 +676,65 @@ test("a project too big to read is reported, never silently dropped", () => {
   assert.equal(found.notFullySearched, 0);
   assert.match(snippet("aaa bbb jarum ccc", "jarum"), /jarum/);
   assert.equal(snippet("tidak ada", "jarum"), "");
+});
+
+test("the readiness list names what is missing, in the words of what it enables", () => {
+  const off = readinessSummary(readinessItems({ cloud: true, ai: true }));
+  assert.equal(off.total, 7);
+  assert.equal(off.ready, 2);
+  assert.deepEqual(
+    off.missing.map((item) => item.id),
+    ["search", "sandbox", "audit", "publish", "payments"],
+  );
+  assert.match(off.missing[0].missing, /provider pencarian berkunci/);
+  assert.match(off.missing[2].missing, /Chromium \+ Lighthouse/);
+  // Every item has both halves: what it gives the user, and what is missing.
+  for (const item of readinessItems({})) {
+    assert.ok(item.label && item.hint && item.missing, item.id);
+    assert.equal(item.ready, false);
+  }
+  // A capability that was never reported is not a capability.
+  assert.equal(
+    readinessItems(undefined).every((item) => !item.ready),
+    true,
+  );
+  // Everything on: nothing is listed as missing, and the count adds up.
+  const on = readinessSummary(
+    readinessItems({
+      cloud: true,
+      ai: true,
+      search: true,
+      sandbox: true,
+      audit: true,
+      publish: true,
+      payments: true,
+    }),
+  );
+  assert.deepEqual(on.missing, []);
+  assert.equal(on.ready, on.total);
+});
+
+test("the plugin line only speaks about versions it actually knows", () => {
+  const fresh = pluginItem({ plugin: { version: "2.1.0" } }, "2.1.0");
+  assert.equal(fresh.ready, true);
+  // Never connected: not a version problem, a "belum terpasang" problem.
+  const never = pluginItem({}, "2.1.0");
+  assert.equal(never.ready, false);
+  assert.match(never.missing, /belum pernah menghubungi/);
+  assert.equal(pluginItem(null, "2.1.0").ready, false);
+  // Older plugin: name both versions so the fix is obvious.
+  const stale = pluginItem({ plugin: { version: "2.0.0" } }, "2.1.0");
+  assert.equal(stale.ready, false);
+  assert.match(
+    stale.missing,
+    /v2\.0\.0 terpasang, aplikasi ini memakai v2\.1\.0/,
+  );
+  assert.deepEqual(
+    readinessSummary(readinessItems({}, [fresh])).missing.map(
+      (item) => item.id,
+    ),
+    ["cloud", "ai", "search", "sandbox", "audit", "publish", "payments"],
+  );
 });
 
 test("sizes are written the way a person reads them", () => {

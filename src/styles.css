@@ -2227,6 +2227,8 @@ section h2 {
   top: 0;
   left: 0;
   bottom: 0;
+  /* Tall content scrolls instead of pushing the account row out of reach. */
+  overflow-y: auto;
   background: #f2f3ed;
   border-right: 1px solid #e6e8de;
   padding: 26px 17px 0;
@@ -2397,34 +2399,6 @@ section h2 {
   border-color: #f0dccf;
   background: #fbf3ee;
 }
-/* Backup: two plain buttons, because this is a safety net, not a feature to sell. */
-.dashboard-backup {
-  display: grid;
-  gap: 6px;
-  padding: 12px 13px;
-  margin-bottom: 14px;
-  border: 1px dashed #dfe3d6;
-  border-radius: 8px;
-}
-.dashboard-backup > span {
-  font-size: 7px;
-  letter-spacing: 1.2px;
-  color: #a9b39c;
-}
-.dashboard-backup .button {
-  justify-content: center;
-  font-size: 9px;
-  padding: 7px 10px;
-}
-.dashboard-backup small {
-  font-size: 8px;
-  line-height: 1.5;
-  color: #a9b39c;
-}
-.dashboard-backup .dashboard-backup-note {
-  color: #b9852f;
-}
-
 .credit-split {
   display: grid;
   gap: 2px;
@@ -2452,6 +2426,89 @@ section h2 {
 }
 
 /* "Menunggu Anda": the decisions a project is waiting for. */
+/* Readiness: one green line when nothing is wrong, a list only when it matters. */
+.dashboard-ready-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 10px;
+  color: #7c8767;
+}
+.dashboard-ready-warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid #efe0cd;
+  border-radius: 8px;
+  background: #fdf8f1;
+  font-size: 10px;
+  color: #a9762c;
+}
+.dashboard-readiness {
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  border: 1px solid #efe0cd;
+  border-radius: 10px;
+  background: #fdf8f1;
+}
+.dashboard-readiness header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-readiness h2 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a5f1d;
+}
+.dashboard-readiness .readiness-count {
+  font-size: 9px;
+  color: #b08a52;
+}
+.dashboard-readiness header .icon-button {
+  margin-left: 0;
+}
+.dashboard-readiness header .icon-button:nth-of-type(1) {
+  margin-left: auto;
+}
+.dashboard-readiness ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-readiness li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.dashboard-readiness li[data-ready="true"] {
+  color: #7c8767;
+}
+.dashboard-readiness li[data-ready="false"] {
+  color: #a9762c;
+}
+.dashboard-readiness li b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.dashboard-readiness li p {
+  margin-top: 2px;
+  font-size: 9px;
+  line-height: 1.6;
+  color: #8b8272;
+}
+.dashboard-readiness .readiness-note {
+  margin-top: 10px;
+  font-size: 9px;
+  color: #a08b6b;
+}
+
 .dashboard-waiting {
   padding: 16px 18px;
   margin-bottom: 24px;

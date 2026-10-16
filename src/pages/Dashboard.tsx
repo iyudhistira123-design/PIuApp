@@ -43,14 +43,7 @@ import CreditSummary from "../components/dashboard/CreditSummary";
 import WaitingForYou from "../components/dashboard/WaitingForYou";
 import QualityPanel from "../components/dashboard/QualityPanel";
 import ActivityFeed from "../components/dashboard/ActivityFeed";
-import BackupPanel from "../components/dashboard/BackupPanel";
-import { saveProjectPhotos } from "../services/project-photos";
-import {
-  backupReport,
-  readBackup,
-  restoreName,
-  type Backup,
-} from "../lib/dashboard/backup";
+import ReadinessChecklist from "../components/dashboard/ReadinessChecklist";
 import { searchProjects } from "../lib/dashboard/search";
 import {
   continueLine,
@@ -118,11 +111,6 @@ export default function Dashboard() {
   const [photos, setPhotos] = useState<
     Record<string, { count: number; bytes: number }>
   >({});
-  // The picked backup file, waiting for the user to confirm what it holds.
-  const [restore, setRestore] = useState<
-    { backup: Backup; skipped: number } | undefined
-  >(undefined);
-  const [restoring, setRestoring] = useState(false);
   const [promptTitle, setPromptTitle] = useState("");
   const [promptContent, setPromptContent] = useState("");
   const continued = useRef(false);
@@ -206,43 +194,6 @@ export default function Dashboard() {
     };
   }, [store.user, store.projects]);
 
-  // Restoring only ever adds: every project comes back under a fresh id, and a
-  // name that is already taken gets a "(pulih)" suffix.
-  async function confirmRestore() {
-    if (!restore) return;
-    setRestoring(true);
-    const scope = scopeFor(store.user);
-    const taken = new Set(store.projects.map((project) => project.name));
-    let photosSaved = 0;
-    let photosDropped = 0;
-    for (const project of restore.backup.projects) {
-      const name = restoreName(project.name, taken);
-      taken.add(name);
-      const id = store.importProject(project, name);
-      const photos = restore.backup.photos[project.id];
-      if (!photos?.length) continue;
-      try {
-        const result = await saveProjectPhotos(scope, id, photos);
-        photosSaved += result.saved;
-        photosDropped += result.dropped.length;
-      } catch {
-        photosDropped += photos.length;
-      }
-    }
-    const parts = [
-      `${restore.backup.projects.length} project ditambahkan`,
-      photosSaved ? `${photosSaved} foto dipulihkan` : "",
-      photosDropped
-        ? `${photosDropped} foto tidak masuk (batas 12 per project / 16 MB)`
-        : "",
-      restore.skipped ? `${restore.skipped} entri dilewati` : "",
-    ].filter(Boolean);
-    store.notify(`${parts.join(" · ")}.`);
-    setRestoring(false);
-    setRestore(undefined);
-    setDialog("");
-  }
-
   function create() {
     if (!newPrompt.trim()) return;
     if (!store.user) {
@@ -316,17 +267,6 @@ export default function Dashboard() {
         </nav>
         <div className="sidebar-bottom">
           <CreditSummary />
-          <BackupPanel
-            onRestore={(text, bytes) => {
-              const read = readBackup(text, bytes);
-              if (!read.ok) {
-                store.notify(read.error);
-                return;
-              }
-              setRestore({ backup: read.backup, skipped: read.skipped });
-              setDialog("restore");
-            }}
-          />
           <div className="upgrade-card">
             <span>
               <Sparkles size={15} />
@@ -447,6 +387,11 @@ export default function Dashboard() {
           <CloudSyncBanner />
           {(tab === "projects" || tab === "shared") && (
             <>
+              <ReadinessChecklist
+                hasRobloxProject={store.projects.some(
+                  (project) => project.kind === "roblox",
+                )}
+              />
               <WaitingForYou projects={store.projects} />
               <QualityPanel projects={store.projects} />
               <div className="dashboard-banner">
@@ -642,7 +587,10 @@ export default function Dashboard() {
                     <p>Beri ruang untuk tumbuh.</p>
                   </button>
                 </div>
-              ) : search || filter !== "all" || commentsOnly || scopeKind !== "all" ? (
+              ) : search ||
+                filter !== "all" ||
+                commentsOnly ||
+                scopeKind !== "all" ? (
                 <EmptyState icon={Search} title="Tidak ada project yang cocok">
                   {found.notFullySearched
                     ? `Isi ${found.notFullySearched} project terlalu besar untuk diperiksa seluruhnya — coba kata kunci lain.`
@@ -801,59 +749,11 @@ export default function Dashboard() {
               delete: "Hapus project?",
               settings: "Pengaturan workspace",
               prompt: "Simpan prompt",
-              restore: "Pulihkan dari cadangan?",
             }[dialog] || ""
           }
           onClose={() => setDialog("")}
         >
           <div className="modal-content">
-            {dialog === "restore" && restore && (
-              <>
-                <p>
-                  Berkas ini memuat{" "}
-                  <b>{backupReport(restore.backup).projects} project</b> (
-                  {backupReport(restore.backup).files} file)
-                  {backupReport(restore.backup).photos
-                    ? ` dan ${backupReport(restore.backup).photos} foto`
-                    : ""}
-                  .
-                </p>
-                <p>
-                  Pemuihan selalu menambah. Project dengan nama yang sudah ada
-                  akan muncul sebagai &ldquo;nama (pulih)&rdquo; — tidak ada
-                  project Anda yang ditimpa atau dihapus.
-                </p>
-                {restore.skipped > 0 && (
-                  <p>
-                    {restore.skipped} entri dilewati karena isinya tidak terbaca
-                    atau terlalu besar.
-                  </p>
-                )}
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="button button-outline"
-                    disabled={restoring}
-                    onClick={() => {
-                      setRestore(undefined);
-                      setDialog("");
-                    }}
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-dark"
-                    disabled={restoring}
-                    onClick={() => void confirmRestore()}
-                  >
-                    {restoring
-                      ? "Memulihkan…"
-                      : `Tambahkan ${restore.backup.projects.length} project`}
-                  </button>
-                </div>
-              </>
-            )}
             {dialog === "new" && (
               <form
                 onSubmit={(e) => {
