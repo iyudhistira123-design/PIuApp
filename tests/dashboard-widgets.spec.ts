@@ -141,6 +141,7 @@ test.beforeEach(async ({ page }) => {
           cloud: true,
           ai: true,
           sandbox: true,
+          audit: true,
           publish: false,
           payments: false,
         },

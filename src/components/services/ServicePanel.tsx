@@ -519,7 +519,9 @@ export default function ServicePanel({
             async () => {
               await request("audit", {});
             },
-            editor && webRuntime && status?.capabilities?.sandbox,
+            // `capabilities.audit` needs a database, an E2B key AND an E2B
+            // template with Chromium + Lighthouse, which is what the route uses.
+            editor && webRuntime && status?.capabilities?.audit,
           )}
           {data?.reports?.map((r: any) => (
             <div key={r.id}>

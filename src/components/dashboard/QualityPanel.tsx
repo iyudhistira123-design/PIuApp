@@ -44,7 +44,9 @@ export default function QualityPanel({ projects }: { projects: Project[] }) {
   );
   const key = candidates.map((project) => project.id).join(",");
   const [rows, setRows] = useState<Record<string, Row>>({});
-  const [sandbox, setSandbox] = useState<boolean | null>(null);
+  // `capabilities.audit` is the precise gate: a database, an E2B key and a
+  // template with Chromium + Lighthouse. `sandbox` alone is not enough.
+  const [auditReady, setAuditReady] = useState<boolean | null>(null);
   const [round, setRound] = useState(0);
   const [busy, setBusy] = useState("");
   const [note, setNote] = useState("");
@@ -54,8 +56,8 @@ export default function QualityPanel({ projects }: { projects: Project[] }) {
     let live = true;
     void fetch("/api/status")
       .then((response) => response.json())
-      .then((data) => live && setSandbox(Boolean(data?.capabilities?.sandbox)))
-      .catch(() => live && setSandbox(false));
+      .then((data) => live && setAuditReady(Boolean(data?.capabilities?.audit)))
+      .catch(() => live && setAuditReady(false));
     return () => {
       live = false;
     };
@@ -177,7 +179,7 @@ export default function QualityPanel({ projects }: { projects: Project[] }) {
                   server.
                 </p>
               )}
-              {mayAudit && synced && sandbox && (
+              {mayAudit && synced && auditReady && (
                 <button
                   className="button button-outline quality-button"
                   disabled={busy === project.id}
@@ -196,10 +198,10 @@ export default function QualityPanel({ projects }: { projects: Project[] }) {
         })}
       </ul>
       {note && <p className="waiting-note">{note}</p>}
-      {sandbox === false && (
+      {auditReady === false && (
         <p className="waiting-note">
-          Audit Lighthouse belum aktif di server ini (butuh sandbox E2B), jadi
-          tombolnya tidak ditampilkan.
+          Audit Lighthouse belum aktif di server ini (butuh sandbox E2B dengan
+          template Chromium + Lighthouse), jadi tombolnya tidak ditampilkan.
         </p>
       )}
       {Object.values(rows).some((row) => row.error) && (
