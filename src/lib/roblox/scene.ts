@@ -24,6 +24,11 @@ const mesh = z
         z.object({
           color: z.string().regex(/^#[0-9a-f]{6}$/i),
           faces: z.array(z.number().int().nonnegative()).min(1),
+          // The rectangle of the photo this group's faces were sampled from,
+          // kept so the colours can become a real texture at export time.
+          region: z
+            .tuple([z.number(), z.number(), z.number(), z.number()])
+            .optional(),
         }),
       )
       .max(MESH_GROUPS_MAX)
@@ -91,6 +96,8 @@ export const sceneSchema = z
     }
   });
 export type SceneObject = z.infer<typeof objectSchema>;
+/** The custom geometry one object may carry. */
+export type SceneMesh = NonNullable<SceneObject["mesh"]>;
 export type RobloxScene = z.infer<typeof sceneSchema>;
 export function newObject(kind: SceneObject["kind"]): SceneObject {
   return {
@@ -194,7 +201,7 @@ export function meshOBJ(object: SceneObject) {
   const { color: perFace } = meshPhotoColors(object.mesh, object.color);
   const lines = [
     "# PiwuApp mesh dengan warna per sisi dari foto (vertex colour extension)",
-    "# Roblox mengabaikan warna di file OBJ ini; unggah tekstur di Studio bila perlu.",
+    "# Roblox mengabaikan warna di file OBJ ini; pakai Ekspor GLB di panel Properti untuk tekstur.",
     "o PiwuMeshColored",
   ];
   let emitted = 0;

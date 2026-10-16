@@ -60,6 +60,17 @@ const meshGroups = z
       .object({
         color: z.string().regex(/^#[0-9a-f]{6}$/i),
         faces: z.array(z.number().int().nonnegative()).min(1),
+        // Area of the photo the group's faces were sampled from. The server
+        // writes it so an exported texture uses the very pixels behind the
+        // colour; a model-authored mesh may leave it out.
+        region: z
+          .tuple([
+            z.number().min(0).max(1),
+            z.number().min(0).max(1),
+            z.number().min(0).max(1),
+            z.number().min(0).max(1),
+          ])
+          .optional(),
       })
       .strict(),
   )
@@ -494,13 +505,19 @@ function applyBuild(objects, op, { photos = 0, palettes = [] } = {}, report) {
         candidate.faces.includes(merged.faceLocal[index]),
       );
       const color = group?.color || entry.color;
-      const list = byColor.get(color) || [];
-      list.push(index);
-      byColor.set(color, list);
+      const region = group?.region || entry.region || null;
+      // Colour *and* area: two parts of the same colour taken from different
+      // places on the photo must stay two groups, or one part would be textured
+      // with the other's pixels.
+      const key = `${color}|${region ? region.map(round3).join(",") : ""}`;
+      const found = byColor.get(key) || { color, region, faces: [] };
+      found.faces.push(index);
+      byColor.set(key, found);
     });
-    const groups = [...byColor.entries()].map(([color, faces]) => ({
-      color,
-      faces,
+    const groups = [...byColor.values()].map((group) => ({
+      color: group.color,
+      faces: group.faces,
+      ...(group.region ? { region: group.region } : {}),
     }));
     groups.sort((a, b) => b.faces.length - a.faces.length);
     const kept = groups.slice(0, GROUPS_MAX);
@@ -549,10 +566,20 @@ function applyBuild(objects, op, { photos = 0, palettes = [] } = {}, report) {
     const colors = [...new Set(built.map((entry) => entry.color))];
     // The colours the photo actually produced, so the chat can show them as
     // swatches instead of asking the reader to trust a count.
-    const colorGroups = (mergedGroups || []).map((group) => ({
-      color: group.color,
-      faces: group.faces.length,
-    }));
+    // One row per colour: the mesh keeps a group per colour *and* per photo
+    // area (so the atlas can take pixels from the right place), but the chat
+    // reports colours a person reads — two areas that happen to be the same
+    // colour must not read as "3 colours" when there are only two.
+    const colorGroups = [
+      ...(mergedGroups || [])
+        .reduce((byColor, group) => {
+          const faces = byColor.get(group.color) || 0;
+          return byColor.set(group.color, faces + group.faces.length);
+        }, new Map())
+        .entries(),
+    ]
+      .map(([color, faces]) => ({ color, faces }))
+      .sort((a, b) => b.faces - a.faces);
     const color = (op.color || colors[0]).toLowerCase();
     const id = freshId(objects, taken, op.name);
     objects.push({
@@ -759,7 +786,7 @@ const colorNote = ({ groups = 0, sources = [], dropped = 0 } = {}, context) => {
     );
   if (groups)
     lines.push(
-      "Roblox mengabaikan warna di file OBJ: pakai versi Part untuk warna asli, atau unggah tekstur di Studio untuk mesh",
+      "Roblox mengabaikan warna di file OBJ; kalau foto project masih tersimpan di browser ini, tombol Ekspor GLB di panel Properti membawa tekstur asli foto itu ke Studio (satu file, tekstur 1024×1024 tertanam)",
     );
   else if (context.colors?.length > 1 && !fromPhoto)
     lines.push(

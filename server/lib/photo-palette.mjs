@@ -170,9 +170,13 @@ export function faceGroups(palette, region, mesh, baseColor) {
     list.push(index);
     byColor.set(color, list);
   });
+  const box = [left, top, right, bottom];
   const groups = [...byColor.entries()].map(([color, faces]) => ({
     color,
     faces,
+    // The area of the photo these faces were coloured from. Kept beside the
+    // colour so an exported texture shows the very pixels behind it.
+    region: box,
   }));
   // Too many distinct colours: keep the ones that cover the most faces and let
   // the rest fall back to the object colour, which the report states.
