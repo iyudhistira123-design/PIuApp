@@ -44,6 +44,12 @@ export interface AiModelGroup {
   label: string;
   models: string[];
 }
+export interface AiModelCost {
+  model: string;
+  tier: string;
+  /** Credits one chat turn on this model costs (Ask/Plan override this). */
+  cost: number;
+}
 export interface AiModelCatalog {
   source: "provider";
   count: number;
@@ -51,6 +57,12 @@ export interface AiModelCatalog {
   groups: AiModelGroup[];
   /** Optional per-tier overrides the operator configured on the server. */
   tiers: Record<string, string>;
+  /** What the server bills per model, aligned with `models`. */
+  costs?: AiModelCost[];
+  /** Chat price of each tier preset. */
+  tierCosts?: Record<string, number>;
+  askCost?: number;
+  planCost?: number;
   defaultModel: string;
   defaultSource: string;
 }
@@ -62,30 +74,60 @@ export function tierOfModel(model: string, tiers: Record<string, string> = {}) {
     if (tiers[tier] === model) return tier;
   return "Seimbang";
 }
+/**
+ * The credits one chat turn costs on a model. The server's catalogue is the
+ * source: `costs` says exactly what it will charge, and the tier rules only
+ * fill in before the catalogue has loaded (or for an id the key no longer
+ * serves). Ask and Plan are fixed by the shared price list and never change
+ * with the model, so the picker says so instead of printing a chat price.
+ */
+export function modelCost({
+  model,
+  catalog,
+  tiers,
+}: {
+  model: string;
+  catalog?: AiModelCatalog | null;
+  tiers?: Record<string, string>;
+}): { tier: string; cost: number; known: boolean } {
+  const listed = catalog?.costs?.find((entry) => entry.model === model);
+  if (listed) return { tier: listed.tier, cost: listed.cost, known: true };
+  const map = tiers || catalog?.tiers || {};
+  const tier = (AI_TIERS as readonly string[]).includes(model)
+    ? model === "Otomatis"
+      ? "Seimbang"
+      : model
+    : tierOfModel(model, map);
+  const cost =
+    catalog?.tierCosts?.[tier] ??
+    (tier === "Otomatis" ? tierCost("Seimbang") : tierCost(tier));
+  return { tier, cost, known: false };
+}
 /** Client mirror of the server cost rule, so the estimate never lies. */
 export function estimateCredits({
   mode,
   model,
   tiers = {},
+  catalog,
   prompt = "",
   hasAttachments = false,
 }: {
   mode: Mode;
   model: string;
   tiers?: Record<string, string>;
+  catalog?: AiModelCatalog | null;
   prompt?: string;
   hasAttachments?: boolean;
 }) {
-  if (mode === "Ask") return 1;
-  if (mode === "Plan") return 2;
-  const tier = (AI_TIERS as readonly string[]).includes(model)
-    ? model === "Otomatis"
-      ? prompt.length > 1200 || hasAttachments
-        ? "Kuat"
-        : "Seimbang"
-      : model
-    : tierOfModel(model, tiers);
-  return tierCost(tier);
+  if (mode === "Ask") return catalog?.askCost ?? 1;
+  if (mode === "Plan") return catalog?.planCost ?? 2;
+  // "Otomatis" is the one choice whose price depends on the prompt, because the
+  // tier is picked from the prompt; every explicit model is priced as listed.
+  if (model === "Otomatis" && !catalog?.costs?.some((e) => e.model === model)) {
+    const tier = prompt.length > 1200 || hasAttachments ? "Kuat" : "Seimbang";
+    return catalog?.tierCosts?.[tier] ?? tierCost(tier);
+  }
+  return modelCost({ model, catalog, tiers }).cost;
 }
 /**
  * Every model the configured API key serves, straight from the provider.

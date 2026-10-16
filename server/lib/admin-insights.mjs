@@ -1,6 +1,11 @@
 import { capabilities, HttpError } from "./core.mjs";
 import { platformResult } from "./platform.mjs";
-import { listProviderModels, modelCatalog, tierModels } from "./ai-models.mjs";
+import {
+  listProviderModels,
+  modelCatalog,
+  tierCost,
+  tierModels,
+} from "./ai-models.mjs";
 import { STUDIO_PLUGIN } from "../../shared/studio.mjs";
 
 // Read-only admin insight for the AI provider, per-account credits, and runtime
@@ -44,6 +49,8 @@ export function tierMapping(env, catalog) {
         : catalog?.defaultModel
           ? "model pertama provider"
           : "belum ditentukan",
+    // What one chat turn on this tier bills, from the shared price list.
+    cost: tierCost(tier),
   }));
 }
 

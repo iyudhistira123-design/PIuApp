@@ -328,6 +328,15 @@ test("admin AI overview reports the provider catalogue, tiers and usage without 
     const strong = body.tiers.find((t: any) => t.tier === "Kuat");
     assert.equal(strong.model, "claude-sonnet-4-20250514");
     assert.equal(strong.source, "LLM_MODEL_KUAT");
+    // The admin table prints the same prices the picker shows the user.
+    assert.deepEqual(
+      body.tiers.map((t: any) => [t.tier, t.cost]),
+      [
+        ["Cepat", 1],
+        ["Seimbang", 3],
+        ["Kuat", 8],
+      ],
+    );
     // AI credits spent in the window come from ledger rows with reason "ai".
     assert.equal(body.usage.aiCreditsSpent, 3);
     const ai = body.usage.purposes.find((p: any) => p.purpose === "ai");

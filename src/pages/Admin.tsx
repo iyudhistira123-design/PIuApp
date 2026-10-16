@@ -2179,17 +2179,28 @@ function AiPanel({ data, client }: { data: Row; client: AdminClient }) {
           </div>
           <Cpu size={20} />
         </div>
-        {table_(["Tier", "Model", "Sumber"], state.tiers || [], (r) => (
-          <>
-            <td>
-              <strong>{r.tier}</strong>
-            </td>
-            <td>{r.model ? <code>{r.model}</code> : "Model default"}</td>
-            <td>
-              <small>{r.source}</small>
-            </td>
-          </>
-        ))}
+        {table_(
+          ["Tier", "Model", "Sumber", "Kredit/pesan"],
+          state.tiers || [],
+          (r) => (
+            <>
+              <td>
+                <strong>{r.tier}</strong>
+              </td>
+              <td>{r.model ? <code>{r.model}</code> : "Model default"}</td>
+              <td>
+                <small>{r.source}</small>
+              </td>
+              <td>
+                {typeof r.cost === "number" ? (
+                  <b>{r.cost}</b>
+                ) : (
+                  <small>-</small>
+                )}
+              </td>
+            </>
+          ),
+        )}
       </section>
       <section className="ad-card">
         <div className="ad-card-heading">

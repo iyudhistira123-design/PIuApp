@@ -27,12 +27,13 @@ const aiPayload = {
   defaultModel: "deepseek-chat",
   defaultSource: "model pertama dari daftar provider",
   tiers: [
-    { tier: "Cepat", model: "", source: "LLM_MODEL" },
-    { tier: "Seimbang", model: "", source: "LLM_MODEL" },
+    { tier: "Cepat", model: "", source: "LLM_MODEL", cost: 1 },
+    { tier: "Seimbang", model: "", source: "LLM_MODEL", cost: 3 },
     {
       tier: "Kuat",
       model: "claude-sonnet-4-20250514",
       source: "LLM_MODEL_KUAT",
+      cost: 8,
     },
   ],
   catalog: catalogue,

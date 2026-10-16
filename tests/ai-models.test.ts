@@ -5,9 +5,11 @@ import {
   groupModels,
   listProviderModels,
   modelCatalog,
+  modelCosts,
   providerLabel,
   resetModelCache,
   resolveAiModel,
+  tierCosts,
   tierModels,
   tierOfModel,
 } from "../server/lib/ai-models.mjs";
@@ -98,6 +100,67 @@ test("LLM_MODEL is optional: the first model of the key becomes the default", as
   assert.equal(
     automaticTier({ prompt: "pendek", hasAttachments: true }),
     "Kuat",
+  );
+  resetModelCache();
+});
+
+test("every model the catalogue shows is priced, and the charge matches that price", async () => {
+  resetModelCache();
+  const env = {
+    LLM_API_KEY: "test-ai-private",
+    LLM_BASE_URL: "https://model.test/v1",
+    LLM_MODEL: "deepseek-chat",
+    LLM_MODEL_KUAT: "claude-sonnet-4-20250514",
+    LLM_MODEL_CEPAT: "glm-4-flash",
+  };
+  const { ctx } = fixture(env);
+  const models = [
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "glm-4-flash",
+    "claude-sonnet-4-20250514",
+  ];
+  const catalog = modelCatalog(env, models);
+  // One entry per model, in the same order as the list the picker renders.
+  assert.deepEqual(
+    catalog.costs.map((entry: any) => entry.model),
+    models,
+  );
+  assert.deepEqual(modelCosts(env, models), catalog.costs);
+  assert.deepEqual(tierCosts(), { Cepat: 1, Seimbang: 3, Kuat: 8 });
+  assert.equal(catalog.tierCosts.Kuat, 8);
+  // Ask and Plan are flat, whichever model answered; chat follows the tier the
+  // model bills as, and the operator override moves the price with the model.
+  assert.equal(catalog.askCost, 1);
+  assert.equal(catalog.planCost, 2);
+  for (const entry of catalog.costs) {
+    const chat = await resolveAiModel({
+      ctx,
+      model: entry.model,
+      mode: "Builder",
+      prompt: "ubah warna",
+    });
+    assert.equal(
+      chat.cost,
+      entry.cost,
+      `${entry.model} ditagih ${entry.cost} kredit oleh server`,
+    );
+    assert.equal(chat.tier, entry.tier);
+    for (const mode of ["Ask", "Plan"]) {
+      const flat = await resolveAiModel({ ctx, model: entry.model, mode });
+      assert.equal(flat.cost, mode === "Ask" ? 1 : 2);
+    }
+  }
+  // The override is what makes claude-sonnet-4-20250514 cost 8 and glm-4-flash 1.
+  assert.deepEqual(
+    catalog.costs.find(
+      (entry: any) => entry.model === "claude-sonnet-4-20250514",
+    ),
+    { model: "claude-sonnet-4-20250514", tier: "Kuat", cost: 8 },
+  );
+  assert.deepEqual(
+    catalog.costs.find((entry: any) => entry.model === "glm-4-flash"),
+    { model: "glm-4-flash", tier: "Cepat", cost: 1 },
   );
   resetModelCache();
 });
@@ -242,6 +305,12 @@ test("GET /api/ai/models exposes the provider catalogue and never leaks the key"
     assert.ok(body.groups.some((g: any) => g.label === "Anthropic Claude"));
     assert.ok(body.groups.some((g: any) => g.label === "Z.ai GLM"));
     assert.equal(body.defaultModel, [...served].sort()[0]);
+    // The page prints these prices, so they travel with the catalogue.
+    assert.equal(body.costs.length, served.length);
+    assert.deepEqual(body.tierCosts, { Cepat: 1, Seimbang: 3, Kuat: 8 });
+    assert.equal(body.askCost, 1);
+    assert.equal(body.planCost, 2);
+    assert.ok(body.costs.every((entry: any) => entry.cost >= 1));
     assert.ok(!JSON.stringify(body).includes("test-ai-private"));
   } finally {
     server.close();

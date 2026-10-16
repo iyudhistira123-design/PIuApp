@@ -59,6 +59,33 @@ test("AI model picker lists every model the API key serves, grouped, searchable 
   await expect(
     page.getByText(`${modelCatalogue.length} model dari API key Anda`),
   ).toBeVisible();
+  await expect(page.locator(".ai-model-note")).toContainText(
+    "harga per pesan dari server",
+  );
+  // Every model states what one chat turn costs, and the price comes from the
+  // server catalogue (costs[]), including the operator's tier override.
+  await expect(
+    list.locator('[data-model="deepseek-reasoner"] small'),
+  ).toHaveText("3 kredit/pesan");
+  await expect(
+    list.locator('[data-model="claude-sonnet-4-20250514"] small'),
+  ).toHaveText("dipakai untuk tier Kuat · 8 kredit");
+  await expect(list.locator('[data-model="glm-4.6"] small')).toHaveText(
+    "3 kredit/pesan",
+  );
+  // A tier preset states the range its automatic choice can spend.
+  await expect(list.locator('[data-model="Otomatis"] small')).toContainText(
+    "1–8 kredit/pesan",
+  );
+  await expect(list.locator('[data-model="Kuat"] small')).toContainText(
+    "8 kredit/pesan",
+  );
+  // The trigger repeats the price of the current choice, in the menu or not.
+  await expect(
+    page
+      .getByRole("button", { name: "Pilih model" })
+      .locator(".ai-model-price"),
+  ).toHaveText("1–8 kredit/pesan");
   // Search narrows the list...
   await page.getByLabel("Cari model").fill("deepseek");
   await expect(list.locator("[data-model]")).toHaveCount(2);
@@ -105,6 +132,12 @@ test("AI model picker sends the chosen model and shows which model answered", as
   await expect(page.getByRole("button", { name: "Pilih model" })).toContainText(
     "deepseek-reasoner",
   );
+  // The trigger keeps showing the price of the chosen model.
+  await expect(
+    page
+      .getByRole("button", { name: "Pilih model" })
+      .locator(".ai-model-price"),
+  ).toHaveText("3 kredit/pesan");
   // Credits follow the server rule: a provider model bills as Seimbang.
   await expect(page.locator(".composer-footer > span")).toContainText(
     "Estimasi 3 kredit",
@@ -133,6 +166,19 @@ test("AI model picker sends the chosen model and shows which model answered", as
   await expect(page.getByRole("button", { name: "Pilih model" })).toContainText(
     "deepseek-reasoner",
   );
+  // The expensive model the operator mapped to Kuat is priced where it is
+  // chosen: 8 credits, and the composer estimate agrees before sending.
+  await page.getByRole("button", { name: "Pilih model" }).click();
+  // The id also appears in the tier hints, so pick the option by its own id.
+  await page.locator('[data-model="claude-sonnet-4-20250514"]').click();
+  await expect(page.locator(".composer-footer > span")).toContainText(
+    "Estimasi 8 kredit",
+  );
+  await expect(
+    page
+      .getByRole("button", { name: "Pilih model" })
+      .locator(".ai-model-price"),
+  ).toHaveText("8 kredit/pesan");
 });
 
 test("AI model picker stays honest when the provider list cannot be read", async ({
@@ -160,6 +206,14 @@ test("AI model picker stays honest when the provider list cannot be read", async
   // Tier presets remain selectable and the picker keeps no fake model list.
   await expect(list.getByRole("option", { name: /Kuat/ })).toHaveCount(1);
   await expect(list.getByRole("option")).toHaveCount(4);
+  // Without a catalogue the presets still state their own price rather than
+  // implying a free turn or a number nobody will charge.
+  await expect(list.locator('[data-model="Kuat"] small')).toContainText(
+    "8 kredit/pesan",
+  );
+  await expect(list.locator('[data-model="Cepat"] small')).toContainText(
+    "1 kredit/pesan",
+  );
   await list.getByRole("option", { name: /Kuat/ }).click();
   await expect(page.getByRole("button", { name: "Pilih model" })).toContainText(
     "Kuat",

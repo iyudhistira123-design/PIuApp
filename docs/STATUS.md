@@ -16,11 +16,18 @@ Installer baru atomik 001–010, pemeriksaan read-only tabel/RLS/RPC/bucket, dan
 - **Halaman menyatakan kedaluwarsa apa adanya**: kartu paket menulis "20 kredit/hari", "hangus 2 bulan setelah terbit", dan top-up "berlaku 12 bulan sejak pembelian"; kalimat "kredit tidak kedaluwarsa" di halaman paket, landing, kartu saldo dashboard, dan halaman Akun & kredit diganti kalimat yang sama dengan policy database.
 - **Penjaga angka**: `tests/credit-lots.test.ts` (6 tes PGlite) menguji reset harian, urutan pemakaian lot, kedaluwarsa per sumber, hibah/revoke admin, backfill, dan refund reservasi lama dengan invarian `sum(remaining) = max(balance, 0)`; `tests/credits-model.test.ts` membaca `piwu_credit_policy()` di 010 sehingga tangga di UI dan policy database tidak bisa berbeda; `tests/services-db.test.ts` dan `tests/admin.test.ts` ikut memuat 010; installer gabungan diregenerasi ke **001–010** bersama CHECK/BOOTSTRAP.
 
+## Boros kredit kini menyebut modelnya (16 Oktober 2026)
+
+- **Harga per model dari server, bukan taksiran UI**: `GET /api/ai/models` kini ikut mengirim `costs[]` (satu entri `{model, tier, cost}` per model yang dilayani API key), `tierCosts` (Cepat 1 / Seimbang 3 / Kuat 8), serta `askCost` 1 dan `planCost` 2. Aturannya tidak berubah — biaya tetap 1/3/8 per tier dan model provider dihitung Seimbang kecuali dipetakan operator lewat `LLM_MODEL_*` — tetapi sekarang **setiap model di pemilih menulis biayanya** ("3 kredit/pesan", "dipakai untuk tier Kuat · 8 kredit", preset Otomatis menulis rentang 1–8), dan nilai itu dibaca dari katalog yang sama dengan yang dipakai server saat menagih. Bila daftar model gagal dibaca, preset tier tetap menyebut harganya sendiri, bukan angka kosong.
+- **Estimasi composer ikut satu angka**: `estimateCredits()` menerima katalog, jadi "Estimasi N kredit · belum ditagih" memakai harga model yang dipilih; Ask 1 dan Plan 2 tetap tidak berubah oleh model.
+- **Panel admin (tetap baca-saja)** menambahkan kolom **Kredit/pesan** pada tabel pemetaan tier, dibaca dari harga yang sama.
+- **Verifikasi**: `tests/ai-models.test.ts` menambah tes "setiap model yang tampil punya harga, dan tagihan server sama dengan harga itu" (termasuk pemeriksaan bahwa `resolveAiModel` menagih tepat angka di katalog untuk Builder, dan 1/2 untuk Ask/Plan); `tests/ai-model-picker.spec.ts` mengunci teks harga per model, harga di tombol pemicu, rentang preset, dan estimasi 8 kredit untuk model yang dipetakan ke Kuat; unit/integrasi **336/336**.
+
 ## Pembaruan sebelumnya (16 Oktober 2026): kredit mengikuti harga, durasi dinyatakan (digantikan oleh lot di atas)
 
 > Catatan: angka dan janji di bagian ini adalah kebijakan sebelum migration 010. Kebijakan yang berlaku sekarang ada di pembaruan paling atas.
 
-**335/335 unit/integrasi** lulus di atas migration 010; suite browser lengkap **107/107** lulus pada pohon sebelumnya (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
+**336/336 unit/integrasi** lulus di atas migration 010; suite browser lengkap **107/107** lulus pada pohon sebelumnya (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
 
 Kredit sekarang mengikuti harga, dan setiap paket menyebut berapa lama jatahnya bertahan:
 

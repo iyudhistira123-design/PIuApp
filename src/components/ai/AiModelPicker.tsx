@@ -10,8 +10,7 @@ import {
 import {
   AI_TIERS,
   TIER_INFO,
-  tierCost,
-  tierOfModel,
+  modelCost,
   type AiModelCatalog,
 } from "../../lib/ai";
 import "./ai-model-picker.css";
@@ -177,6 +176,17 @@ export default function AiModelPicker({
         ? `fallback ${catalog.defaultModel}`
         : "";
   };
+  /** What one chat turn costs here, from the server catalogue when we have it. */
+  const price = (model: string) => modelCost({ model, catalog });
+  /** "3 kredit/pesan", or the range a preset can take when the prompt decides. */
+  const priceLabel = (model: string) => {
+    if (model === "Otomatis") {
+      const cepat = price("Cepat").cost;
+      const kuat = price("Kuat").cost;
+      return `${cepat}–${kuat} kredit/pesan`;
+    }
+    return `${price(model).cost} kredit/pesan`;
+  };
 
   return (
     <div className="ai-model-picker" ref={root}>
@@ -192,6 +202,7 @@ export default function AiModelPicker({
       >
         <Sparkles size={10} />
         <span>{value}</span>
+        <em className="ai-model-price">{priceLabel(value)}</em>
         {value !== "Otomatis" &&
         !(AI_TIERS as readonly string[]).includes(value)
           ? groupOf(catalog, value) && <em>{groupOf(catalog, value)}</em>
@@ -252,10 +263,10 @@ export default function AiModelPicker({
                 <ul role="presentation">
                   {section.models.map((model) => {
                     const index = flat.indexOf(model);
-                    const tier = tierOfModel(model, catalog?.tiers || {});
                     const isTier = (AI_TIERS as readonly string[]).includes(
                       model,
                     );
+                    const tier = isTier ? model : price(model).tier;
                     return (
                       <li
                         key={model}
@@ -275,15 +286,19 @@ export default function AiModelPicker({
                         <span className="ai-model-name">{model}</span>
                         {isTier ? (
                           <small>
-                            {TIER_INFO[model]}
+                            {TIER_INFO[model]} · {priceLabel(model)}
                             {tierHint(model) ? " · " + tierHint(model) : ""}
                           </small>
                         ) : catalog?.tiers[tier] === model ? (
                           <small>
-                            dipakai untuk tier {tier} · {tierCost(tier)} kredit
+                            dipakai untuk tier {tier} · {price(model).cost}{" "}
+                            kredit
                           </small>
                         ) : (
-                          <small>3 kredit per pesan Builder</small>
+                          // The price printed here is the price the server bills:
+                          // it comes from the catalogue (costs[]), not from a
+                          // number typed into this component.
+                          <small>{priceLabel(model)}</small>
                         )}
                         {model === value && <Check size={11} />}
                       </li>
@@ -311,8 +326,8 @@ export default function AiModelPicker({
             ) : (
               <span>
                 {catalog
-                  ? `${catalog.count} model dari API key Anda · ${providers} grup`
-                  : "Daftar model diambil dari endpoint /models provider Anda."}
+                  ? `${catalog.count} model dari API key Anda · ${providers} grup · harga per pesan dari server`
+                  : "Daftar model diambil dari endpoint /models provider Anda. Harga per pesan menyusul dari server."}
               </span>
             )}
           </div>

@@ -137,6 +137,16 @@ export async function realAccountFixture(page: Page, ai = true) {
           { label: "Model lainnya", models: ["jamba-1.5-large"] },
         ],
         tiers: { Kuat: "claude-sonnet-4-20250514" },
+        // Same shape the server sends: one price per model plus the tier
+        // prices, so the picker can print what it will be charged.
+        costs: modelCatalogue.map((model) =>
+          model === "claude-sonnet-4-20250514"
+            ? { model, tier: "Kuat", cost: 8 }
+            : { model, tier: "Seimbang", cost: 3 },
+        ),
+        tierCosts: { Cepat: 1, Seimbang: 3, Kuat: 8 },
+        askCost: 1,
+        planCost: 2,
         defaultModel: "claude-sonnet-4-20250514",
         defaultSource: "LLM_MODEL",
       },

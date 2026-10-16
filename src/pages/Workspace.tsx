@@ -3037,6 +3037,7 @@ function WorkspaceContent({ project }: { project: Project }) {
                               mode,
                               model,
                               tiers: catalog?.tiers,
+                              catalog,
                               prompt: input,
                               hasAttachments:
                                 attachments.length > 0 || references.length > 0,

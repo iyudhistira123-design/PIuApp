@@ -82,6 +82,29 @@ export function automaticTier({ prompt = "", hasAttachments = false } = {}) {
   return prompt.length > 1200 || hasAttachments ? "Kuat" : "Seimbang";
 }
 
+/** What one chat turn costs on each tier preset, from the shared price list. */
+export function tierCosts() {
+  return {
+    Cepat: CREDIT_COSTS.chat.Cepat,
+    Seimbang: CREDIT_COSTS.chat.Seimbang,
+    Kuat: CREDIT_COSTS.chat.Kuat,
+  };
+}
+
+/**
+ * What the server would charge for one chat turn on each model the API key
+ * serves. The picker prints these numbers, so a shown price is a billed price:
+ * both sides call tierOfModel/tierCost, and an operator override (LLM_MODEL_*)
+ * moves the price on the model it maps, not on a copy in the UI.
+ */
+export function modelCosts(env, models) {
+  const tiers = tierModels(env);
+  return models.map((model) => {
+    const tier = tierOfModel(model, tiers);
+    return { model, tier, cost: tierCost(tier) };
+  });
+}
+
 export function modelCatalog(env, models) {
   const tiers = tierModels(env);
   const fallback = env.LLM_MODEL || models[0] || "";
@@ -91,6 +114,11 @@ export function modelCatalog(env, models) {
     models,
     groups: groupModels(models),
     tiers,
+    // Ask/Plan prices are fixed; chat prices follow the tier the model bills as.
+    costs: modelCosts(env, models),
+    tierCosts: tierCosts(),
+    askCost: CREDIT_COSTS.ask,
+    planCost: CREDIT_COSTS.plan,
     defaultModel: fallback,
     defaultSource: env.LLM_MODEL
       ? "LLM_MODEL"
