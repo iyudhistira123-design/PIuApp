@@ -73,9 +73,10 @@ test("AI model picker lists every model the API key serves, grouped, searchable 
   await expect(list.locator('[data-model="glm-4.6"] small')).toHaveText(
     "3 kredit/pesan",
   );
-  // A tier preset states the range its automatic choice can spend.
+  // A tier preset states the range its automatic choice can spend: Otomatis
+  // picks Seimbang or Kuat, never the cheapest tier, so the range says 3–8.
   await expect(list.locator('[data-model="Otomatis"] small')).toContainText(
-    "1–8 kredit/pesan",
+    "3–8 kredit/pesan",
   );
   await expect(list.locator('[data-model="Kuat"] small')).toContainText(
     "8 kredit/pesan",
@@ -85,7 +86,7 @@ test("AI model picker lists every model the API key serves, grouped, searchable 
     page
       .getByRole("button", { name: "Pilih model" })
       .locator(".ai-model-price"),
-  ).toHaveText("1–8 kredit/pesan");
+  ).toHaveText("3–8 kredit/pesan");
   // Search narrows the list...
   await page.getByLabel("Cari model").fill("deepseek");
   await expect(list.locator("[data-model]")).toHaveCount(2);

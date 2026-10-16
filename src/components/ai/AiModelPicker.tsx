@@ -178,12 +178,21 @@ export default function AiModelPicker({
   };
   /** What one chat turn costs here, from the server catalogue when we have it. */
   const price = (model: string) => modelCost({ model, catalog });
-  /** "3 kredit/pesan", or the range a preset can take when the prompt decides. */
+  /**
+   * "3 kredit/pesan", or the range a preset can take when the prompt decides.
+   * Otomatis never picks Cepat (server rule: long prompts or attachments go
+   * Kuat, everything else Seimbang), so the range starts at Seimbang instead of
+   * promising a price it can never charge.
+   */
   const priceLabel = (model: string) => {
     if (model === "Otomatis") {
-      const cepat = price("Cepat").cost;
+      const seimbang = price("Seimbang").cost;
       const kuat = price("Kuat").cost;
-      return `${cepat}–${kuat} kredit/pesan`;
+      const low = Math.min(seimbang, kuat);
+      const high = Math.max(seimbang, kuat);
+      return low === high
+        ? `${low} kredit/pesan`
+        : `${low}–${high} kredit/pesan`;
     }
     return `${price(model).cost} kredit/pesan`;
   };
