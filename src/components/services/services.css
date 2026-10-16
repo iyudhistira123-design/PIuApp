@@ -203,8 +203,18 @@
 .service-page a {
   color: inherit;
 }
+/* Links inherit the page colour inside the shell, so a link styled as a solid
+   button has to keep its own text colour or it renders nearly invisible. */
+.service-page a.button-dark {
+  color: #fff;
+}
+.service-page a.button-danger {
+  color: #fff;
+}
 .service-page .eyebrow-label {
-  color: var(--ide-subtle, #6e7680);
+  /* #636c78 keeps the label readable at 11px: 5.05:1 on the page background,
+     which axe checks on the service pages (same idea as the auth override). */
+  color: var(--ide-subtle, #636c78);
   font-size: 11px;
   letter-spacing: 1.5px;
 }

@@ -135,6 +135,11 @@ export default function Services({
               </div>
             </div>
             <h2>Paket & top-up</h2>
+            <p className="service-actions">
+              <Link to="/upgrade">
+                Buka halaman paket (perbandingan & rincian kredit)
+              </Link>
+            </p>
             <p>
               Paket prabayar 30 hari, tanpa penagihan otomatis. Pembelian paket
               tambahan dijadwalkan setelah masa aktif sebelumnya; kredit

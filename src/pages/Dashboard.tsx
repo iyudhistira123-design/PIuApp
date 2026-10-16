@@ -277,7 +277,7 @@ export default function Dashboard() {
               <br />
               untuk ide-ide berikutnya.
             </p>
-            <Link to="/#pricing">
+            <Link to="/upgrade">
               Jelajahi PiwuApp Pro <ArrowUpRight size={13} />
             </Link>
           </div>

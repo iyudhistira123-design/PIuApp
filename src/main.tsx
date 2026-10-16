@@ -23,6 +23,7 @@ import WorkspaceSession from "./components/storage/WorkspaceSession";
 const PasswordRecovery = lazy(() => import("./pages/PasswordRecovery"));
 const Admin = lazy(() => import("./pages/Admin"));
 const Services = lazy(() => import("./pages/Services"));
+const Upgrade = lazy(() => import("./pages/Upgrade"));
 const Workspace = lazy(() => import("./pages/Workspace"));
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -129,6 +130,9 @@ function App() {
               ),
             )}
             <Route path="/login" element={<Auth />} />
+            {/* Pricing stays reachable without the workspace gate: the page
+                itself explains what a session would unlock. */}
+            <Route path="/upgrade" element={<Upgrade />} />
             <Route path="/forgot-password" element={<PasswordRecovery />} />
             <Route
               path="/reset-password"
