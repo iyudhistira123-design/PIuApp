@@ -84,16 +84,12 @@ for (const size of sizes) {
       page.getByRole("button", { name: "Apakah saya harus bisa coding?" }),
     ).toHaveAttribute("aria-expanded", "true");
     if ([320, 834, 1440].includes(size.width)) {
-      await page
-        .locator(".templates-section")
-        .screenshot({
-          path: `.artifacts/responsive-${size.name}-templates.png`,
-        });
-      await page
-        .locator(".features-section")
-        .screenshot({
-          path: `.artifacts/responsive-${size.name}-features.png`,
-        });
+      await page.locator(".templates-section").screenshot({
+        path: `.artifacts/responsive-${size.name}-templates.png`,
+      });
+      await page.locator(".features-section").screenshot({
+        path: `.artifacts/responsive-${size.name}-features.png`,
+      });
       const results = await new AxeBuilder({ page })
         .include(".landing")
         .analyze();

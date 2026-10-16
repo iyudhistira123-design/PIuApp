@@ -115,13 +115,11 @@ export function registerMarketplace(app, ctx) {
           .select("id,title,price,status")
           .single(),
       );
-      res
-        .status(201)
-        .json({
-          template,
-          notice:
-            "Template dipublikasikan. Pendapatan bersih 80% dicatat setelah pembayaran terverifikasi; pencairan belum otomatis.",
-        });
+      res.status(201).json({
+        template,
+        notice:
+          "Template dipublikasikan. Pendapatan bersih 80% dicatat setelah pembayaran terverifikasi; pencairan belum otomatis.",
+      });
     }),
   );
   app.post(

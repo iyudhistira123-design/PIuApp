@@ -89,17 +89,13 @@ export function registerAnalytics(app, ctx) {
             .digest("hex")
         : null;
       check(
-        await ctx.admin
-          .from("analytics_events")
-          .insert({
-            project_id: event.projectId,
-            path: event.path.split("?")[0],
-            referrer: event.referrer
-              .replace(/[^a-zA-Z0-9.-]/g, "")
-              .slice(0, 253),
-            device: event.device,
-            visitor_hash: visitor,
-          }),
+        await ctx.admin.from("analytics_events").insert({
+          project_id: event.projectId,
+          path: event.path.split("?")[0],
+          referrer: event.referrer.replace(/[^a-zA-Z0-9.-]/g, "").slice(0, 253),
+          device: event.device,
+          visitor_hash: visitor,
+        }),
       );
       res.status(204).end();
     }),

@@ -1,4 +1,4 @@
-# Status implementasi — 15 Oktober 2026
+# Status implementasi — 16 Oktober 2026
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
@@ -6,7 +6,28 @@
 
 Installer baru atomik 001–009, pemeriksaan read-only tabel/RLS/RPC/bucket, dan bootstrap superadmin terverifikasi beserta audit tersedia di [supabase/README.md](../supabase/README.md). Installer menolak database lama/konflik bucket; tidak ada reset data otomatis. **93/93 unit/integrasi lulus**, termasuk tiga tes paket SQL baru. Database live belum diubah. Bootstrap tidak membuat akun/password.
 
-## Pembaruan terbaru: admin dan hardening
+## Pembaruan terbaru (16 Oktober 2026): dashboard yang menjawab, plugin Studio sekali pasang
+
+**307/307 unit/integrasi** dan **99/99 tes browser lengkap** lulus (dua kali: 1 worker 6,9 menit dan 2 worker 4,8 menit), build produksi 42,21 detik, `check:bundle` editor **3.201.506 B** / gzip 822.641 B / 38 aset / total 13.860.812 B — di bawah anggaran. Semuanya memakai data yang sudah ada: **tanpa tabel baru, tanpa migration baru**.
+
+Dashboard kini menjawab pertanyaan yang sebelumnya harus diklik dulu:
+
+- **Kredit di sidebar**: saldo, plan, dan pemakaian 7 hari terakhir dari `GET /api/account`, dirinci per jenis dari `ledger.reason` (`ai` → Percakapan AI, `sandbox` → Build & audit, `publish` → Publish). Baris positif (top up, kredit awal) bukan pemakaian; di bawah 10 kredit muncul peringatan "Saldo menipis". Saldo yang gagal dimuat ditulis "Belum bisa dimuat", bukan ditampilkan 0.
+- **"Menunggu Anda"**: keputusan menggantung dari endpoint yang sudah ada — komentar belum `resolved`, undangan kolaborator belum dijawab (kedaluwarsa tidak dihitung), domain kustom belum aktif, deploy terakhir gagal, bundle Studio masih menunggu, sinkronisasi berkonflik. Hanya 4 project terbaru diperiksa, dan panelnya menyebut berapa yang diperiksa serta berapa yang tidak bisa diperiksa; satu endpoint mati tidak pernah muncul sebagai "tidak ada yang menunggu".
+- **Kartu project**: badge sinkronisasi (`local/pending/conflict`), baris "Terakhir: …" dari pesan terakhir, dan isi project (jumlah file, riwayat, ukuran, foto x/12; untuk project Roblox: jumlah objek scene dan berapa mesh yang sudah punya aset Roblox dari `studio.assets.json`).
+- **Kualitas project**: skor Lighthouse terakhir dari `GET /api/projects/:id/audits` beserta arah perubahannya, sub-skor, dan jumlah temuan. Tombol audit (3 kredit) hanya muncul bila peran mengizinkan, `capabilities.audit` aktif, dan revisi terakhir sudah tersinkron. Tombol Lighthouse di panel Layanan juga diperbaiki: syaratnya `capabilities.audit` (yang memang disetel server), bukan capability lain.
+- **Aktivitas terbaru**: 8 kejadian terakhir lintas project dari riwayat versi. Panelnya menyebut sumbernya — pesan chat belum menyimpan stempel waktu, jadi feed ini bukan log percakapan.
+- **Cari sampai ke isi**: kotak cari membaca nama, isi file, lalu percakapan, dan kartu menyebut di mana kata itu ditemukan. Tiap project punya anggaran 1,5 juta karakter; project yang terlalu besar untuk diperiksa seluruhnya dilaporkan, bukan didiamkan. Di bawah dua huruf hanya nama yang dicocokkan. Ditambah saringan Semua/Web/Mobile/Roblox/Komentar terbuka.
+- **Kesiapan fitur**: capability server dalam bahasa gunanya, plus status plugin Studio (hanya ditanyakan bila ada project Roblox). Yang belum aktif disebut persis apa yang kurang (mis. `NETLIFY_TOKEN`, `APP_BASE_URL`); semua siap = satu baris hijau.
+- **Cadangan**: unduh semua project + riwayat + foto IndexedDB ke satu berkas JSON, dan pulihkan dari berkas dengan konfirmasi di dalam dialog Penyimpanan. Pemulihan selalu menambah (id baru, nama bentrok jadi "(pulih)"); berkas yang tidak dikenal ditolak dengan alasan.
+
+Plugin Studio v2.1.0 (`.rbxmx`, sekali pasang) terdokumentasi di [ROBLOX.md](ROBLOX.md): izin HTTP lewat **Plugin Management** (bukan `HttpEnabled`), tombol tes koneksi, impor `scene.roblox.json` sekali klik, dan unggah aset Open Cloud opsional. Dua perbaikan pendukung: unggah GLB ke Roblox (`studio/assets`) dulu memakai anggaran 30 detik sehingga unggahan yang sebenarnya sudah masuk dilaporkan "belum terkonfirmasi" — sekarang 180 detik, dan anggarannya diuji (`tests/api-budget.test.ts`); asersi e2e project Roblox sekarang memeriksa berkas yang benar-benar diunduh pengguna (`.rbxmx`), bukan `.luau`.
+
+Satu tes browser (`ai-model-picker`) yang gagal 3 dari 6 suite penuh juga ditelusuri sampai akar: aplikasi menolak giliran kedua selama project belum tersinkron (perilaku yang benar), balasan tiruan tesnya sama untuk kedua giliran sehingga penantiannya terpuaskan oleh giliran pembuatan project, dan lokator penulis pesan mencocokkan dua pesan. Diperbaiki di sisi tes; perintah kontensi yang sebelumnya 4/4 gagal kini 40/40 lulus. **Tidak ada perubahan kode aplikasi untuk itu.**
+
+**Batas yang belum berubah:** belum ada klaim pengujian terhadap Studio asli, perangkat native, atau database live (migration 006 belum diterapkan); tidak ada provider berbayar, inference, pembayaran, atau deploy publik dalam verifikasi ini. Kredit **per project** tidak mungkin dihitung — `credit_ledger` tidak menyimpan project id — jadi hanya saldo dan pemakaian agregat yang disajikan.
+
+## Pembaruan sebelumnya: admin dan hardening
 
 **269/269 unit/integrasi, 93/93 browser lengkap (lima regresi motion landing, empat regresi pemilih model AI, empat regresi panel admin baru, empat regresi komposer hero, empat regresi mode riset, dua regresi laporan ops dan dua regresi ekspor GLB bertesktur), 8/8 regresi native/tema, build produksi, 11/11 smoke HTTP dan 1/1 tes bundle produksi lulus.** Admin ditambah pencarian server, filter, ekspor CSV, diagnostik, panel AI & model, rincian kredit per akun dan runtime/sandbox, serta aksesibilitas tabel. Migration 007 menambahkan rate limit/kuota bersama; 008 menambahkan direktori akun service-only; 009 menambahkan cache hasil pencarian bersama (khusus service role, tanpa akses browser). Produksi fail-closed bila kontrol keamanan/koordinasi tidak tersedia. Routing sandbox tetap memerlukan affinity; belum HA/failover transparan.
 

@@ -104,17 +104,15 @@ export function registerCollaboration(app, ctx) {
           .catch(() => null);
         emailSent = Boolean(result?.ok);
       }
-      res
-        .status(201)
-        .json({
-          invite,
-          link,
-          emailSent,
-          notice:
-            body.email && !emailSent
-              ? "Undangan dibuat. Email belum terkirim; bagikan tautan secara manual."
-              : undefined,
-        });
+      res.status(201).json({
+        invite,
+        link,
+        emailSent,
+        notice:
+          body.email && !emailSent
+            ? "Undangan dibuat. Email belum terkirim; bagikan tautan secara manual."
+            : undefined,
+      });
     }),
   );
   app.delete(
@@ -215,13 +213,11 @@ export function registerCollaboration(app, ctx) {
           "Konfirmasikan email atau nomor HP Anda terlebih dahulu.",
         );
       const id = check(
-        await ctx
-          .needAdmin()
-          .rpc("piwu_accept_invite", {
-            p_hash: hash(req.params.token),
-            p_user: req.user.id,
-            p_email: req.user.email_confirmed_at ? req.user.email || "" : "",
-          }),
+        await ctx.needAdmin().rpc("piwu_accept_invite", {
+          p_hash: hash(req.params.token),
+          p_user: req.user.id,
+          p_email: req.user.email_confirmed_at ? req.user.email || "" : "",
+        }),
       );
       res.json({ projectId: id });
     }),

@@ -9,6 +9,8 @@
     "build": "tsc -b && vite build",
     "plugin:rbxmx": "node scripts/build-plugin-rbxmx.mjs",
     "plugin:check": "node scripts/build-plugin-rbxmx.mjs --check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --import tsx --import ./tests/storage-setup.mjs --test --test-concurrency=2 tests/*.test.ts",
     "test:e2e": "playwright test",
