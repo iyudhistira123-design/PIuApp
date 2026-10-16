@@ -28,6 +28,22 @@ export const accountPayload = (overrides: Record<string, unknown> = {}) => ({
     },
   ],
   plan: { plan: "Free" },
+  // What `GET /api/account` answers about today's allowance: the database's own
+  // numbers and the instant of the next reset.
+  credits: {
+    applied: true,
+    source: "database",
+    plan: "Free",
+    daily: 20,
+    dailyClaimed: 20,
+    dailyRemaining: 12,
+    monthlyCap: 600,
+    monthlyUsed: 120,
+    resetUtcHour: 0,
+    resetAt: new Date(Date.now() + 3 * 3600000).toISOString(),
+    planMonths: 2,
+    topupMonths: 12,
+  },
   products: {
     pro: {
       kind: "plan",

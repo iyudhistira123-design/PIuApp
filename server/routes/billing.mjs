@@ -14,6 +14,7 @@ import {
   verifyPaymentHook,
 } from "../providers/payments.mjs";
 import { rateLimit } from "../lib/context.mjs";
+import { creditStatus } from "../lib/credit-status.mjs";
 export function registerBilling(app, ctx) {
   app.get(
     "/api/account",
@@ -81,8 +82,14 @@ export function registerBilling(app, ctx) {
           .select("reward_status")
           .eq("referrer_id", req.user.id),
       );
+      // What the database says about today's allowance, asked after the claim
+      // above (piwu_ensure_credits refills it) so the numbers describe the day
+      // the account is actually in. A missing migration or an unreadable
+      // answer comes back as `applied: false` with a note, never as a guess.
+      const credits = await creditStatus(admin, req.user.id);
       res.json({
         balance,
+        credits,
         ledger,
         orders,
         plan: plans[0] || { plan: "Free" },

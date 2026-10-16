@@ -150,7 +150,7 @@ export default function Upgrade() {
       <p className="upgrade-lead">
         Semua paket di halaman ini prabayar {PLAN_DAYS} hari. Tidak ada
         penagihan berulang dan tidak ada penguncian fitur yang disembunyikan.{" "}
-        {expiryLine()}
+        {expiryLine(data?.credits)}
       </p>
 
       {!signedIn && (
@@ -263,8 +263,8 @@ export default function Upgrade() {
 
               <h2>Seberapa lama kredit bertahan</h2>
               <p className="plan-meta">
-                {expiryLine()} Tabel ini menjawab pertanyaan yang berbeda —
-                berapa lama sebuah jatah terpakai habis pada tiga pola
+                {expiryLine(data?.credits)} Tabel ini menjawab pertanyaan yang
+                berbeda — berapa lama sebuah jatah terpakai habis pada tiga pola
                 pemakaian. Angkanya aritmetika dari harga per operasi (
                 {costLine()}), bukan janji; pemakaian Anda bisa lebih hemat atau
                 lebih boros.

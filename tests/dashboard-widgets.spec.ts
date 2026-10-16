@@ -34,6 +34,20 @@ test.beforeEach(async ({ page }) => {
         ],
         orders: [],
         plan: { plan: "Free" },
+        credits: {
+          applied: true,
+          source: "database",
+          plan: "Free",
+          daily: 20,
+          dailyClaimed: 20,
+          dailyRemaining: 12,
+          monthlyCap: 600,
+          monthlyUsed: 120,
+          resetUtcHour: 0,
+          resetAt: new Date(Date.now() + 3 * 3600000).toISOString(),
+          planMonths: 2,
+          topupMonths: 12,
+        },
         products: [],
         paymentsEnabled: false,
         provider: null,
@@ -210,10 +224,17 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit.locator(".credit-lasts")).toContainText(
     "kredit paket & top-up ada masa berlaku",
   );
-  // The daily allowance and the countdown to its reset, where the balance is
-  // read: the plan in this fixture is Free, so the line says 20 kredit/hari.
+  // The daily allowance, the countdown to its reset and what is left of today
+  // — all of it from the server's answer, not from the shared price list.
+  await expect(credit.locator(".credit-daily")).toHaveAttribute(
+    "data-credits",
+    "database",
+  );
   await expect(credit.locator(".credit-daily")).toContainText(
-    "20 kredit/hari · direset 00:00 UTC",
+    "20 kredit/hari · direset 00:00 UTC (dalam",
+  );
+  await expect(credit.locator(".credit-daily")).toContainText(
+    "sisa hari ini 12",
   );
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 

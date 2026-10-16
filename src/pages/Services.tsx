@@ -5,10 +5,14 @@ import { api } from "../services/api";
 import { useStore } from "../lib/store";
 import { requestCloudSync } from "../lib/cloud/sync";
 import {
+  capLine,
   count,
+  creditsNote,
   dailyLine,
   lastsLabel,
+  serverDailyLine,
   usageProfile,
+  type ServerCredits,
 } from "../lib/dashboard/plans";
 const ReplayPlayer = lazy(() => import("../components/services/ReplayPlayer"));
 import "../components/services/services.css";
@@ -143,7 +147,21 @@ export default function Services({
                       )
                     : "Paket gratis"}
                 </p>
-                <small>{dailyLine(data.plan.plan)}</small>
+                <small
+                  className="credit-daily"
+                  data-credits={data.credits?.source || ""}
+                >
+                  {data.credits
+                    ? data.credits.applied
+                      ? serverDailyLine(data.credits)
+                      : creditsNote(data.credits)
+                    : dailyLine(data.plan.plan)}
+                </small>
+                {!!capLine(data.credits as ServerCredits | null) && (
+                  <small className="credit-cap">
+                    {capLine(data.credits as ServerCredits | null)}
+                  </small>
+                )}
               </div>
             </div>
             <h2>Paket & top-up</h2>

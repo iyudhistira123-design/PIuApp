@@ -500,6 +500,125 @@ test("accounts that existed before 010 keep their credits as a dated lot", async
   }
 });
 
+test("piwu_credit_status reports today's allowance, the cap and the real reset instant", async () => {
+  const db = new PGlite();
+  try {
+    await setup(db);
+    await migrate(db);
+    const [free] = await fresh(db);
+
+    // A brand-new Free account: claim first (that is what /api/account does),
+    // then read the status. Nothing is invented: the numbers are today's lot.
+    await db.query("select piwu_ensure_credits($1)", [free]);
+    const status = async (user: string) =>
+      (await db.query<any>("select piwu_credit_status($1) as s", [user]))
+        .rows[0].s;
+    const first = await status(free);
+    assert.equal(first.applied, true);
+    assert.equal(first.source, "database");
+    assert.equal(first.plan, "Free");
+    assert.equal(first.daily, 20);
+    assert.equal(first.dailyClaimed, 20);
+    assert.equal(first.dailyRemaining, 20);
+    assert.equal(first.monthlyCap, 600);
+    assert.equal(first.monthlyUsed, 20);
+    assert.equal(first.resetUtcHour, 0);
+    assert.equal(first.planMonths, 2);
+    assert.equal(first.topupMonths, 12);
+    // The reset instant is the daily lot's own expiry: the countdown a page
+    // prints cannot point at a time the database does not use.
+    const lotExpiry = await scalar(
+      db,
+      "select expires_at from credit_lots where user_id=$1 and source='daily'",
+      [free],
+    );
+    assert.equal(
+      new Date(first.resetAt).toISOString(),
+      new Date(lotExpiry as string).toISOString(),
+    );
+    const hours = (new Date(first.resetAt).getTime() - Date.now()) / 3600000;
+    assert.ok(hours > 0 && hours <= 24, `reset dalam ${hours} jam`);
+    assert.equal(new Date(first.resetAt).getUTCHours(), 0);
+    // Reading it twice changes nothing (it is a read, not a claim).
+    assert.deepEqual(await status(free), first);
+
+    // Spending today's allowance shows up as less left over, and settling a
+    // reservation does not touch the accounting.
+    const job = crypto.randomUUID();
+    await db.query("select piwu_reserve_credits($1,$2,5,'ai')", [free, job]);
+    const spent = await status(free);
+    assert.equal(spent.dailyRemaining, 15);
+    assert.equal(spent.dailyClaimed, 20);
+    await db.query("select piwu_finish_credits($1,true)", [job]);
+    assert.equal((await status(free)).dailyRemaining, 15);
+
+    // A refunded operation hands the credits back to the same lot.
+    const failed = crypto.randomUUID();
+    await db.query("select piwu_reserve_credits($1,$2,3,'ai')", [free, failed]);
+    assert.equal((await status(free)).dailyRemaining, 12);
+    await db.query("select piwu_finish_credits($1,false)", [failed]);
+    assert.equal((await status(free)).dailyRemaining, 15);
+
+    // Team: the bigger allowance and no monthly cap.
+    const [team] = await fresh(db);
+    await db.query(
+      "insert into subscriptions(user_id,plan,provider,status,current_period_start,current_period_end) values($1,'Team','test','active',now()-interval '1 day',now()+interval '29 days')",
+      [team],
+    );
+    await db.query("select piwu_ensure_credits($1)", [team]);
+    const seat = await status(team);
+    assert.equal(seat.plan, "Team");
+    assert.equal(seat.daily, 40);
+    assert.equal(seat.dailyRemaining, 40);
+    assert.equal(seat.monthlyCap, null);
+    assert.equal(seat.monthlyUsed, 40);
+
+    // Free account whose month is already full: nothing is granted today, and
+    // the status says so instead of promising 20 credits that will not come.
+    const [capped] = await fresh(db);
+    await db.query("select piwu_ensure_credits($1)", [capped]);
+    await db.query(
+      "update credit_lots set amount=600,remaining=600 where user_id=$1 and source='daily'",
+      [capped],
+    );
+    await db.query("delete from credit_lots where user_id=$1", [capped]);
+    await db.query(
+      "insert into credit_lots(user_id,source,amount,remaining,granted_at,expires_at,reference) values($1,'daily',600,600,now()-interval '2 days',now()-interval '1 day','daily:past')",
+      [capped],
+    );
+    await db.query("update credit_accounts set balance=600 where user_id=$1", [
+      capped,
+    ]);
+    assert.equal(
+      await scalar(db, "select piwu_claim_daily($1)", [capped]),
+      0,
+      "plafon bulanan Free sudah penuh",
+    );
+    const full = await status(capped);
+    assert.equal(full.daily, 20);
+    assert.equal(full.dailyClaimed, 0);
+    assert.equal(full.dailyRemaining, 0);
+    assert.equal(full.monthlyUsed, 600);
+    assert.ok(!/0001-01-01/.test(String(full.resetAt)));
+
+    // The status is service-only: a browser session may not read other people's
+    // allowance, and the balance invariant is untouched by any of this.
+    await db.exec("set role authenticated");
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [
+      free,
+    ]);
+    await assert.rejects(
+      db.query("select piwu_credit_status($1)", [free]),
+      /permission denied/,
+    );
+    await db.exec("reset role");
+    await assertLotsMatchBalance(db, free);
+    await assertLotsMatchBalance(db, team);
+  } finally {
+    await db.close();
+  }
+});
+
 test("a reservation made before 010 still refunds into a lot", async () => {
   const db = new PGlite();
   try {

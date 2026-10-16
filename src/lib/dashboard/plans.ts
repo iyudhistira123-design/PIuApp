@@ -266,17 +266,62 @@ export function planFacts() {
  * One sentence with every deadline in the model, for the page header. Built
  * from the same numbers the database enforces, so it cannot drift.
  */
-export function expiryLine() {
+export function expiryLine(credits?: ServerCredits | null) {
   const free = PLAN_LADDER.find((plan) => !plan.monthly);
   const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro");
   const team = PLAN_LADDER[PLAN_LADDER.length - 1];
-  return `Jatah harian ${count(free?.daily || 0)} kredit (Pro ${count(pro?.daily || 0)}, Team ${count(team.daily)}) direset setiap hari pukul 00:00 UTC dan tidak menumpuk; kredit paket ${expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up berlaku ${CREDIT_EXPIRY_MONTHS.topup} bulan sejak pembelian.`;
+  // The header prefers what the database answered about this account, so the
+  // sentence describes the deployment the reader is actually on.
+  const fromServer = credits?.applied === true ? credits : null;
+  const daily = fromServer ? wholeNumber(fromServer.daily) : null;
+  const hour = fromServer
+    ? (wholeNumber(fromServer.resetUtcHour) ?? DAILY_RESET_UTC_HOUR)
+    : DAILY_RESET_UTC_HOUR;
+  const planMonths = fromServer
+    ? (wholeNumber(fromServer.planMonths) ?? CREDIT_EXPIRY_MONTHS.plan)
+    : CREDIT_EXPIRY_MONTHS.plan;
+  const topupMonths = fromServer
+    ? (wholeNumber(fromServer.topupMonths) ?? CREDIT_EXPIRY_MONTHS.topup)
+    : CREDIT_EXPIRY_MONTHS.topup;
+  const reset = `direset setiap hari pukul ${String(hour).padStart(2, "0")}:00 UTC dan tidak menumpuk`;
+  if (fromServer && daily)
+    return `Jatah harian paket ${fromServer.plan || "ini"} ${count(daily)} kredit, ${reset}; kredit paket ${expiryLabel(planMonths)}, kredit top-up berlaku ${topupMonths} bulan sejak pembelian.`;
+  return `Jatah harian ${count(free?.daily || 0)} kredit (Pro ${count(pro?.daily || 0)}, Team ${count(team.daily)}) ${reset}; kredit paket ${expiryLabel(planMonths)}, kredit top-up berlaku ${topupMonths} bulan sejak pembelian.`;
 }
 
 /**
+ * What the server answers about today's allowance (`credits` in
+ * `GET /api/account`). `applied: false` means the database could not describe
+ * it — a missing migration or an unreadable answer — and then the note is what
+ * the page says instead of a number nobody verified.
+ */
+export interface ServerCredits {
+  applied: boolean;
+  source: string;
+  note?: string;
+  plan?: string;
+  daily?: number;
+  dailyClaimed?: number;
+  dailyRemaining?: number;
+  monthlyCap?: number | null;
+  monthlyUsed?: number;
+  resetUtcHour?: number;
+  resetAt?: string;
+  planMonths?: number | null;
+  topupMonths?: number | null;
+}
+
+const wholeNumber = (value: unknown) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(number) : null;
+};
+
+/**
  * When the daily allowance next refills (00:00 UTC by default), as a timestamp.
- * The hour comes from the same constant migration 010 uses, so a card cannot
- * count down to a reset the database does not do.
+ * When the server sent the instant of the next reset, that is the one used: it
+ * is the daily lot's own expiry, so the countdown cannot point at a time the
+ * database does not use. Otherwise the hour comes from the same constant
+ * migration 010 uses.
  */
 export function nextResetAt(now = Date.now()) {
   const date = new Date(now);
@@ -290,8 +335,51 @@ export function nextResetAt(now = Date.now()) {
 }
 
 /** Whole hours to that reset, never negative. */
-export function hoursToReset(now = Date.now()) {
+export function hoursToReset(now = Date.now(), resetAt?: string | null) {
+  const target = resetAt ? Date.parse(resetAt) : Number.NaN;
+  if (Number.isFinite(target))
+    return Math.max(0, Math.ceil((target - now) / 3600000));
   return Math.max(0, Math.ceil((nextResetAt(now) - now) / 3600000));
+}
+
+/**
+ * "20 kredit/hari · direset 00:00 UTC (dalam 9 jam) · sisa hari ini 12", from
+ * what the server answered. Empty until the server confirms the allowance is
+ * actually enforced (`applied`), so a page never prints a daily quota that the
+ * database it is talking to does not grant.
+ */
+export function serverDailyLine(
+  credits: ServerCredits | null | undefined,
+  now = Date.now(),
+) {
+  if (!credits || credits.applied !== true) return "";
+  const daily = wholeNumber(credits.daily);
+  if (daily === null || daily <= 0) return "";
+  const hour = wholeNumber(credits.resetUtcHour) ?? DAILY_RESET_UTC_HOUR;
+  const hours = hoursToReset(now, credits.resetAt);
+  let line = `${count(daily)} kredit/hari · direset ${String(hour).padStart(2, "0")}:00 UTC (dalam ${hours} jam)`;
+  const left = wholeNumber(credits.dailyRemaining);
+  if (left !== null)
+    line += ` · sisa hari ini ${count(Math.max(0, Math.min(left, daily)))}`;
+  return line;
+}
+
+/**
+ * "Plafon 600 kredit/bulan · terpakai 120" for the plan that has a ceiling.
+ * Empty for a paid plan (which reports null) and before the server confirmed.
+ */
+export function capLine(credits: ServerCredits | null | undefined) {
+  if (!credits || credits.applied !== true) return "";
+  const cap = wholeNumber(credits.monthlyCap);
+  if (cap === null || cap <= 0) return "";
+  const used = Math.max(0, wholeNumber(credits.monthlyUsed) ?? 0);
+  return `Plafon ${count(cap)} kredit/bulan · terpakai ${count(Math.min(used, cap))}`;
+}
+
+/** What to say when the server could not describe the allowance; "" when it did. */
+export function creditsNote(credits: ServerCredits | null | undefined) {
+  if (!credits || credits.applied === true) return "";
+  return typeof credits.note === "string" && credits.note ? credits.note : "";
 }
 
 /**

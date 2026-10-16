@@ -2,11 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PLAN_DAYS,
+  capLine,
+  creditsNote,
   dailyLine,
   expiryLine,
   hoursToReset,
   nextResetAt,
   offerExpiry,
+  serverDailyLine,
   paymentsNotice,
   periodLeft,
   planFacts,
@@ -217,6 +220,80 @@ test("the daily allowance line counts down to the real reset, in UTC", () => {
   assert.match(dailyLine("Team", noon), /^40 kredit\/hari/);
   assert.equal(dailyLine("Enterprise", noon), "");
   assert.equal(dailyLine("", noon), "");
+});
+
+test("the daily line follows the server's allowance, not the shared ladder", () => {
+  const noon = Date.parse("2026-10-16T12:00:00.000Z");
+  const credits = {
+    applied: true,
+    source: "database",
+    plan: "Free",
+    daily: 20,
+    dailyClaimed: 20,
+    dailyRemaining: 12,
+    monthlyCap: 600,
+    monthlyUsed: 120,
+    resetUtcHour: 0,
+    resetAt: "2026-10-17T00:00:00.000Z",
+    planMonths: 2,
+    topupMonths: 12,
+  };
+  // The countdown uses the instant the database sent (the daily lot's expiry),
+  // even when that is not what the shared model would compute from the hour.
+  assert.equal(
+    serverDailyLine(credits, noon),
+    "20 kredit/hari · direset 00:00 UTC (dalam 12 jam) · sisa hari ini 12",
+  );
+  assert.equal(
+    serverDailyLine({ ...credits, resetAt: "2026-10-16T14:00:00.000Z" }, noon),
+    "20 kredit/hari · direset 00:00 UTC (dalam 2 jam) · sisa hari ini 12",
+  );
+  // A Team seat reports its own allowance and no ceiling.
+  assert.match(
+    serverDailyLine(
+      {
+        ...credits,
+        plan: "Team",
+        daily: 40,
+        dailyRemaining: 40,
+        monthlyCap: null,
+      },
+      noon,
+    ),
+    /^40 kredit\/hari/,
+  );
+  assert.equal(capLine({ ...credits, monthlyCap: null }), "");
+  assert.equal(capLine(credits), "Plafon 600 kredit/bulan · terpakai 120");
+  assert.equal(
+    capLine({ ...credits, monthlyUsed: 900 }),
+    "Plafon 600 kredit/bulan · terpakai 600",
+  );
+  // Nothing is printed before the server confirms the allowance exists: an
+  // unreadable or missing migration answer becomes the note instead of a number.
+  const missing = {
+    applied: false,
+    source: "migration",
+    note: "Jatah harian dan masa berlaku kredit belum aktif di database ini: terapkan migration 010_credit_lots.sql. Saldo tetap seperti yang tercatat.",
+  };
+  assert.equal(serverDailyLine(missing, noon), "");
+  assert.equal(serverDailyLine(null, noon), "");
+  assert.equal(capLine(missing), "");
+  assert.equal(creditsNote(missing), missing.note);
+  assert.equal(creditsNote(credits), "");
+  assert.equal(creditsNote(undefined), "");
+  // A missing or unparsable instant falls back to the shared hour, so the line
+  // is still a countdown rather than an empty sentence.
+  assert.equal(hoursToReset(noon, "bukan tanggal"), 12);
+  assert.equal(hoursToReset(noon, "2026-10-16T11:00:00.000Z"), 0);
+  assert.equal(
+    serverDailyLine({ ...credits, resetAt: undefined }, noon),
+    "20 kredit/hari · direset 00:00 UTC (dalam 12 jam) · sisa hari ini 12",
+  );
+  // And the header sentence speaks about the account the reader is on.
+  const line = expiryLine(credits);
+  assert.match(line, /Jatah harian paket Free 20 kredit/);
+  assert.match(line, /kredit top-up berlaku 12 bulan/);
+  assert.equal(/Enterprise/.test(line), false);
 });
 
 test("prices are written as rupiah without hidden decimals", () => {

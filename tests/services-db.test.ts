@@ -54,6 +54,20 @@ test("Service migration: atomic credits, payment replay/refund, invite and role 
       20,
       "lot harus menjumlah sebesar saldo",
     );
+    // `GET /api/account` asks this after the claim above: the page prints the
+    // allowance the database actually granted, the day's remainder (5 credits
+    // spent and given back above), and the instant of the next reset.
+    const status = (
+      await db.query<any>("select piwu_credit_status($1) as s", [a])
+    ).rows[0].s;
+    assert.equal(status.applied, true);
+    assert.equal(status.plan, "Free");
+    assert.equal(status.daily, 20);
+    assert.equal(status.dailyRemaining, 20);
+    assert.equal(status.monthlyCap, 600);
+    assert.equal(status.resetUtcHour, 0);
+    assert.equal(new Date(status.resetAt).getUTCHours(), 0);
+    assert.ok(new Date(status.resetAt).getTime() > Date.now());
     await db.query(
       "insert into referrals(referrer_id,referred_id) values($1,$2)",
       [b, a],

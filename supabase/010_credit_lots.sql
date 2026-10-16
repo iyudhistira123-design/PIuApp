@@ -107,6 +107,33 @@ declare policy jsonb;day_key text;plan_name text;allowance integer;month_total i
  return allowance;
 end;$$;
 
+-- Read-only facts about today's allowance, for GET /api/account: what the plan
+-- grants per day, how much of it is still unspent, how far the Free cap is, and
+-- when the next reset happens. The reset instant is exactly the daily lot's
+-- expiry (piwu_lot_expiry), so a countdown in the UI cannot point at a time the
+-- database does not use. Writes nothing: call piwu_ensure_credits first if the
+-- day has not been claimed yet.
+create function public.piwu_credit_status(p_user uuid) returns jsonb language plpgsql security definer set search_path='' as $$
+declare policy jsonb;plan_name text;allowance integer;claimed integer;left_over integer;month_total integer;h integer;begin
+ policy:=public.piwu_credit_policy();h:=(policy->>'resetUtcHour')::integer;
+ select plan into plan_name from public.subscriptions where user_id=p_user and status='active' and current_period_end>now() order by current_period_end desc limit 1;
+ if plan_name='Team' then allowance:=(policy->>'dailyTeam')::integer;
+ elsif plan_name='Pro' then allowance:=(policy->>'dailyPro')::integer;
+ else allowance:=(policy->>'dailyFree')::integer;end if;
+ select coalesce(sum(l.remaining),0),coalesce(sum(l.amount),0) into left_over,claimed from public.credit_lots l
+  where l.user_id=p_user and l.source='daily' and l.reference='daily:'||to_char((now() at time zone 'utc'),'YYYY-MM-DD');
+ select coalesce(sum(l.amount),0) into month_total from public.credit_lots l
+  where l.user_id=p_user and l.source='daily' and (l.granted_at at time zone 'utc')>=date_trunc('month',(now() at time zone 'utc'));
+ return jsonb_build_object(
+  'applied',true,'source','database',
+  'plan',coalesce(plan_name,'Free'),
+  'daily',allowance,'dailyClaimed',claimed,'dailyRemaining',left_over,
+  'monthlyCap',case when plan_name in('Pro','Team') then null else (policy->>'freeMonthlyCap')::integer end,
+  'monthlyUsed',month_total,
+  'resetUtcHour',h,'resetAt',public.piwu_lot_expiry('daily',now()),
+  'planMonths',(policy->>'planMonths')::integer,'topupMonths',(policy->>'topupMonths')::integer);
+end;$$;
+
 create or replace function public.piwu_ensure_credits(p_user uuid) returns integer language plpgsql security definer set search_path='' as $$
 declare result integer;begin
  insert into public.credit_accounts(user_id,balance) values(p_user,0) on conflict do nothing;
@@ -330,12 +357,14 @@ end;$$;
 revoke all on function public.piwu_grant_credits(uuid,integer,text,text,timestamptz,text) from public,anon,authenticated;
 revoke all on function public.piwu_revoke_credits(uuid,integer,text,text) from public,anon,authenticated;
 revoke all on function public.piwu_claim_daily(uuid) from public,anon,authenticated;
+revoke all on function public.piwu_credit_status(uuid) from public,anon,authenticated;
 revoke all on function public.piwu_expire_credits() from public,anon,authenticated;
 revoke all on function public.piwu_credit_policy() from public,anon,authenticated;
 revoke all on function public.piwu_lot_expiry(text,timestamptz) from public,anon,authenticated;
 grant execute on function public.piwu_grant_credits(uuid,integer,text,text,timestamptz,text) to service_role;
 grant execute on function public.piwu_revoke_credits(uuid,integer,text,text) to service_role;
 grant execute on function public.piwu_claim_daily(uuid) to service_role;
+grant execute on function public.piwu_credit_status(uuid) to service_role;
 grant execute on function public.piwu_expire_credits() to service_role;
 grant execute on function public.piwu_credit_policy() to service_role;
 grant execute on function public.piwu_lot_expiry(text,timestamptz) to service_role;

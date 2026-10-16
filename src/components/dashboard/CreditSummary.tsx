@@ -5,7 +5,14 @@ import { api } from "../../services/api";
 import { useStore } from "../../lib/store";
 import { scopeFor } from "../../lib/cloud/types";
 import { creditSpend } from "../../lib/dashboard/attention";
-import { dailyLine, lastsLabel, usageProfile } from "../../lib/dashboard/plans";
+import {
+  creditsNote,
+  dailyLine,
+  lastsLabel,
+  serverDailyLine,
+  usageProfile,
+  type ServerCredits,
+} from "../../lib/dashboard/plans";
 import {
   LEDGER_DAYS,
   isLowBalance,
@@ -34,6 +41,8 @@ type CardState =
       ledgerDays: number;
       split: SpendRow[];
       low: boolean;
+      /** What the server answered about today's allowance. */
+      credits: ServerCredits | null;
     };
 
 export default function CreditSummary() {
@@ -55,6 +64,7 @@ export default function CreditSummary() {
           balance?: number;
           ledger?: { delta?: number; created_at?: string }[];
           plan?: { plan?: string } | null;
+          credits?: ServerCredits | null;
         }>("/account");
         if (!live) return;
         const balance = Number(account.balance || 0);
@@ -66,6 +76,7 @@ export default function CreditSummary() {
           ledgerDays: LEDGER_DAYS,
           split: spendByReason(account.ledger, LEDGER_DAYS),
           low: isLowBalance(balance),
+          credits: account.credits || null,
         });
       } catch {
         if (live) setState({ phase: "error" });
@@ -117,7 +128,19 @@ export default function CreditSummary() {
         {lastsLabel(state.balance, usageProfile("normal"))} pada pemakaian
         normal · kredit paket &amp; top-up ada masa berlaku
       </small>
-      <small className="credit-daily">{dailyLine(state.plan)}</small>
+      {/* The allowance and its countdown come from the server answer when it has
+          one; a database without migration 010 gets its own note instead of a
+          quota that is not being granted. */}
+      <small
+        className="credit-daily"
+        data-credits={state.credits?.source || ""}
+      >
+        {state.credits
+          ? state.credits.applied
+            ? serverDailyLine(state.credits)
+            : creditsNote(state.credits)
+          : dailyLine(state.plan)}
+      </small>
       {!!state.split.length && (
         <ul className="credit-split">
           {state.split.map((row) => (
