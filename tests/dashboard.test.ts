@@ -14,6 +14,12 @@ import {
   syncNotice,
   type ProjectSignals,
 } from "../src/lib/dashboard/attention";
+import {
+  CREDIT_LOW,
+  isLowBalance,
+  spendByReason,
+  spendLabel,
+} from "../src/lib/dashboard/credits";
 import { SCENE_PATH } from "../src/lib/roblox/scene";
 import type { Project } from "../src/lib/types";
 
@@ -160,6 +166,51 @@ test("credit spend counts only what was actually spent inside the window", () =>
   assert.equal(creditSpend(ledger, 7, NOW), 42);
   assert.equal(creditSpend([], 7, NOW), 0);
   assert.equal(creditSpend(undefined, 7, NOW), 0);
+});
+
+test("credit spending is grouped by what it was spent on, biggest first", () => {
+  const rows = spendByReason(
+    [
+      { delta: -3, reason: "sandbox", created_at: days(-1) },
+      { delta: -3, reason: "sandbox", created_at: days(-2) },
+      { delta: -12, reason: "ai", created_at: days(-3) },
+      { delta: -5, reason: "publish", created_at: days(-4) },
+      { delta: -99, reason: "ai", created_at: days(-30) },
+      { delta: 500, reason: "Pembayaran terverifikasi", created_at: days(-1) },
+      { delta: -1, reason: undefined, created_at: days(-1) },
+      { delta: -2, reason: "eksperimen", created_at: days(-1) },
+    ],
+    7,
+    NOW,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.label, row.credits, row.count]),
+    [
+      ["Percakapan AI", 12, 1],
+      ["Build & audit", 6, 2],
+      ["Publish", 5, 1],
+      ["eksperimen", 2, 1],
+      ["Lainnya", 1, 1],
+    ],
+  );
+  assert.equal(
+    spendLabel("AI"),
+    "Percakapan AI",
+    "alasan server tidak peka huruf",
+  );
+  assert.equal(spendLabel(""), "Lainnya");
+  assert.deepEqual(spendByReason(undefined, 7, NOW), []);
+});
+
+test("a low balance is called out before the next session runs dry", () => {
+  assert.equal(isLowBalance(CREDIT_LOW), true);
+  assert.equal(isLowBalance(CREDIT_LOW + 1), false);
+  assert.equal(isLowBalance(0), true);
+  assert.equal(
+    isLowBalance(Number.NaN),
+    false,
+    "angka tak dikenal bukan alasan panik",
+  );
 });
 
 test("a project's footprint is its real contents, not a rounded guess", () => {

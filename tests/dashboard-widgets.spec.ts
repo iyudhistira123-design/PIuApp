@@ -21,13 +21,13 @@ test.beforeEach(async ({ page }) => {
           {
             id: "l-1",
             delta: -30,
-            reason: "ai_turn",
+            reason: "ai",
             created_at: new Date().toISOString(),
           },
           {
             id: "l-2",
             delta: 500,
-            reason: "topup",
+            reason: "Pembayaran terverifikasi",
             created_at: new Date().toISOString(),
           },
         ],
@@ -130,6 +130,11 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit).toContainText("1.240");
   await expect(credit).toContainText("Free");
   await expect(credit).toContainText("7 hari terakhir: 30 kredit");
+  // Where those credits went, and only the spending (top ups are not spending).
+  await expect(credit.locator(".credit-split")).toContainText("Percakapan AI");
+  await expect(credit.locator(".credit-split")).toContainText("30");
+  await expect(credit).not.toContainText("Pembayaran");
+  await expect(credit.locator(".credit-low")).toHaveCount(0);
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 
   // 2. "Menunggu Anda": four real items from four real endpoints.
@@ -166,6 +171,36 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   ).toHaveClass(/active/);
   await expect(dialog).toContainText("tombolnya terlalu kecil di ponsel");
   expect(errors).toEqual([]);
+});
+
+test("a thinning balance is called out with a way to top up", async ({
+  page,
+}) => {
+  await page.unroute("**/api/account");
+  await page.route("**/api/account", (route) =>
+    route.fulfill({
+      json: {
+        balance: 4,
+        ledger: [
+          {
+            id: "l-3",
+            delta: -3,
+            reason: "sandbox",
+            created_at: new Date().toISOString(),
+          },
+        ],
+        orders: [],
+        plan: { plan: "Free" },
+      },
+    }),
+  );
+  await page.goto("/login");
+  await loginRealFixture(page);
+  const credit = page.locator(".dashboard-credit");
+  await expect(credit).toContainText("4");
+  await expect(credit.locator(".credit-low")).toContainText("Saldo menipis");
+  await expect(credit).toContainText("Build & audit");
+  await expect(credit.getByRole("link", { name: /top up/ })).toBeVisible();
 });
 
 test("the dashboard says so when the account endpoint is unreachable", async ({

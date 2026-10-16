@@ -5,6 +5,12 @@ import { api } from "../../services/api";
 import { useStore } from "../../lib/store";
 import { scopeFor } from "../../lib/cloud/types";
 import { creditSpend } from "../../lib/dashboard/attention";
+import {
+  LEDGER_DAYS,
+  isLowBalance,
+  spendByReason,
+  type SpendRow,
+} from "../../lib/dashboard/credits";
 
 /**
  * Credit balance where the user actually starts a session: the dashboard sidebar.
@@ -25,9 +31,9 @@ type CardState =
       plan: string;
       spend: number;
       ledgerDays: number;
+      split: SpendRow[];
+      low: boolean;
     };
-
-const LEDGER_DAYS = 7;
 
 export default function CreditSummary() {
   const user = useStore((s) => s.user);
@@ -50,12 +56,15 @@ export default function CreditSummary() {
           plan?: { plan?: string } | null;
         }>("/account");
         if (!live) return;
+        const balance = Number(account.balance || 0);
         setState({
           phase: "ready",
-          balance: Number(account.balance || 0),
+          balance,
           plan: account.plan?.plan || "Free",
           spend: creditSpend(account.ledger, LEDGER_DAYS),
           ledgerDays: LEDGER_DAYS,
+          split: spendByReason(account.ledger, LEDGER_DAYS),
+          low: isLowBalance(balance),
         });
       } catch {
         if (live) setState({ phase: "error" });
@@ -103,6 +112,24 @@ export default function CreditSummary() {
         {state.plan} · {state.ledgerDays} hari terakhir:{" "}
         {state.spend.toLocaleString("id-ID")} kredit
       </small>
+      {!!state.split.length && (
+        <ul className="credit-split">
+          {state.split.map((row) => (
+            <li key={row.reason || "lainnya"}>
+              <span>
+                {row.label}
+                {row.count > 1 ? ` (${row.count}×)` : ""}
+              </span>
+              <b>{row.credits.toLocaleString("id-ID")}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+      {state.low && (
+        <p className="credit-low">
+          Saldo menipis — top up sebelum sesi berikutnya.
+        </p>
+      )}
       <Link to="/account">
         Rincian &amp; top up <ArrowUpRight size={11} />
       </Link>

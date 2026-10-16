@@ -2397,6 +2397,31 @@ section h2 {
   border-color: #f0dccf;
   background: #fbf3ee;
 }
+.credit-split {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.credit-split li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9px;
+  color: #8b9a76;
+}
+.credit-split li b {
+  font-size: 9px;
+  font-weight: 500;
+  color: #55613f;
+}
+.credit-low {
+  margin-top: 6px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: #b9852f;
+}
 
 /* "Menunggu Anda": the decisions a project is waiting for. */
 .dashboard-waiting {
