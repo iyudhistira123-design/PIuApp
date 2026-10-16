@@ -102,9 +102,29 @@ test("Roblox project: real scene editing, mesh export, Luau editor, bridge unava
   await page
     .getByRole("button", { name: "Hubungkan Studio", exact: true })
     .click();
-  const plugin = await page.request.get("/plugins/PiwuStudio.luau");
-  expect(plugin.ok()).toBe(true);
-  expect(await plugin.text()).toContain("UpdateSourceAsync");
+  // What a user installs is the .rbxmx bundle: one Script whose Source is the
+  // real plugin, with the version the panel advertises. The .luau next to it is
+  // the manual fallback, and it must not drift from the bundle.
+  const install = page.getByRole("link", {
+    name: /Unduh plugin PiwuApp \.rbxmx · v\d/,
+  });
+  await expect(install).toHaveAttribute("href", "/plugins/PiwuStudio.rbxmx");
+  const version = (await install.textContent())!.match(/v([\d.]+)/)![1];
+  const bundle = await page.request.get("/plugins/PiwuStudio.rbxmx");
+  expect(bundle.ok()).toBe(true);
+  const xml = await bundle.text();
+  expect(xml).toContain('<Item class="Script"');
+  expect(xml).toContain('class="Script" referent="RBX0"');
+  expect(xml).toContain(`local VERSION = "${version}"`);
+  expect(xml).toContain("UpdateSourceAsync");
+  const manual = await page.request.get("/plugins/PiwuStudio.luau");
+  expect(manual.ok()).toBe(true);
+  const source = await manual.text();
+  expect(source).toContain("UpdateSourceAsync");
+  expect(source).toContain(`local VERSION = "${version}"`);
+  // The manual copy is raw Luau, not the XML bundle under another name.
+  expect(source.startsWith("--!strict")).toBe(true);
+  expect(source).not.toContain("</ProtectedString>");
   await page.getByRole("button", { name: "Buat token pasangan" }).click();
   await expect(page.locator(".rb-bridge").getByRole("alert")).toContainText(
     "belum dikonfigurasi",
