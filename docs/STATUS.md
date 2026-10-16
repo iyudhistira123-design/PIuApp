@@ -4,7 +4,7 @@
 
 ## Paket SQL siap pasang
 
-Installer baru atomik 001–009, pemeriksaan read-only tabel/RLS/RPC/bucket, dan bootstrap superadmin terverifikasi beserta audit tersedia di [supabase/README.md](../supabase/README.md). Installer menolak database lama/konflik bucket; tidak ada reset data otomatis. **93/93 unit/integrasi lulus**, termasuk tiga tes paket SQL baru. Database live belum diubah. Bootstrap tidak membuat akun/password.
+Installer baru atomik 001–010, pemeriksaan read-only tabel/RLS/RPC/bucket, dan bootstrap superadmin terverifikasi beserta audit tersedia di [supabase/README.md](../supabase/README.md). Installer menolak database lama/konflik bucket; tidak ada reset data otomatis. **93/93 unit/integrasi lulus**, termasuk tiga tes paket SQL baru. Database live belum diubah. Bootstrap tidak membuat akun/password.
 
 ## Pembaruan terbaru (16 Oktober 2026): kredit mengikuti harga, durasi dinyatakan
 

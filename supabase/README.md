@@ -7,11 +7,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 ## A. Project Supabase baru, belum pernah dipasang PiwuApp
 
 1. Pastikan project benar-benar baru/dikhususkan untuk PiwuApp. Auth dan Storage bawaan Supabase harus tersedia.
-2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–009** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
-3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–009 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
+2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–010** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
+3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–010 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
 4. Lanjutkan bootstrap admin di bagian C.
 
-**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–009 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
+**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–010 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
 
 ## B. Database lama / pernah menjalankan sebagian migration
 

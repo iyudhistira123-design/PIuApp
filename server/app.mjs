@@ -182,14 +182,19 @@ export function createApp({
   const stopWorker = worker
     ? startPublishWorker(ctx, sandbox, hosting)
     : () => {};
-  const recovery =
-    worker && ctx.admin
-      ? setInterval(() => {
-          void Promise.resolve(ctx.admin.rpc("piwu_recover_credits")).catch(
-            () => {},
-          );
-        }, 60000)
-      : null;
+  // The sweep also expires credit lots (010), which matters even when no
+  // publish worker is configured, so it runs whenever the service client is
+  // there. piwu_recover_credits already expires lots; without a worker the
+  // expiry call is the whole sweep.
+  const recovery = ctx.admin
+    ? setInterval(() => {
+        void Promise.resolve(
+          ctx.admin.rpc(
+            worker ? "piwu_recover_credits" : "piwu_expire_credits",
+          ),
+        ).catch(() => {});
+      }, 60000)
+    : null;
   recovery?.unref();
   const stop = () => {
     stopWorker();

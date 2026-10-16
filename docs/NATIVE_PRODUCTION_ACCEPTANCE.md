@@ -19,7 +19,7 @@ Prasyarat: project hasil ekspor, Node kompatibel SDK 57, perangkat dengan Expo G
 
 ## Roblox Studio
 
-Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTPS yang dapat dijangkau Studio, cloud/migration 001–009, akun terverifikasi, plugin `public/plugins/PiwuStudio.rbxmx` (atau `.luau` sebagai cadangan). Jangan memakai place produksi pertama kali.
+Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTPS yang dapat dijangkau Studio, cloud/migration 001–010, akun terverifikasi, plugin `public/plugins/PiwuStudio.rbxmx` (atau `.luau` sebagai cadangan). Jangan memakai place produksi pertama kali.
 
 - [ ] Catat versi Studio/plugin, commit, place uji privat dan peran akun (tanpa token).
 - [ ] Pairing memakai token terbatas/berumur pendek; verifikasi penolakan token kedaluwarsa/dicabut.
@@ -35,7 +35,7 @@ Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTP
 
 Prasyarat: URL target yang diizinkan, ruang lingkup pentest, data uji non-sensitif, backup, jadwal dan batas beban, kredensial lewat secret manager. Jangan memulai uji beban/pembayaran pada produksi tanpa batas dan izin operasional yang jelas.
 
-- [ ] Terapkan migration berurutan **001–009**, uji RLS/RPC/Storage/Realtime melalui akun Owner, Editor, Viewer, outsider, auditor/operator/superadmin asli.
+- [ ] Terapkan migration berurutan **001–010**, uji RLS/RPC/Storage/Realtime melalui akun Owner, Editor, Viewer, outsider, auditor/operator/superadmin asli.
 - [ ] Verifikasi signup, OAuth, recovery email benar-benar diterima, expiry/revocation, sesi lama dan perubahan peran.
 - [ ] Jalankan dua proses/mesin API terhadap PostgreSQL/Supabase yang sama, `NODE_ENV=production`, reverse proxy dengan CIDR trust sempit.
 - [ ] Beban bergantian antar-node tetap berbagi rate limit dan kuota sandbox; spoof forwarded header dari jalur tidak tepercaya tidak melewati batas.

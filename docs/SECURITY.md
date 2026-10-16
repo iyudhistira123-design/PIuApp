@@ -17,7 +17,7 @@
 
 ## Syarat sebelum produksi
 
-1. Jalankan migration 001–009 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
+1. Jalankan migration 001–010 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
 2. Konfirmasi seluruh kredensial server-only, HTTPS, allowed redirects, email/phone verification, aturan signup, body/concurrency limits, proxy trust yang sempit, HSTS/CSP dan logging teredaksi.
 3. Produksi memakai rate limiter dan admission sandbox PostgreSQL (migration 007) serta fail-closed ketika database tidak tersedia. SDK handle tetap lokal dan memerlukan sticky routing; belum failover transparan. Kuota bersama mencakup sandbox interaktif, bukan build sekali pakai. Queue publish/credit/payment menggunakan database; uji crash recovery, cleanup konkurensi dan kapasitas pada infrastruktur sebenarnya.
 4. Uji invoice sukses/gagal/duplicate/out-of-order/refund/chargeback. Partial refund, Xendit refund di luar invoice callback, checkout dengan respons provider hilang, fraud, pajak, dispute dan payout belum otomatis. Jangan aktifkan pembayaran live tanpa rekonsiliasi/runbook.

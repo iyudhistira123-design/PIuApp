@@ -14,7 +14,8 @@ with markers(migration,table_name,function_signature) as (values
  ('007','public.runtime_rate_buckets','public.piwu_take_rate(text,integer,integer)'),
  ('007','public.runtime_sandbox_slots','public.piwu_sandbox_slot(uuid,uuid,uuid,boolean)'),
  ('008',null,'public.piwu_admin_users(uuid,text,integer)'),
- ('009','public.runtime_search_cache',null)
+ ('009','public.runtime_search_cache',null),
+ ('010','public.credit_lots','public.piwu_claim_daily(uuid)')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)

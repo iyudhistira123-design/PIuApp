@@ -33,6 +33,7 @@ test("Admin SQL: migrations, permissions, audit/idempotency, CAS, broadcasts and
       "003_services",
       "004_project_data",
       "005_admin",
+      "010_credit_lots",
     ])
       await db.exec(
         readFileSync("supabase/" + n + ".sql", "utf8").replace(
@@ -83,10 +84,10 @@ test("Admin SQL: migrations, permissions, audit/idempotency, CAS, broadcasts and
     );
     const req = crypto.randomUUID();
     assert.deepEqual(await action(root, "credits", user, { delta: 50 }, req), {
-      result: { balance: 80 },
+      result: { balance: 70 },
     });
     assert.deepEqual(await action(root, "credits", user, { delta: 50 }, req), {
-      result: { balance: 80 },
+      result: { balance: 70 },
     });
     await assert.rejects(
       () => action(root, "credits", user, { delta: 51 }, req),
