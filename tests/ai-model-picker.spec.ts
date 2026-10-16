@@ -18,6 +18,14 @@ async function openWorkspace(page: import("@playwright/test").Page) {
   await expect(
     page.getByRole("button", { name: "Hentikan respons" }),
   ).toHaveCount(0, { timeout: 20000 });
+  // The workspace refuses a turn while the project is not on the server yet
+  // ("Sinkronkan project ke cloud terlebih dahulu."), which is correct but means
+  // a test that sends its own message must wait for the first write to land.
+  await expect(
+    page
+      .getByRole("button", { name: "Penyimpanan: Tersinkron ke cloud" })
+      .first(),
+  ).toBeVisible({ timeout: 20000 });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -80,7 +88,10 @@ test("AI model picker sends the chosen model and shows which model answered", as
       body: `data: ${JSON.stringify({
         type: "result",
         result: {
-          content: "Jawaban dengan model pilihan.",
+          // Names the prompt it answers: the creation turn runs before the
+          // choice is made, and an identical reply would satisfy the wait below
+          // with the wrong request (the model it carried was still "Otomatis").
+          content: `Jawaban dengan model pilihan untuk: ${body.prompt}`,
           creditsUsed: 3,
           model: body.model,
           tier: "Seimbang",
@@ -100,13 +111,22 @@ test("AI model picker sends the chosen model and shows which model answered", as
   );
   await page.getByLabel("Pesan untuk AI").fill("Jelaskan struktur project");
   await page.getByRole("button", { name: "Kirim pesan", exact: true }).click();
+  // Wait for the answer to *this* prompt before reading what was sent.
   await expect(
-    page.getByText("Jawaban dengan model pilihan.", { exact: true }),
+    page.getByText(
+      "Jawaban dengan model pilihan untuk: Jelaskan struktur project",
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible({ timeout: 15000 });
+  expect(sent.at(-1)?.prompt).toBe("Jelaskan struktur project");
   expect(sent.at(-1)?.model).toBe("deepseek-reasoner");
   // The reply names the model that answered, and the choice survives a reload.
+  // The last assistant message is the one that just answered; the creation turn
+  // above it was answered by the automatic tier.
   await expect(
-    page.locator(".chat-message.assistant .message-author"),
+    page.locator(".chat-message.assistant .message-author").last(),
   ).toContainText("deepseek-reasoner");
   await page.reload();
   await page.waitForSelector(".chat-composer");
