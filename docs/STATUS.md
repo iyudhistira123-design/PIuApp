@@ -27,7 +27,7 @@ Installer baru atomik 001–010, pemeriksaan read-only tabel/RLS/RPC/bucket, dan
 
 > Catatan: angka dan janji di bagian ini adalah kebijakan sebelum migration 010. Kebijakan yang berlaku sekarang ada di pembaruan paling atas.
 
-**337/337 unit/integrasi** lulus di atas migration 010; suite browser lengkap **107/107** lulus pada pohon sebelumnya (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
+**337/337 unit/integrasi** lulus di atas migration 010; suite browser lengkap **108/108** lulus (8,4 menit, 1 worker) (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
 
 Kredit sekarang mengikuti harga, dan setiap paket menyebut berapa lama jatahnya bertahan:
 
