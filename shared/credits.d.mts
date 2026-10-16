@@ -10,21 +10,46 @@ export const CREDIT_COSTS: {
   publish: number;
 };
 export const PLAN_PERIOD_DAYS: number;
+export const DAILY_RESET_UTC_HOUR: number;
+export const CREDIT_EXPIRY_MONTHS: {
+  daily: number;
+  plan: number;
+  topup: number;
+  bonus: number;
+  refund: number;
+  admin: null;
+};
 export const FREE_PLAN: {
   plan: string;
   credits: number;
-  once: boolean;
+  daily: boolean;
+  monthlyCap: number;
   reason: string;
 };
-export const PLAN_LADDER: {
+export interface PlanRow {
   plan: string;
   sku: string | null;
   monthly: number;
   annual: number;
+  /** Credits granted per paid period, or the daily allowance for Free. */
   credits: number;
-  once?: boolean;
+  /** Daily allowance that refills every day at 00:00 UTC. */
+  daily: number;
+  /** Monthly ceiling a Free account may not pass; null when there is none. */
+  monthlyCap: number | null;
+  /** Months until a granted lot expires; 0 means "at the end of that day". */
+  expiryMonths: number;
+}
+export const PLAN_LADDER: PlanRow[];
+export const TOPUP_LADDER: {
+  sku: string;
+  amount: number;
+  credits: number;
+  expiryMonths: number;
 }[];
-export const TOPUP_LADDER: { sku: string; amount: number; credits: number }[];
+export function planForSku(sku: string): PlanRow | undefined;
+export function dailyAllowance(planName: string): number;
+export function expiryLabel(months?: number | null): string;
 export function usageProfile(id: string): UsageProfile;
 export function costLine(): string;
 export interface UsageProfile {

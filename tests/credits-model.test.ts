@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   CREDIT_COSTS,
+  CREDIT_EXPIRY_MONTHS,
+  DAILY_RESET_UTC_HOUR,
   FREE_PLAN,
   PLAN_LADDER,
   PLAN_PERIOD_DAYS,
@@ -89,25 +91,71 @@ test("a bigger package is never more expensive per credit", () => {
     assert.ok(ratePerCredit(plan.amount, plan.credits) > 0);
 });
 
-test("the free allowance matches exactly what the database grants", () => {
-  const sql = readFileSync("supabase/003_services.sql", "utf8");
-  const ensure =
-    /create function public\.piwu_ensure_credits[\s\S]*?\$\$;/.exec(sql)?.[0];
-  assert.ok(ensure, "piwu_ensure_credits harus ada di 003_services.sql");
-  const granted = Number(
-    /values\s*\(\s*p_user\s*,\s*(\d+)\s*\)/.exec(ensure)?.[1],
+test("the published ladder carries the agreed rates and allowances", () => {
+  const rate = (name: string) => {
+    const plan = PLAN_LADDER.find((row) => row.plan === name)!;
+    return ratePerCredit(plan.monthly, plan.credits);
+  };
+  assert.equal(rate("Pro"), 133);
+  assert.equal(rate("Team"), 111);
+  const rates = TOPUP_LADDER.map((topup) =>
+    ratePerCredit(topup.amount, topup.credits),
   );
-  assert.equal(
-    granted,
-    FREE_PLAN.credits,
-    "kredit awal di SQL dan di shared/credits.mjs harus sama",
-  );
+  assert.deepEqual(rates, [163, 142]);
+  // Daily allowances: Free and Pro share one, Team gets double.
+  const daily = (name: string) =>
+    PLAN_LADDER.find((row) => row.plan === name)!.daily;
+  assert.equal(daily("Free"), 20);
+  assert.equal(daily("Pro"), 20);
+  assert.equal(daily("Team"), 40);
+  assert.equal(FREE_PLAN.monthlyCap, 600);
+});
+
+test("the credit model matches the database policy in migration 010", () => {
+  const sql = readFileSync("supabase/010_credit_lots.sql", "utf8");
+  const policy = /create function public\.piwu_credit_policy[\s\S]*?\$\$;/.exec(
+    sql,
+  )?.[0];
+  assert.ok(policy, "piwu_credit_policy harus ada di 010_credit_lots.sql");
+  const number = (key: string) => {
+    const found = new RegExp(`'${key}',\\s*(\\d+)`).exec(policy);
+    assert.ok(found, `policy ${key} harus ada`);
+    return Number(found[1]);
+  };
+  const row = (name: string) => PLAN_LADDER.find((plan) => plan.plan === name)!;
+  assert.equal(row("Free").daily, number("dailyFree"));
+  assert.equal(row("Pro").daily, number("dailyPro"));
+  assert.equal(row("Team").daily, number("dailyTeam"));
+  assert.equal(FREE_PLAN.monthlyCap, number("freeMonthlyCap"));
+  assert.equal(DAILY_RESET_UTC_HOUR, number("resetUtcHour"));
+  // The lot deadlines the pages print are the ones the database applies: plan
+  // 2 months, top-up and referral 12 months, daily at the end of the day.
+  assert.equal(CREDIT_EXPIRY_MONTHS.plan, number("planMonths"));
+  assert.equal(CREDIT_EXPIRY_MONTHS.topup, number("topupMonths"));
+  assert.equal(row("Pro").expiryMonths, CREDIT_EXPIRY_MONTHS.plan);
+  assert.equal(row("Team").expiryMonths, CREDIT_EXPIRY_MONTHS.plan);
+  for (const source of ["daily", "plan", "topup", "bonus", "refund", "admin"])
+    assert.ok(
+      source in CREDIT_EXPIRY_MONTHS,
+      `sumber lot ${source} harus punya masa berlaku`,
+    );
+  assert.equal(CREDIT_EXPIRY_MONTHS.admin, null, "hibah admin tidak hangus");
+  const expiry =
+    /create function public\.piwu_lot_expiry[\s\S]*?\$\$;/.exec(sql)?.[0] || "";
+  assert.match(expiry, /when 'daily' then/);
+  assert.match(expiry, /when 'topup' then p_at\+make_interval\(months=>tm\)/);
+  assert.match(expiry, /when 'bonus' then p_at\+make_interval\(months=>tm\)/);
+  assert.match(expiry, /else null/);
+  // Every top-up SKU on the ladder expires like the model says.
+  for (const topup of TOPUP_LADDER)
+    assert.equal(topup.expiryMonths, CREDIT_EXPIRY_MONTHS.topup);
   // The plan period the payment function applies is the one the pages print.
-  const interval = /interval '(\d+) days'/.exec(sql)?.[1];
+  const services = readFileSync("supabase/003_services.sql", "utf8");
+  const interval = /interval '(\d+) days'/.exec(services)?.[1];
   assert.equal(Number(interval), PLAN_PERIOD_DAYS);
-  // Free is free: no price anywhere, and no recurring allowance.
-  assert.equal(PLAN_LADDER[0].monthly, 0);
-  assert.equal(PLAN_LADDER[0].once, true);
+  // Free is free: no price anywhere, not even a discounted annual one.
+  assert.equal(row("Free").monthly, 0);
+  assert.equal(row("Free").annual, 0);
 });
 
 test("durations come from the real operation costs, in the stated order", () => {
@@ -157,7 +205,7 @@ test("the printed price list is generated from the costs it describes", () => {
   ])
     assert.match(line, new RegExp(`\\b${value}\\b`));
   assert.match(line, /chat Cepat 1 \/ Seimbang 3 \/ Kuat 8 kredit/);
-  // Anything the page says about time is a duration of usage. Nothing here may
-  // claim credits expire, because the schema has no expiry to enforce.
+  // The operation list says what each action costs and nothing about time: the
+  // deadlines are printed from the shared model, never mixed into this line.
   assert.equal(/kedaluwarsa|hangus/i.test(line), false);
 });

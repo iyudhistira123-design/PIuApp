@@ -24,7 +24,7 @@ test("the dashboard opens the upgrade page, which reads prices from the server",
   ).toContainText("199.000");
   await expect(
     planGrid.locator(".plan-card", { hasText: "PiwuApp Pro" }),
-  ).toContainText("800");
+  ).toContainText("1.500");
   await expect(
     page.locator(".plan-grid").nth(1).locator(".plan-card"),
   ).toHaveCount(2);
@@ -47,11 +47,14 @@ test("the dashboard opens the upgrade page, which reads prices from the server",
   // Credits follow the price: the card prints the effective rate for the
   // package, and the durations come from the shared costs, not from copy.
   const proCard = planGrid.locator(".plan-card", { hasText: "PiwuApp Pro" });
-  await expect(proCard.locator(".plan-rate")).toContainText("249");
-  await expect(proCard).toContainText("Kredit tidak kedaluwarsa");
+  await expect(proCard.locator(".plan-rate")).toContainText("133");
+  await expect(proCard).toContainText("20 kredit/hari");
+  await expect(proCard).toContainText("hangus 2 bulan setelah terbit");
+  await expect(proCard).toContainText("jatah harian tidak menumpuk");
   const teamCard = planGrid.locator(".plan-card", { hasText: "PiwuApp Team" });
-  await expect(teamCard.locator(".plan-rate")).toContainText("200");
-  await expect(teamCard.locator(".plan-credits")).toContainText("2.500");
+  await expect(teamCard.locator(".plan-rate")).toContainText("111");
+  await expect(teamCard.locator(".plan-credits")).toContainText("4.500");
+  await expect(teamCard).toContainText("40 kredit/hari");
   // "How long until it runs out" is answered with three stated profiles.
   const table = page.locator(".plan-table");
   await expect(table.locator(".plan-table-row")).toHaveCount(4);
@@ -102,13 +105,13 @@ test("checkout sends the chosen SKU and follows the provider link", async ({
     }),
   );
   await page
-    .locator(".plan-card", { hasText: "Top-up 100 kredit" })
+    .locator(".plan-card", { hasText: "Top-up 300 kredit" })
     .getByRole("button")
     .click();
   await expect(
     page.getByText("Halaman checkout provider (fixture)"),
   ).toBeVisible();
-  expect(sent).toEqual([{ sku: "credits100" }]);
+  expect(sent).toEqual([{ sku: "credits300" }]);
 });
 
 test("the upgrade page states the session requirement instead of showing prices", async ({
@@ -132,26 +135,26 @@ test("the landing prices come from the same credit ladder as the checkout", asyn
   const cards = page.locator("#pricing .pricing-card");
   await expect(cards).toHaveCount(3);
   await expect(cards.nth(0).locator(".pricing-credit")).toContainText(
-    "30 kredit",
+    "20 kredit/hari",
   );
   await expect(cards.nth(0).locator(".pricing-credit")).toContainText(
-    "tanpa reset bulanan",
+    "plafon 600 kredit/bulan",
   );
   await expect(cards.nth(1).locator(".price-value")).toHaveText("199.000");
   await expect(cards.nth(1).locator(".pricing-credit")).toContainText(
-    "800 kredit",
+    "1.500 kredit/bulan",
   );
   await expect(cards.nth(1).locator(".pricing-credit")).toContainText(
     "pemakaian normal",
   );
   await expect(cards.nth(2).locator(".pricing-credit")).toContainText(
-    "2.500 kredit",
+    "4.500 kredit/bulan",
   );
   await expect(cards.nth(2).locator(".pricing-credit")).toContainText(
-    "pemakaian intens",
+    "hangus 2 bulan setelah terbit",
   );
   await expect(page.locator(".pricing-note")).toContainText(
-    "Kredit tidak kedaluwarsa",
+    "Jatah harian direset setiap hari pukul 00:00 UTC dan tidak menumpuk",
   );
   const axe = await new AxeBuilder({ page }).analyze();
   expect(axe.violations).toEqual([]);

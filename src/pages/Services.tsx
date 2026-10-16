@@ -124,7 +124,8 @@ export default function Services({
                 <p>Kredit tersedia</p>
                 <small>
                   {lastsLabel(data.balance, usageProfile("normal"))} pada
-                  pemakaian normal · kredit tidak kedaluwarsa
+                  pemakaian normal · jatah harian direset, kredit paket &amp;
+                  top-up ada masa berlaku
                 </small>
               </div>
               <div className="service-card">

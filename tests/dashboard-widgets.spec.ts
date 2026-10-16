@@ -203,12 +203,12 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await expect(credit).not.toContainText("Pembayaran");
   await expect(credit.locator(".credit-low")).toHaveCount(0);
   // How long the balance lasts, at the stated usage, right where the session
-  // starts — and that credits do not expire.
+  // starts — with the deadlines the database enforces, not a promise.
   await expect(credit.locator(".credit-lasts")).toContainText(
     "pada pemakaian normal",
   );
   await expect(credit.locator(".credit-lasts")).toContainText(
-    "kredit tidak kedaluwarsa",
+    "kredit paket & top-up ada masa berlaku",
   );
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 

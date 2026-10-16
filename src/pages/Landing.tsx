@@ -9,8 +9,10 @@ import useLandingMotion, {
 } from "../components/landing/useLandingMotion";
 import { usePlatform, PlatformNotices } from "../components/admin/Platform";
 import {
+  CREDIT_EXPIRY_MONTHS,
   PLAN_LADDER,
   costLine,
+  expiryLabel,
   lastsLabel,
   usageProfile,
 } from "../../shared/credits.mjs";
@@ -68,11 +70,17 @@ const thousands = (value: number) =>
   new Intl.NumberFormat("id-ID").format(value);
 
 /** Credits and how long they last, straight from the shared price model. */
+const creditHeadline = (name: string) => {
+  const plan = ladder(name);
+  return plan.monthly
+    ? `${thousands(plan.credits)} kredit/bulan`
+    : `${thousands(plan.credits)} kredit/hari`;
+};
 const creditNote = (name: string) => {
   const plan = ladder(name);
-  if (plan.once)
-    return `${lastsLabel(plan.credits, usageProfile("ringan"))} pemakaian ringan · sekali, tanpa reset bulanan`;
-  return `${lastsLabel(plan.credits, usageProfile("normal"))} pemakaian normal · ${lastsLabel(plan.credits, usageProfile("intens"))} pemakaian intens`;
+  if (!plan.monthly)
+    return `direset tiap hari pukul 00:00 UTC · plafon ${thousands(plan.monthlyCap || 0)} kredit/bulan`;
+  return `${thousands(plan.daily)} kredit/hari + ${lastsLabel(plan.credits, usageProfile("normal"))} pemakaian normal · ${expiryLabel(plan.expiryMonths)}`;
 };
 
 // The pricing cards read the credit ladder in shared/credits.mjs (the same
@@ -650,7 +658,7 @@ export default function Landing() {
                   </span>
                 </div>
                 <div className="pricing-credit">
-                  <b>{thousands(ladder(p.name).credits)} kredit</b>
+                  <b>{creditHeadline(p.name)}</b>
                   <span>{creditNote(p.name)}</span>
                 </div>
                 <button
@@ -680,9 +688,11 @@ export default function Landing() {
             ))}
           </div>
           <p className="pricing-note">
-            Kredit tidak kedaluwarsa — yang berjalan 30 hari adalah masa paket,
-            bukan kreditnya. Perkiraan durasi di atas dihitung dari biaya nyata
-            per operasi ({costLine()}), jadi angkanya aritmetika, bukan janji.
+            Jatah harian direset setiap hari pukul 00:00 UTC dan tidak menumpuk;
+            kredit paket {expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up
+            berlaku {CREDIT_EXPIRY_MONTHS.topup} bulan. Perkiraan durasi di atas
+            dihitung dari biaya nyata per operasi ({costLine()}), jadi angkanya
+            aritmetika, bukan janji.
           </p>
         </section>
         <section

@@ -6,9 +6,21 @@
 
 Installer baru atomik 001–010, pemeriksaan read-only tabel/RLS/RPC/bucket, dan bootstrap superadmin terverifikasi beserta audit tersedia di [supabase/README.md](../supabase/README.md). Installer menolak database lama/konflik bucket; tidak ada reset data otomatis. **93/93 unit/integrasi lulus**, termasuk tiga tes paket SQL baru. Database live belum diubah. Bootstrap tidak membuat akun/password.
 
-## Pembaruan terbaru (16 Oktober 2026): kredit mengikuti harga, durasi dinyatakan
+## Pembaruan terbaru (16 Oktober 2026): kredit bentuk lot — jatah harian, rollover, kedaluwarsa
 
-**328/328 unit/integrasi** dan **107/107 tes browser lengkap** lulus (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
+**Migration 010 (`supabase/010_credit_lots.sql`) mengubah arti saldo kredit**: setiap kredit masuk sebagai _lot_ bertanggal, dan janji lama "kredit tidak kedaluwarsa" digantikan aturan yang ditegakkan database.
+
+- **Jatah harian**: Free dan Pro **20 kredit/hari**, Team **40 kredit/hari**, direset setiap hari pukul **00:00 UTC** dan **tidak menumpuk** — habis dipakai atau tidak, besok kembali ke batas. Free juga dibatasi plafon **600 kredit/bulan**. `piwu_claim_daily` idempoten per hari UTC (`daily:YYYY-MM-DD`), jadi memanggil ulang tidak menambah saldo, dan naik paket di tengah hari tidak memberi jatah harian kedua.
+- **Masa berlaku per lot**: kredit paket boleh menumpuk antar bulan tetapi **hangus 2 bulan setelah terbit**; kredit top-up dan bonus referral **berlaku 12 bulan**; hibah admin tidak hangus. Saldo akun lama di-backfill menjadi satu lot top-up 12 bulan (`migrasi-010:<user>`) supaya tidak ada kredit yang hilang. Penyapu `piwu_expire_credits` menulis satu baris ledger `expire:` per kejadian dan jalan tiap 60 detik — juga saat tidak ada publish worker.
+- **Tangga kredit baru**: Pro Rp 199.000 → **1.500/bulan + 20/hari** (Rp 133/kredit); Team Rp 499.000 → **4.500/bulan + 40/hari** (Rp 111/kredit); top-up Rp 49.000 → **300** (Rp 163/kredit) dan Rp 199.000 → **1.400** (Rp 142/kredit). Harga paket tidak diubah.
+- **Halaman menyatakan kedaluwarsa apa adanya**: kartu paket menulis "20 kredit/hari", "hangus 2 bulan setelah terbit", dan top-up "berlaku 12 bulan sejak pembelian"; kalimat "kredit tidak kedaluwarsa" di halaman paket, landing, kartu saldo dashboard, dan halaman Akun & kredit diganti kalimat yang sama dengan policy database.
+- **Penjaga angka**: `tests/credit-lots.test.ts` (6 tes PGlite) menguji reset harian, urutan pemakaian lot, kedaluwarsa per sumber, hibah/revoke admin, backfill, dan refund reservasi lama dengan invarian `sum(remaining) = max(balance, 0)`; `tests/credits-model.test.ts` membaca `piwu_credit_policy()` di 010 sehingga tangga di UI dan policy database tidak bisa berbeda; `tests/services-db.test.ts` dan `tests/admin.test.ts` ikut memuat 010; installer gabungan diregenerasi ke **001–010** bersama CHECK/BOOTSTRAP.
+
+## Pembaruan sebelumnya (16 Oktober 2026): kredit mengikuti harga, durasi dinyatakan (digantikan oleh lot di atas)
+
+> Catatan: angka dan janji di bagian ini adalah kebijakan sebelum migration 010. Kebijakan yang berlaku sekarang ada di pembaruan paling atas.
+
+**335/335 unit/integrasi** lulus di atas migration 010; suite browser lengkap **107/107** lulus pada pohon sebelumnya (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
 
 Kredit sekarang mengikuti harga, dan setiap paket menyebut berapa lama jatahnya bertahan:
 

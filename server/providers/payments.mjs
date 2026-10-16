@@ -3,38 +3,39 @@ import { HttpError, equal, appOrigin } from "../lib/core.mjs";
 // The credit ladder: how many credits a package grants follows its price, so
 // a bigger package is never more expensive per credit. The plan prices are
 // unchanged; only the credits they grant were raised to match them.
-// Pro  Rp 199.000 / 800  = Rp 249 per credit
-// Team Rp 499.000 / 2.500 = Rp 200 per credit
-// Top-up Rp 49.000 / 100  = Rp 490, Rp 199.000 / 500 = Rp 398 (top-up is the
+// Pro  Rp 199.000 / 1.500 = Rp 133 per credit
+// Team Rp 499.000 / 4.500 = Rp 111 per credit
+// Top-up Rp 49.000 / 300  = Rp 163, Rp 199.000 / 1.400 = Rp 142 (top-up is the
 // flexible way to buy, so it stays the pricier per-credit option on purpose).
-// tests/credits-model.test.ts reads this table; shared/credits.mjs explains the
-// durations these numbers produce.
+// Plan credits roll over but expire 2 months after they are granted; top-ups
+// are valid 12 months. tests/credits-model.test.ts reads this table;
+// shared/credits.mjs explains the durations these numbers produce.
 export const products = {
   pro: {
     kind: "plan",
     plan: "Pro",
     amount: 199000,
-    credits: 800,
+    credits: 1500,
     label: "PiwuApp Pro · 30 hari",
   },
   team: {
     kind: "plan",
     plan: "Team",
     amount: 499000,
-    credits: 2500,
+    credits: 4500,
     label: "PiwuApp Team · 30 hari",
   },
-  credits100: {
+  credits300: {
     kind: "topup",
     amount: 49000,
-    credits: 100,
-    label: "Top-up 100 kredit",
+    credits: 300,
+    label: "Top-up 300 kredit",
   },
-  credits500: {
+  credits1400: {
     kind: "topup",
     amount: 199000,
-    credits: 500,
-    label: "Top-up 500 kredit",
+    credits: 1400,
+    label: "Top-up 1.400 kredit",
   },
 };
 export function midtransSignature(body, key) {

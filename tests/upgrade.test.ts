@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PLAN_DAYS,
+  expiryLine,
+  offerExpiry,
   paymentsNotice,
   periodLeft,
   planFacts,
@@ -9,6 +11,7 @@ import {
   rupiah,
   topupOffers,
 } from "../src/lib/dashboard/plans";
+import { CREDIT_EXPIRY_MONTHS } from "../shared/credits.mjs";
 
 // The exact products the server sells today (server/providers/payments.mjs).
 const products = {
@@ -16,27 +19,27 @@ const products = {
     kind: "plan",
     plan: "Pro",
     amount: 199000,
-    credits: 800,
+    credits: 1500,
     label: "PiwuApp Pro · 30 hari",
   },
   team: {
     kind: "plan",
     plan: "Team",
     amount: 499000,
-    credits: 2500,
+    credits: 4500,
     label: "PiwuApp Team · 30 hari",
   },
-  credits100: {
+  credits300: {
     kind: "topup",
     amount: 49000,
-    credits: 100,
-    label: "Top-up 100 kredit",
+    credits: 300,
+    label: "Top-up 300 kredit",
   },
-  credits500: {
+  credits1400: {
     kind: "topup",
     amount: 199000,
-    credits: 500,
-    label: "Top-up 500 kredit",
+    credits: 1400,
+    label: "Top-up 1.400 kredit",
   },
 };
 
@@ -47,20 +50,34 @@ test("the upgrade page splits plans from top-ups using the server's own kind", (
   );
   assert.deepEqual(
     topupOffers(products).map((o) => o.sku),
-    ["credits100", "credits500"],
+    ["credits300", "credits1400"],
   );
   const [pro] = planOffers(products, "Free");
   assert.equal(pro.price, 199000);
-  assert.equal(pro.credits, 800);
+  assert.equal(pro.credits, 1500);
   assert.equal(pro.plan, "Pro");
-  assert.equal(pro.perDayCredits, Math.round(800 / PLAN_DAYS));
+  assert.equal(pro.perDayCredits, Math.round(1500 / PLAN_DAYS));
   // The price per credit is written on the card and comes from the same model
   // the server bills with, so a package that got bigger cannot keep the old
   // rate printed beside it.
-  assert.equal(pro.rate, 249);
+  assert.equal(pro.rate, 133);
   const [team] = planOffers(products, "Free").slice(1);
-  assert.equal(team.rate, 200);
+  assert.equal(team.rate, 111);
   assert.ok(team.rate < pro.rate, "a bigger package is cheaper per credit");
+  // The allowance and the deadline on a card come from the ladder the server
+  // sells from, not from copy typed into the page.
+  assert.equal(pro.daily, 20);
+  assert.equal(team.daily, 40);
+  assert.equal(pro.expiryMonths, CREDIT_EXPIRY_MONTHS.plan);
+  assert.equal(pro.monthlyCap, null);
+  const [topup] = topupOffers(products);
+  assert.equal(topup.daily, 0);
+  assert.equal(topup.expiryMonths, CREDIT_EXPIRY_MONTHS.topup);
+  assert.match(offerExpiry(pro), /hangus 2 bulan setelah terbit/);
+  assert.match(offerExpiry(topup), /Berlaku 12 bulan sejak pembelian/);
+  // The header sentence names every deadline in the model.
+  assert.match(expiryLine(), /direset setiap hari pukul 00:00 UTC/);
+  assert.match(expiryLine(), /kredit top-up berlaku 12 bulan/);
   // Durations are arithmetic over the real operation costs, not a promise.
   const normal = pro.durations.find((d) => d.id === "normal")!;
   const intens = pro.durations.find((d) => d.id === "intens")!;
@@ -94,7 +111,7 @@ test("only the plan the account is on is flagged as current", () => {
 
 test("products without a numeric price or credit are not offered", () => {
   const partial = {
-    pro: { kind: "plan", plan: "Pro", amount: 199000, credits: 800 },
+    pro: { kind: "plan", plan: "Pro", amount: 199000, credits: 1500 },
     broken: { kind: "plan", plan: "Broken", label: "Tanpa harga" },
     odd: { kind: "topup", amount: "gratis", credits: 10 },
   };
@@ -135,21 +152,24 @@ test("the period line counts days left and never shows a negative day", () => {
 
 test("the page states what is true about plans instead of implying gating", () => {
   const facts = planFacts();
-  assert.equal(facts.length, 5);
+  assert.equal(facts.length, 6);
   // Intl writes "Rp\u00a0249" with a non-breaking space; normalise it so the
   // assertions read like the text a person sees.
   const joined = facts
     .map((f) => f.title + " " + f.detail)
     .join(" ")
     .replace(/\u00a0/g, " ");
-  assert.match(joined, /tidak ada penagihan otomatis/i);
   assert.match(joined, /belum diterapkan/i);
-  // Credits never expire: the page must not promise a deadline.
-  assert.match(joined, /tidak kedaluwarsa/i);
-  assert.equal(/hangus setelah/i.test(joined), false);
+  // The deadlines are stated with the same numbers the database enforces: the
+  // daily allowance never accumulates and each lot has its own expiry.
+  assert.match(joined, /direset pada pukul 00:00 UTC/);
+  assert.match(joined, /tidak menumpuk/i);
+  assert.match(joined, /hangus 2 bulan setelah terbit/);
+  assert.match(joined, /berlaku 12 bulan sejak pembelian/);
+  assert.match(joined, /plafon 600 kredit per bulan/);
   // The rate sentence is derived from the ladder, so both plans appear.
-  assert.match(joined, /Pro Rp 249\/kredit/);
-  assert.match(joined, /Team Rp 200\/kredit/);
+  assert.match(joined, /Pro Rp 133\/kredit/);
+  assert.match(joined, /Team Rp 111\/kredit/);
   // And the durations are explained, not asserted.
   assert.match(joined, /pemakaian normal/i);
   assert.match(joined, /pemakaian intens/i);

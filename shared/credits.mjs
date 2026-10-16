@@ -7,9 +7,16 @@
  * duration that the billing does not match. Both sides import it, like
  * shared/studio.mjs.
  *
- * Nothing here expires credits. `durationDays()` answers "how long would this
- * last at that usage", not "when does it disappear" — the database has no
- * per-credit expiry and adding one is a migration, not a display change.
+ * Credits live as lots in the database (supabase/010_credit_lots.sql) and each
+ * lot carries its own deadline:
+ *   - the daily allowance refills to its limit every day at 00:00 UTC and never
+ *     accumulates (Free and Pro 20/day, Team 40/day; Free is capped at 600 per
+ *     month);
+ *   - plan credits roll over between months but expire 2 months after they are
+ *     granted;
+ *   - top-up (and referral) credits are valid for 12 months.
+ * The numbers below mirror `public.piwu_credit_policy()` in migration 010, and
+ * tests/credits-model.test.ts fails if the two drift apart.
  */
 
 /** Credits charged per operation. Every reservation in the server uses these. */
@@ -41,15 +48,34 @@ export const CREDIT_COSTS = {
  */
 export const PLAN_PERIOD_DAYS = 30;
 
+/** The hour (UTC) the daily allowance refills. Mirrors migration 010. */
+export const DAILY_RESET_UTC_HOUR = 0;
+
 /**
- * The free allowance a new account gets, once. Must stay equal to the value in
- * supabase/003_services.sql (piwu_ensure_credits); guarded by the same test.
+ * How long a credit lot of each source stays valid, in months. `0` means "gone
+ * at the end of the day it was granted" (the daily allowance); `null` means the
+ * database never expires it (hand-made admin corrections).
+ */
+export const CREDIT_EXPIRY_MONTHS = {
+  daily: 0,
+  plan: 2,
+  topup: 12,
+  bonus: 12,
+  refund: 12,
+  admin: null,
+};
+
+/**
+ * The daily allowance Free gets, and the monthly cap it may not pass. Must stay
+ * equal to `piwu_credit_policy()` in supabase/010_credit_lots.sql; guarded by
+ * tests/credits-model.test.ts.
  */
 export const FREE_PLAN = {
   plan: "Free",
-  credits: 30,
-  once: true,
-  reason: "Kredit awal",
+  credits: 20,
+  daily: true,
+  monthlyCap: 600,
+  reason: "Jatah harian",
 };
 
 /**
@@ -67,17 +93,69 @@ export const PLAN_LADDER = [
     monthly: 0,
     annual: 0,
     credits: FREE_PLAN.credits,
-    once: true,
+    daily: FREE_PLAN.credits,
+    monthlyCap: FREE_PLAN.monthlyCap,
+    expiryMonths: CREDIT_EXPIRY_MONTHS.daily,
   },
-  { plan: "Pro", sku: "pro", monthly: 199000, annual: 159200, credits: 800 },
-  { plan: "Team", sku: "team", monthly: 499000, annual: 399200, credits: 2500 },
+  {
+    plan: "Pro",
+    sku: "pro",
+    monthly: 199000,
+    annual: 159200,
+    credits: 1500,
+    daily: 20,
+    monthlyCap: null,
+    expiryMonths: CREDIT_EXPIRY_MONTHS.plan,
+  },
+  {
+    plan: "Team",
+    sku: "team",
+    monthly: 499000,
+    annual: 399200,
+    credits: 4500,
+    daily: 40,
+    monthlyCap: null,
+    expiryMonths: CREDIT_EXPIRY_MONTHS.plan,
+  },
 ];
 
 /** Top-ups have no plan and no period: they only add credits to the balance. */
 export const TOPUP_LADDER = [
-  { sku: "credits100", amount: 49000, credits: 100 },
-  { sku: "credits500", amount: 199000, credits: 500 },
+  {
+    sku: "credits300",
+    amount: 49000,
+    credits: 300,
+    expiryMonths: CREDIT_EXPIRY_MONTHS.topup,
+  },
+  {
+    sku: "credits1400",
+    amount: 199000,
+    credits: 1400,
+    expiryMonths: CREDIT_EXPIRY_MONTHS.topup,
+  },
 ];
+
+/** The plan ladder row a product SKU sells, or undefined for an unknown SKU. */
+export function planForSku(sku) {
+  return PLAN_LADDER.find((plan) => plan.sku === sku);
+}
+
+/** Daily allowance a plan name gets; 0 for a name the ladder does not know. */
+export function dailyAllowance(planName) {
+  const plan = PLAN_LADDER.find((row) => row.plan === planName);
+  return plan ? plan.daily : 0;
+}
+
+/**
+ * One plain sentence for a deadline, from the same number the database uses:
+ * "hangus 2 bulan setelah terbit", "hangus pada akhir hari", or
+ * "tidak kedaluwarsa" for a lot the database never expires.
+ */
+export function expiryLabel(months) {
+  if (months === null || months === undefined) return "tidak kedaluwarsa";
+  if (!months) return "hangus pada akhir hari";
+  return `hangus ${months} bulan setelah terbit`;
+}
 
 /**
  * What an active account does in a day, written as operations rather than as a
@@ -158,7 +236,11 @@ export function creditsPerDay(profile) {
   );
 }
 
-/** Whole days a credit balance covers at that usage; 0 when it cannot be told. */
+/**
+ * Whole days a credit balance covers at that usage; 0 when it cannot be told.
+ * This is arithmetic, not a deadline: the lots themselves expire (2 months for
+ * plan credits, 12 for top-ups), so a big balance can still lapse unspent.
+ */
 export function durationDays(credits, profile) {
   const perDay = creditsPerDay(profile);
   const total = Number(credits);

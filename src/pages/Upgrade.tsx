@@ -7,7 +7,9 @@ import {
   PLAN_DAYS,
   count,
   costLine,
+  expiryLine,
   lastsLabel,
+  offerExpiry,
   planFacts,
   planOffers,
   periodLeft,
@@ -104,16 +106,17 @@ export default function Upgrade() {
         <small className="plan-rate"> · {rupiah(offer.rate)}/kredit</small>
       </strong>
       <p className="plan-credits">
-        <b>{count(offer.credits)}</b> kredit
+        <b>{count(offer.credits)}</b>
+        {kind === "plan" ? " kredit per bulan" : " kredit"}
         {kind === "plan"
-          ? ` · masa paket ${PLAN_DAYS} hari`
+          ? ` · masa paket ${PLAN_DAYS} hari · ${count(offer.daily)} kredit/hari`
           : " · tanpa masa aktif"}
       </p>
       <p className="plan-meta">
         {kind === "plan"
           ? `Pada pemakaian normal jatah ini bertahan ${normal(offer)}, pada pemakaian intens ${intens(offer)}.`
           : `Menambah ${light(offer)} pemakaian ringan atau ${normal(offer)} pemakaian normal ke saldo berjalan; pada pola intens jatah ini ${intens(offer)}.`}{" "}
-        Kredit tidak kedaluwarsa.
+        {offerExpiry(offer)}
       </p>
       <button
         className="button button-dark"
@@ -146,9 +149,8 @@ export default function Upgrade() {
       <h1>Naikkan paket saat karya menuntut lebih.</h1>
       <p className="upgrade-lead">
         Semua paket di halaman ini prabayar {PLAN_DAYS} hari. Tidak ada
-        penagihan berulang dan tidak ada penguncian fitur yang disembunyikan.
-        Kredit yang Anda beli tidak kedaluwarsa — yang berjalan {PLAN_DAYS} hari
-        adalah masa paketnya, bukan saldo kreditnya.
+        penagihan berulang dan tidak ada penguncian fitur yang disembunyikan.{" "}
+        {expiryLine()}
       </p>
 
       {!signedIn && (
@@ -261,11 +263,11 @@ export default function Upgrade() {
 
               <h2>Seberapa lama kredit bertahan</h2>
               <p className="plan-meta">
-                Kredit tidak kedaluwarsa: tidak ada tanggal hangus di sistem
-                ini. Tabel ini menjawab pertanyaan yang berbeda — berapa lama
-                sebuah jatah terpakai habis pada tiga pola pemakaian. Angkanya
-                aritmetika dari harga per operasi ({costLine()}), bukan janji;
-                pemakaian Anda bisa lebih hemat atau lebih boros.
+                {expiryLine()} Tabel ini menjawab pertanyaan yang berbeda —
+                berapa lama sebuah jatah terpakai habis pada tiga pola
+                pemakaian. Angkanya aritmetika dari harga per operasi (
+                {costLine()}), bukan janji; pemakaian Anda bisa lebih hemat atau
+                lebih boros.
               </p>
               <div
                 className="plan-table"

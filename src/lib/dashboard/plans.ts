@@ -1,10 +1,14 @@
 import {
   CREDIT_COSTS,
+  CREDIT_EXPIRY_MONTHS,
+  FREE_PLAN,
   PLAN_LADDER,
   PLAN_PERIOD_DAYS,
+  TOPUP_LADDER,
   USAGE_PROFILES,
   costLine,
   durationDays,
+  expiryLabel,
   lastsLabel,
   ratePerCredit,
   usageProfile,
@@ -44,10 +48,18 @@ export interface Offer {
   label: string;
   price: number;
   credits: number;
+  /** "plan" or "topup", straight from the server product. */
+  kind: string;
   /** Plan name for a subscription product, empty for a top-up. */
   plan: string;
   /** What the price buys per day over the 30-day period (arithmetic, not a promise). */
   perDayCredits: number;
+  /** Daily allowance that refills every day at 00:00 UTC; 0 when there is none. */
+  daily: number;
+  /** Monthly ceiling on a Free allowance; null when the plan has no ceiling. */
+  monthlyCap: number | null;
+  /** Months until a granted lot expires; 0 means "at the end of that day". */
+  expiryMonths: number;
   /** Effective price of one credit at this package size. */
   rate: number;
   /** How long these credits last at each usage profile, from the real costs. */
@@ -58,8 +70,9 @@ export interface Offer {
 
 /**
  * How long a paid plan's period runs. This is a duration of the *plan*, not of
- * the credits: credits are a balance and the database expires nothing. The
- * server applies the same 30 days in supabase/003_services.sql.
+ * the credits: plan credits roll over between months but expire 2 months after
+ * they are granted, and top-ups last 12 months (supabase/010_credit_lots.sql).
+ * The server applies the same 30 days in supabase/003_services.sql.
  */
 export const PLAN_DAYS = PLAN_PERIOD_DAYS;
 
@@ -139,13 +152,24 @@ function toOffer(
   const price = Number(product?.amount);
   const credits = Number(product?.credits);
   if (!Number.isFinite(price) || !Number.isFinite(credits)) return null;
+  // The allowance and the deadline come from the same ladder the server sells
+  // from, so a card cannot print a validity the store does not honour.
+  const ladderPlan = PLAN_LADDER.find((row) => row.sku === sku);
+  const ladderTopup = TOPUP_LADDER.find((row) => row.sku === sku);
   return {
     sku,
     label: product.label || sku,
     price,
     credits,
+    kind,
     plan: product.plan || "",
     perDayCredits: Math.round(credits / PLAN_DAYS),
+    daily: ladderPlan?.daily ?? 0,
+    monthlyCap: ladderPlan?.monthlyCap ?? null,
+    expiryMonths:
+      ladderPlan?.expiryMonths ??
+      ladderTopup?.expiryMonths ??
+      CREDIT_EXPIRY_MONTHS.topup,
     ...priceFacts(price, credits),
     current:
       kind === "plan" &&
@@ -205,15 +229,20 @@ export function paymentsNotice(
  * advertising a gated feature that does not exist.
  */
 export function planFacts() {
+  const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
+  const team = PLAN_LADDER.find((plan) => plan.plan === "Team")!;
   return [
     {
-      title: "Kredit tidak kedaluwarsa",
-      detail:
-        "Kredit yang masuk ke saldo tidak hangus dan tidak punya tanggal kedaluwarsa. Yang berjalan 30 hari adalah masa paket, bukan kreditnya: tidak ada penagihan otomatis dan tidak ada perpanjangan diam-diam.",
+      title: "Jatah harian kembali penuh setiap hari",
+      detail: `Free dan Pro ${count(pro.daily)} kredit/hari, Team ${count(team.daily)} kredit/hari, direset pada pukul 00:00 UTC. Jatah yang tidak terpakai hangus — tidak menumpuk ke hari berikutnya. Akun Free dibatasi plafon ${count(FREE_PLAN.monthlyCap)} kredit per bulan.`,
+    },
+    {
+      title: "Setiap kredit punya masa berlaku yang tercatat",
+      detail: `Kredit paket boleh menumpuk antar bulan, tetapi ${expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}. Kredit top-up berlaku ${CREDIT_EXPIRY_MONTHS.topup} bulan sejak pembelian, dan bonus referral mengikuti masa berlaku yang sama. Tiap lot menyimpan tanggal hangusnya sendiri di database, jadi tidak ada tanggal yang hilang diam-diam.`,
     },
     {
       title: "Harga menentukan jumlah kredit",
-      detail: `${rateSentence()} Semakin besar paket, semakin murah harga per kreditnya. Free tetap 30 kredit sekali untuk mencoba — tanpa tagihan dan tanpa reset bulanan. Saat ini Pro dan Team hanya berbeda pada harga dan jumlah kreditnya: pembatasan fitur per paket belum diterapkan di aplikasi ini, jadi tidak ada fitur yang dikunci diam-diam.`,
+      detail: `${rateSentence()} Semakin besar paket, semakin murah harga per kreditnya. Free tetap tanpa tagihan: ${count(FREE_PLAN.credits)} kredit/hari dengan plafon ${count(FREE_PLAN.monthlyCap)} per bulan. Saat ini Pro dan Team hanya berbeda pada harga dan jumlah kreditnya: pembatasan fitur per paket belum diterapkan di aplikasi ini, jadi tidak ada fitur yang dikunci diam-diam.`,
     },
     {
       title: "Perkiraan berapa lama jatah bertahan",
@@ -231,7 +260,29 @@ export function planFacts() {
   ];
 }
 
-/** "Pro Rp 249/kredit · Team Rp 200/kredit" — computed, never typed twice. */
+/**
+ * One sentence with every deadline in the model, for the page header. Built
+ * from the same numbers the database enforces, so it cannot drift.
+ */
+export function expiryLine() {
+  const free = PLAN_LADDER.find((plan) => !plan.monthly);
+  const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro");
+  const team = PLAN_LADDER[PLAN_LADDER.length - 1];
+  return `Jatah harian ${count(free?.daily || 0)} kredit (Pro ${count(pro?.daily || 0)}, Team ${count(team.daily)}) direset setiap hari pukul 00:00 UTC dan tidak menumpuk; kredit paket ${expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up berlaku ${CREDIT_EXPIRY_MONTHS.topup} bulan sejak pembelian.`;
+}
+
+/** The deadline sentence for one card, from the ladder row it came from. */
+export function offerExpiry(offer: Pick<Offer, "kind" | "expiryMonths">) {
+  if (offer.kind === "plan")
+    return offer.expiryMonths
+      ? `Kredit bulanan boleh menumpuk antar bulan, tetapi ${expiryLabel(offer.expiryMonths)}; jatah harian tidak menumpuk.`
+      : "Jatah harian direset setiap hari dan tidak menumpuk.";
+  return offer.expiryMonths
+    ? `Berlaku ${offer.expiryMonths} bulan sejak pembelian.`
+    : "Tidak kedaluwarsa.";
+}
+
+/** "Pro Rp 133/kredit · Team Rp 111/kredit" — computed, never typed twice. */
 function rateSentence() {
   return PLAN_LADDER.filter((plan) => plan.monthly > 0)
     .map(

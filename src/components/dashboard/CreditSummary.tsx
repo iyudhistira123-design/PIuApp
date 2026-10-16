@@ -115,7 +115,8 @@ export default function CreditSummary() {
       </small>
       <small className="credit-lasts">
         {lastsLabel(state.balance, usageProfile("normal"))} pada pemakaian
-        normal · kredit tidak kedaluwarsa
+        normal · jatah harian direset, kredit paket &amp; top-up ada masa
+        berlaku
       </small>
       {!!state.split.length && (
         <ul className="credit-split">
