@@ -109,7 +109,7 @@ test("Service migration: atomic credits, payment replay/refund, invite and role 
       second = crypto.randomUUID();
     for (const orderId of [first, second]) {
       await db.query(
-        "insert into payment_orders(id,user_id,provider,kind,sku,amount,credits,plan) values($1,$2,'midtrans','plan','pro',199000,600,'Pro')",
+        "insert into payment_orders(id,user_id,provider,kind,sku,amount,credits,plan) values($1,$2,'midtrans','plan','pro',199000,800,'Pro')",
         [orderId, a],
       );
       await db.query("select piwu_apply_payment($1,199000,'IDR','paid')", [

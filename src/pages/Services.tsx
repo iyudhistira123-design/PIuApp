@@ -4,6 +4,7 @@ import { Logo } from "../components/ui";
 import { api } from "../services/api";
 import { useStore } from "../lib/store";
 import { requestCloudSync } from "../lib/cloud/sync";
+import { count, lastsLabel, usageProfile } from "../lib/dashboard/plans";
 const ReplayPlayer = lazy(() => import("../components/services/ReplayPlayer"));
 import "../components/services/services.css";
 const money = (n: number) =>
@@ -119,8 +120,12 @@ export default function Services({
           <>
             <div className="service-grid">
               <div className="service-card">
-                <strong className="metric">{data.balance}</strong>
+                <strong className="metric">{count(data.balance)}</strong>
                 <p>Kredit tersedia</p>
+                <small>
+                  {lastsLabel(data.balance, usageProfile("normal"))} pada
+                  pemakaian normal · kredit tidak kedaluwarsa
+                </small>
               </div>
               <div className="service-card">
                 <strong className="metric">{data.plan.plan}</strong>
@@ -151,7 +156,7 @@ export default function Services({
                 <div className="service-card" key={sku}>
                   <h3>{p.label}</h3>
                   <p>
-                    {money(p.amount)} · {p.credits} kredit
+                    {money(p.amount)} · {count(p.credits)} kredit
                   </p>
                   <button
                     disabled={busy || !data.paymentsEnabled}

@@ -1,4 +1,5 @@
 import { HttpError } from "./core.mjs";
+import { CREDIT_COSTS } from "../../shared/credits.mjs";
 
 // Model catalogue and model resolution.
 //
@@ -70,7 +71,11 @@ export function tierOfModel(model, tiers) {
 }
 
 export function tierCost(tier) {
-  return tier === "Kuat" ? 8 : tier === "Cepat" ? 1 : 3;
+  return tier === "Kuat"
+    ? CREDIT_COSTS.chat.Kuat
+    : tier === "Cepat"
+      ? CREDIT_COSTS.chat.Cepat
+      : CREDIT_COSTS.chat.Seimbang;
 }
 
 export function automaticTier({ prompt = "", hasAttachments = false } = {}) {
@@ -169,7 +174,12 @@ export async function resolveAiModel({
       ? automaticTier({ prompt, hasAttachments })
       : model
     : tierOfModel(model, tiers);
-  const cost = mode === "Ask" ? 1 : mode === "Plan" ? 2 : tierCost(tier);
+  const cost =
+    mode === "Ask"
+      ? CREDIT_COSTS.ask
+      : mode === "Plan"
+        ? CREDIT_COSTS.plan
+        : tierCost(tier);
   if (!TIERS.includes(model)) {
     const models = await listProviderModels(ctx).catch(() => null);
     if (models && !models.includes(model))

@@ -6,7 +6,18 @@
 
 Installer baru atomik 001–009, pemeriksaan read-only tabel/RLS/RPC/bucket, dan bootstrap superadmin terverifikasi beserta audit tersedia di [supabase/README.md](../supabase/README.md). Installer menolak database lama/konflik bucket; tidak ada reset data otomatis. **93/93 unit/integrasi lulus**, termasuk tiga tes paket SQL baru. Database live belum diubah. Bootstrap tidak membuat akun/password.
 
-## Pembaruan terbaru (16 Oktober 2026): halaman paket & profil, admin yang menyesuaikan
+## Pembaruan terbaru (16 Oktober 2026): kredit mengikuti harga, durasi dinyatakan
+
+**328/328 unit/integrasi** dan **107/107 tes browser lengkap** lulus (1 worker, 7,0 menit), build produksi 43,22 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 41 aset / total 13.888.739 B — di bawah anggaran. Tanpa tabel baru dan tanpa migration baru: yang berubah hanya angka produk dan cara menjelaskannya.
+
+Kredit sekarang mengikuti harga, dan setiap paket menyebut berapa lama jatahnya bertahan:
+
+- **Tangga kredit**: Pro Rp 199.000 tetap, kreditnya 600 → **800**; Team Rp 499.000 tetap, kreditnya 2.000 → **2.500**. Harganya tidak berubah, hanya isinya: Pro jadi **Rp 249/kredit** dan Team **Rp 200/kredit**, jadi paket yang lebih besar selalu lebih murah per kredit. Top-up tidak berubah (Rp 49.000 → 100; Rp 199.000 → 500) dan tetap sengaja lebih mahal per kredit daripada paket, karena naik paket memang jalur yang lebih hemat. Free tetap 30 kredit sekali — angka itu milik `piwu_ensure_credits` di `supabase/003_services.sql` dan sekarang dijaga oleh tes, bukan ditulis ulang di UI.
+- **Satu sumber angka**: `shared/credits.mjs` memuat daftar harga per operasi (chat Cepat 1 / Seimbang 3 / Kuat 8, tanya-jawab 1, plan 2, ronde riset 1, perintah sandbox 1, build/preview 2, audit 3, publish 5), biaya halaman profile, dan tangga paket/top-up. Server menagih dari konstanta itu (`server/lib/ai-models.mjs`, `server/lib/research.mjs`, `server/routes/sandbox.mjs`, `server/routes/publish.mjs`), dan halaman paket, landing, serta kredensial akun membaca tangga itu juga. `tests/credits-model.test.ts` gagal bila katalog server (`server/providers/payments.mjs`) dan tangga publik berbeda, bila paket yang lebih besar jadi lebih mahal per kredit, atau bila angka Free tidak lagi sama dengan SQL.
+- **Berapa lama kredit habis** dijawab sebagai durasi pemakaian, bukan kedaluwarsa — **kredit tidak hangus**: skema tidak punya lot atau tanggal kedaluwarsa, dan halaman menyatakannya apa adanya. Tiga pola pemakaian ditulis sebagai daftar operasi (ringan/normal/intens, dari ±8,3 sampai ±101,5 kredit/hari), lalu halaman paket menampilkan tabel "Seberapa lama kredit bertahan" berisi kredit/hari tiap pola, durasi untuk tiap paket, dan durasi untuk saldo akun yang sedang dibuka; kartu paket juga mencetak harga per kredit. Angkanya aritmetika dari daftar harga, dan halaman mengatakannya begitu — bukan janji pemakaian.
+- **Landing dan halaman akun ikut satu sumber**: harga di `/#pricing` sekarang dibaca dari tangga yang sama (bulanan/tahunan, kredit, dan durasi ringkas), kartu Free menulis "30 kredit · sekali, tanpa reset bulanan", dan kartu saldo di `/account` menambahkan "±N hari pada pemakaian normal · kredit tidak kedaluwarsa".
+
+## Pembaruan sebelumnya (16 Oktober 2026): halaman paket & profil, admin yang menyesuaikan
 
 **323/323 unit/integrasi** dan **106/106 tes browser lengkap** lulus (1 worker, 6,8 menit; satu kegagalan tunggal pada suite penuh sebelumnya tidak terulang dan 24/24 lulus saat spec yang sama dijalankan `--workers=2 --repeat-each=3`), build produksi 40,28 detik, `check:bundle` editor **3.201.506 B** / gzip 822.640 B / 41 aset / total 13.882.326 B — di bawah anggaran. Semuanya memakai data yang sudah ada: **tanpa tabel baru, tanpa migration baru**.
 

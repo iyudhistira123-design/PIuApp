@@ -9,6 +9,7 @@ import {
   appOrigin,
 } from "../lib/core.mjs";
 import { rateLimit } from "../lib/context.mjs";
+import { CREDIT_COSTS } from "../../shared/credits.mjs";
 export function analyticsScript(origin, id) {
   return `<script>(()=>{if(navigator.doNotTrack==='1'||navigator.globalPrivacyControl)return;const send=()=>{const payload={projectId:${JSON.stringify(id)},path:location.pathname.slice(0,500),referrer:document.referrer?new URL(document.referrer).hostname:'',device:innerWidth<640?'mobile':innerWidth<1024?'tablet':'desktop'};fetch(${JSON.stringify(origin + "/api/public/analytics")},{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload),keepalive:true,credentials:'omit'}).catch(()=>{});};send();addEventListener('popstate',send);})();</script>`;
 }
@@ -77,7 +78,7 @@ export function registerPublish(app, ctx, hosting) {
           "Project ini masih memiliki build yang berjalan.",
         );
       const id = randomUUID();
-      await ctx.reserve(req.user.id, id, 5, "publish");
+      await ctx.reserve(req.user.id, id, CREDIT_COSTS.publish, "publish");
       try {
         check(
           await ctx.admin.from("publish_jobs").insert({

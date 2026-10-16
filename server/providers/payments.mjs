@@ -1,18 +1,27 @@
 import { createHash } from "node:crypto";
 import { HttpError, equal, appOrigin } from "../lib/core.mjs";
+// The credit ladder: how many credits a package grants follows its price, so
+// a bigger package is never more expensive per credit. The plan prices are
+// unchanged; only the credits they grant were raised to match them.
+// Pro  Rp 199.000 / 800  = Rp 249 per credit
+// Team Rp 499.000 / 2.500 = Rp 200 per credit
+// Top-up Rp 49.000 / 100  = Rp 490, Rp 199.000 / 500 = Rp 398 (top-up is the
+// flexible way to buy, so it stays the pricier per-credit option on purpose).
+// tests/credits-model.test.ts reads this table; shared/credits.mjs explains the
+// durations these numbers produce.
 export const products = {
   pro: {
     kind: "plan",
     plan: "Pro",
     amount: 199000,
-    credits: 600,
+    credits: 800,
     label: "PiwuApp Pro · 30 hari",
   },
   team: {
     kind: "plan",
     plan: "Team",
     amount: 499000,
-    credits: 2000,
+    credits: 2500,
     label: "PiwuApp Team · 30 hari",
   },
   credits100: {

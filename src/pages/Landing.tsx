@@ -8,6 +8,12 @@ import useLandingMotion, {
   revealDelay,
 } from "../components/landing/useLandingMotion";
 import { usePlatform, PlatformNotices } from "../components/admin/Platform";
+import {
+  PLAN_LADDER,
+  costLine,
+  lastsLabel,
+  usageProfile,
+} from "../../shared/credits.mjs";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -56,6 +62,23 @@ const faqs = [
     "Workspace memakai akun terautentikasi, penyimpanan cloud, editor kode, dan preview interaktif. AI, terminal, dan publikasi memerlukan provider aktif. Layanan yang belum siap tidak digantikan oleh simulasi.",
   ],
 ];
+const ladder = (name: string) =>
+  PLAN_LADDER.find((plan) => plan.plan === name) || PLAN_LADDER[0];
+const thousands = (value: number) =>
+  new Intl.NumberFormat("id-ID").format(value);
+
+/** Credits and how long they last, straight from the shared price model. */
+const creditNote = (name: string) => {
+  const plan = ladder(name);
+  if (plan.once)
+    return `${lastsLabel(plan.credits, usageProfile("ringan"))} pemakaian ringan · sekali, tanpa reset bulanan`;
+  return `${lastsLabel(plan.credits, usageProfile("normal"))} pemakaian normal · ${lastsLabel(plan.credits, usageProfile("intens"))} pemakaian intens`;
+};
+
+// The pricing cards read the credit ladder in shared/credits.mjs (the same
+// numbers the server sells), so the landing page cannot advertise a package
+// size that the checkout does not grant.
+
 export default function Landing() {
   const { settings: siteSettings } = usePlatform();
   const [projectKind, setProjectKind] = useState<ProjectKind>("webapp");
@@ -564,7 +587,7 @@ export default function Landing() {
             {[
               {
                 name: "Free",
-                price: "0",
+                price: thousands(ladder("Free").monthly),
                 desc: "Untuk ide pertama dan rasa penasaran.",
                 features: [
                   "3 project lokal",
@@ -576,11 +599,13 @@ export default function Landing() {
               },
               {
                 name: "Pro",
-                price: annual ? "159.200" : "199.000",
+                price: thousands(
+                  annual ? ladder("Pro").annual : ladder("Pro").monthly,
+                ),
                 desc: "Untuk yang siap membangun lebih jauh.",
                 features: [
                   "Semua fitur Free",
-                  "Kredit AI bulanan lebih besar",
+                  "Kredit jauh lebih besar per paket",
                   "Project tanpa batas",
                   "Custom domain & prioritas AI",
                 ],
@@ -588,7 +613,9 @@ export default function Landing() {
               },
               {
                 name: "Team",
-                price: annual ? "399.200" : "499.000",
+                price: thousands(
+                  annual ? ladder("Team").annual : ladder("Team").monthly,
+                ),
                 desc: "Ide besar lebih baik dibangun bersama.",
                 features: [
                   "Semua fitur Pro",
@@ -618,7 +645,13 @@ export default function Landing() {
                   >
                     {p.price}
                   </span>
-                  <span>/ bulan</span>
+                  <span>
+                    {p.name === "Free" ? "· tanpa tagihan" : "/ bulan"}
+                  </span>
+                </div>
+                <div className="pricing-credit">
+                  <b>{thousands(ladder(p.name).credits)} kredit</b>
+                  <span>{creditNote(p.name)}</span>
                 </div>
                 <button
                   className={
@@ -646,6 +679,11 @@ export default function Landing() {
               </article>
             ))}
           </div>
+          <p className="pricing-note">
+            Kredit tidak kedaluwarsa — yang berjalan 30 hari adalah masa paket,
+            bukan kreditnya. Perkiraan durasi di atas dihitung dari biaya nyata
+            per operasi ({costLine()}), jadi angkanya aritmetika, bukan janji.
+          </p>
         </section>
         <section
           className="security-strip section-container"

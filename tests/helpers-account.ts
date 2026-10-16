@@ -33,14 +33,14 @@ export const accountPayload = (overrides: Record<string, unknown> = {}) => ({
       kind: "plan",
       plan: "Pro",
       amount: 199000,
-      credits: 600,
+      credits: 800,
       label: "PiwuApp Pro · 30 hari",
     },
     team: {
       kind: "plan",
       plan: "Team",
       amount: 499000,
-      credits: 2000,
+      credits: 2500,
       label: "PiwuApp Team · 30 hari",
     },
     credits100: {

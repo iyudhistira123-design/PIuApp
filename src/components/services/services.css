@@ -129,6 +129,13 @@
   font-size: 15px;
   margin: 0 0 7px;
 }
+.service-card small {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.7;
+  color: #626b59;
+}
 .service-card strong.metric {
   font-size: 30px;
   font-weight: 600;

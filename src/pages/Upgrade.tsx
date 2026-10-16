@@ -5,12 +5,17 @@ import { api } from "../services/api";
 import { useStore } from "../lib/store";
 import {
   PLAN_DAYS,
+  count,
+  costLine,
+  lastsLabel,
   planFacts,
   planOffers,
   periodLeft,
   paymentsNotice,
   rupiah,
   topupOffers,
+  usageProfile,
+  usageRows,
   type Offer,
 } from "../lib/dashboard/plans";
 import "../components/services/services.css";
@@ -69,11 +74,20 @@ export default function Upgrade() {
     }
   };
 
+  const rowText = (offer: Offer, id: string) =>
+    offer.durations.find((entry) => entry.id === id)?.text || "—";
+  const light = (offer: Offer) => rowText(offer, "ringan");
+  const normal = (offer: Offer) => rowText(offer, "normal");
+  const intens = (offer: Offer) => rowText(offer, "intens");
+
   const currentPlan = data?.plan?.plan || "Free";
   const plans = planOffers(data?.products, currentPlan);
   const topups = topupOffers(data?.products);
   const notice = paymentsNotice(data?.paymentsEnabled, data?.provider);
   const left = periodLeft(data?.plan?.current_period_end);
+  const balance = Number(data?.balance);
+  const balanceKnown = Number.isFinite(balance);
+  const usage = usageRows();
 
   const card = (offer: Offer, kind: "plan" | "topup") => (
     <div
@@ -85,18 +99,21 @@ export default function Upgrade() {
       {offer.plan && offer.label !== offer.plan && (
         <small className="plan-sub">{offer.label}</small>
       )}
-      <strong className="plan-price">{rupiah(offer.price)}</strong>
+      <strong className="plan-price">
+        {rupiah(offer.price)}
+        <small className="plan-rate"> · {rupiah(offer.rate)}/kredit</small>
+      </strong>
       <p className="plan-credits">
-        <b>{offer.credits}</b> kredit
+        <b>{count(offer.credits)}</b> kredit
         {kind === "plan"
-          ? ` · berlaku ${PLAN_DAYS} hari`
+          ? ` · masa paket ${PLAN_DAYS} hari`
           : " · tanpa masa aktif"}
       </p>
       <p className="plan-meta">
-        Setara ±{offer.perDayCredits} kredit/hari bila dipakai merata.
-        {kind === "topup"
-          ? " Top-up menambah kredit ke saldo berjalan."
-          : " Kredit ditambahkan setelah pembayaran terverifikasi."}
+        {kind === "plan"
+          ? `Pada pemakaian normal jatah ini bertahan ${normal(offer)}, pada pemakaian intens ${intens(offer)}.`
+          : `Menambah ${light(offer)} pemakaian ringan atau ${normal(offer)} pemakaian normal ke saldo berjalan; pada pola intens jatah ini ${intens(offer)}.`}{" "}
+        Kredit tidak kedaluwarsa.
       </p>
       <button
         className="button button-dark"
@@ -129,9 +146,9 @@ export default function Upgrade() {
       <h1>Naikkan paket saat karya menuntut lebih.</h1>
       <p className="upgrade-lead">
         Semua paket di halaman ini prabayar {PLAN_DAYS} hari. Tidak ada
-        penagihan berulang, tidak ada penguncian fitur yang disembunyikan, dan
-        kredit yang Anda beli tidak pernah hangus hanya karena paketnya
-        berganti.
+        penagihan berulang dan tidak ada penguncian fitur yang disembunyikan.
+        Kredit yang Anda beli tidak kedaluwarsa — yang berjalan {PLAN_DAYS} hari
+        adalah masa paketnya, bukan saldo kreditnya.
       </p>
 
       {!signedIn && (
@@ -188,8 +205,12 @@ export default function Upgrade() {
             </div>
             <div>
               <span>Kredit tersedia</span>
-              <strong>{data ? data.balance : "…"}</strong>
-              <small>Terpakai per operasi, tercatat di ledger</small>
+              <strong>{data ? count(data.balance) : "…"}</strong>
+              <small>
+                {balanceKnown
+                  ? `${lastsLabel(balance, usageProfile("normal"))} pada pemakaian normal`
+                  : "Terpakai per operasi, tercatat di ledger"}
+              </small>
             </div>
             <div className="plan-status-actions">
               <Link to="/account">Riwayat &amp; pesanan</Link>
@@ -237,6 +258,50 @@ export default function Upgrade() {
                   lewat paket di atas bila tersedia.
                 </p>
               )}
+
+              <h2>Seberapa lama kredit bertahan</h2>
+              <p className="plan-meta">
+                Kredit tidak kedaluwarsa: tidak ada tanggal hangus di sistem
+                ini. Tabel ini menjawab pertanyaan yang berbeda — berapa lama
+                sebuah jatah terpakai habis pada tiga pola pemakaian. Angkanya
+                aritmetika dari harga per operasi ({costLine()}), bukan janji;
+                pemakaian Anda bisa lebih hemat atau lebih boros.
+              </p>
+              <div
+                className="plan-table"
+                role="table"
+                aria-label="Perkiraan durasi kredit per pola pemakaian"
+              >
+                <div className="plan-table-row plan-table-head" role="row">
+                  <span role="columnheader">Pola pemakaian</span>
+                  <span role="columnheader">Kredit/hari</span>
+                  {balanceKnown && <span role="columnheader">Saldo Anda</span>}
+                  {plans.map((offer) => (
+                    <span role="columnheader" key={offer.sku}>
+                      {offer.plan}
+                    </span>
+                  ))}
+                </div>
+                {usage.map((row, index) => (
+                  <div className="plan-table-row" role="row" key={row.id}>
+                    <span role="cell">
+                      <b>{row.label}</b>
+                      <small>{row.detail}</small>
+                    </span>
+                    <span role="cell">{row.perDay}</span>
+                    {balanceKnown && (
+                      <span role="cell">
+                        {lastsLabel(balance, usageProfile(row.id))}
+                      </span>
+                    )}
+                    {plans.map((offer) => (
+                      <span role="cell" key={offer.sku}>
+                        {offer.durations[index]?.text || "—"}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
 
               {!!data.orders?.length && (
                 <>

@@ -11,6 +11,7 @@ import {
   searchCapability,
 } from "./search.mjs";
 import { isGeneralTool } from "./tools.mjs";
+import { CREDIT_COSTS } from "../../shared/credits.mjs";
 
 // Research orchestration: the model may ask for searches, the server runs them
 // and feeds the numbered sources back for a cited answer. The loop is
@@ -18,7 +19,7 @@ import { isGeneralTool } from "./tools.mjs";
 // queries each — so cost and latency stay predictable and a runaway agent
 // cannot burn credits looking for something that is not there.
 
-export const RESEARCH_COST = 1;
+export const RESEARCH_COST = CREDIT_COSTS.researchRound;
 /** Rounds per turn. Operators may lower it; it is never unbounded. */
 export const SEARCH_ROUNDS_MAX_DEFAULT = 2;
 export const SEARCH_ROUNDS_MAX_CAP = 3;
