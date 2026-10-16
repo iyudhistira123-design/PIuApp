@@ -29,16 +29,13 @@ test("admin searches server-wide, retains filters on failure, paginates, exports
           },
           search: {
             web: false,
-            code: true,
-            docs: true,
             provider: "none",
             rounds: 2,
-            available: true,
+            available: false,
             selected: "tavily",
             selectedAvailable: false,
             disabled: false,
             keyConfigured: false,
-            context7KeyConfigured: false,
             locale: { country: "", language: "" },
             cache: {
               mode: "process",
@@ -52,7 +49,16 @@ test("admin searches server-wide, retains filters on failure, paginates, exports
                 errors: 0,
               },
             },
-            jobs: { jobs: 1, running: 0, ready: 1, ttlMinutes: 30, max: 20 },
+            jobs: {
+              jobs: 1,
+              running: 0,
+              ready: 1,
+              ttlMinutes: 360,
+              max: 20,
+              durable: true,
+              stored: 1,
+              errors: 0,
+            },
             notice:
               "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
           },
@@ -148,7 +154,11 @@ test("admin searches server-wide, retains filters on failure, paginates, exports
   ).toBeVisible();
   await expect(page.getByText(/per-proses \(migration 009/)).toBeVisible();
   await expect(page.getByText(/2 hit/)).toBeVisible();
-  await expect(page.getByText(/1 tersimpan · 0 berjalan/)).toBeVisible();
+  // Background jobs: in-memory count, and how many answers really survive a
+  // restart in the shared table. Never a bare "stored" number.
+  await expect(page.getByText(/1 di memori · 0 berjalan/)).toBeVisible();
+  await expect(page.getByText(/1 tahan restart \(tabel 009\)/)).toBeVisible();
+  await expect(page.getByText(/simpan 360 menit/)).toBeVisible();
   const diagnosticsText = await page.locator("#admin-content").innerText();
   expect(diagnosticsText).not.toContain("SEARCH_API_KEY=");
 });

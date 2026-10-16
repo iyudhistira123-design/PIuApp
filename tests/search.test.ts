@@ -13,20 +13,37 @@ import {
   runSearch,
   searchCapability,
   searchOne,
+  selectExcerpt,
+  significantTerms,
 } from "../server/lib/search.mjs";
 import {
+  FETCH_MAX_DEFAULT,
+  OPENED_PROVIDER,
+  READ_EXCERPT_CHARS,
+  READ_SOURCES_MAX,
   SOURCES_TOTAL_MAX,
+  SUMMARY_CHARS_MAX,
+  SUMMARY_PAGES_MIN,
   buildResearchReport,
   citationReport,
   groundingReport,
+  openResultText,
+  openSources,
+  parseSummary,
   readBodies,
   researchInstruction,
   researchStatus,
+  researchTools,
   runSearchRound,
   searchReservationId,
   searchRoundsMax,
   sourcesPrompt,
   splitSearchOps,
+  summaryEnabled,
+  summaryInstruction,
+  summaryPromptBlock,
+  toolCallsToOps,
+  toolResultText,
 } from "../server/lib/research.mjs";
 import { fetchReference } from "../server/lib/references.mjs";
 import { cacheKey, createSearchCache } from "../server/lib/search-cache.mjs";
@@ -208,25 +225,7 @@ function fixture(
       if (payload && url.host === payloadHost) return Response.json(payload);
       if (providerPayloads[url.host])
         return Response.json(providerPayloads[url.host]);
-      if (url.host === "grep.app")
-        return Response.json({
-          hits: {
-            hits: [
-              {
-                repo: { raw: "acme/app" },
-                path: { raw: "src/db.ts" },
-                content: { snippet: "<mark>retry</mark>" },
-              },
-            ],
-          },
-        });
-      if (url.host === "context7.com") {
-        if (url.pathname === "/api/v1/search")
-          return Response.json([{ id: "/vercel/next.js", title: "Next.js" }]);
-        return new Response("# Dokumentasi Next.js", {
-          headers: { "Content-Type": "text/plain" },
-        });
-      }
+      // Nothing keyless is left to fake: every host here must be a paid vendor.
       throw new Error("Unexpected search fixture: " + url.href);
     },
   };
@@ -554,7 +553,6 @@ test("the live verification script skips honestly and never calls a vendor witho
     ...process.env,
     SEARCH_PROVIDER: "none",
     SEARCH_API_KEY: "",
-    CONTEXT7_API_KEY: "",
   } as any;
   const run = (args: string[]) => {
     try {
@@ -575,12 +573,21 @@ test("the live verification script skips honestly and never calls a vendor witho
   };
   const none = run([]);
   assert.equal(none.status, 0);
-  assert.match(none.stdout, /Tidak ada provider yang diuji/);
+  // The app's own configuration is printed first, then an honest skip.
+  assert.match(none.stdout, /provider terpilih none/);
+  assert.match(none.stdout, /DILEWATI none: SEARCH_PROVIDER belum diarahkan/);
   assert.match(none.stdout, /berarti tidak diuji, bukan berarti berfungsi/);
+  // The next steps name the real variables, so a skip is actionable.
+  assert.match(none.stdout, /SEARCH_PROVIDER=tavily/);
+  assert.match(none.stdout, /SEARCH_API_KEY=\.\.\./);
   // Naming a provider without a key is a gap, so it must exit non-zero.
   const forced = run(["--provider=exa"]);
   assert.equal(forced.status, 1);
   assert.match(forced.stdout, /DILEWATI exa: SEARCH_API_KEY belum diisi\./);
+  // A killed switch means no call at all, not a failed call.
+  const off = run([]);
+  assert.equal(off.status, 0);
+  assert.equal(/^OK\s/m.test(off.stdout), false);
 });
 
 test("web search fails closed when nothing is configured, and never silently falls back", async () => {
@@ -609,24 +616,34 @@ test("web search fails closed when nothing is configured, and never silently fal
   );
   const off = searchCapability({ SEARCH_ENABLED: "off" });
   assert.equal(off.web, false);
-  assert.equal(off.code, false);
-  assert.equal(off.docs, false);
   assert.equal(off.disabled, true);
   await assert.rejects(
     async () => resolveProvider({ SEARCH_ENABLED: "false" }, "web"),
     { message: /dinonaktifkan/ },
   );
-  // A configured kind is never used for a different kind. `resolveProvider`
-  // throws synchronously, so it needs an async wrapper to surface as rejection.
-  await assert.rejects(async () => resolveProvider(ctx.env, "web", "grepp"), {
-    message: /tidak melayani pencarian web/,
-  });
+  // A provider that no longer exists is refused by name, never run.
+  await assert.rejects(
+    async () => resolveProvider(ctx.env, "web", "context7"),
+    {
+      message: /tidak dikenal/,
+    },
+  );
   await assert.rejects(
     async () => resolveProvider(ctx.env, "lagu", undefined),
     {
       message: /tidak dikenal/,
     },
   );
+  // The keyless kinds are gone, and asking for one says exactly that instead of
+  // running a web search or returning an empty list.
+  for (const kind of ["code", "docs"]) {
+    await assert.rejects(
+      async () => resolveProvider(ctx.env, kind, undefined),
+      {
+        message: /tidak lagi tersedia/,
+      },
+    );
+  }
 });
 
 test("a page body that looks like a credential is redacted, not copied into the prompt", async () => {
@@ -674,29 +691,37 @@ test("provider markup is flattened before it reaches the prompt or the chat", as
   assert.equal(hit.sources[0].snippet, "retry dengan try/catch");
 });
 
-test("keyless code and docs search work without any API key", async () => {
+test("the keyless code and docs paths are gone, and saying so costs nothing", async () => {
   resetSearchCache();
-  const { ctx } = fixture({ SEARCH_PROVIDER: "none", SEARCH_API_KEY: "" });
+  const { ctx, calls } = fixture({
+    SEARCH_PROVIDER: "none",
+    SEARCH_API_KEY: "",
+  });
   const capability = searchCapability(ctx.env);
   assert.equal(capability.web, false);
-  assert.equal(capability.code, true);
-  assert.equal(capability.docs, true);
-
-  const code = await searchOne(ctx, { query: "fetchWithRetry", kind: "code" });
-  assert.equal(code.provider, "grepp");
-  assert.equal(
-    code.sources[0].url,
-    "https://github.com/acme/app/blob/HEAD/src/db.ts",
+  assert.equal("code" in capability, false);
+  assert.equal("docs" in capability, false);
+  // No key means no provider at all: web fails closed and the retired kinds are
+  // refused with a plain reason rather than answered from an anonymous source.
+  await assert.rejects(
+    async () => searchOne(ctx, { query: "cara pakai vite", kind: "web" }),
+    { message: /belum dikonfigurasi/ },
   );
-  assert.match(code.sources[0].title, /acme\/app/);
-  // grep.app marks the hit with <mark>; the prompt and chat get plain text.
-  assert.equal(code.sources[0].snippet, "retry");
-  assert.doesNotMatch(code.sources[0].snippet, /<|>/);
-
-  const docs = await searchOne(ctx, { query: "next.js routing", kind: "docs" });
-  assert.equal(docs.provider, "context7");
-  assert.equal(docs.sources[0].url, "https://context7.com/vercel/next.js");
-  assert.match(docs.sources[0].snippet, /Dokumentasi Next\.js/);
+  for (const kind of ["code", "docs"]) {
+    await assert.rejects(
+      async () => searchOne(ctx, { query: "fetchWithRetry", kind }),
+      { message: /tidak lagi tersedia/ },
+    );
+  }
+  // Not one vendor was called, and no source was invented.
+  assert.deepEqual(calls, []);
+  // A whole round of retired kinds is reported per query, not thrown away.
+  const round = await runSearch(ctx, {
+    queries: ["retry helper"],
+    kind: "code",
+  });
+  assert.equal(round.sources.length, 0);
+  assert.match(round.rounds[0].error, /tidak lagi tersedia/);
 });
 
 test("sources keep the query that found them, and near-duplicates are dropped once", async () => {
@@ -934,8 +959,11 @@ test("search ops are validated strictly and separated from scene ops", () => {
 test("the research instruction is honest about what is available", () => {
   const none = researchInstruction({ web: false, code: false, docs: false });
   assert.match(none, /do not request a search/i);
-  const web = researchInstruction({ web: true, code: false, docs: true });
-  assert.match(web, /Available search kinds: web, docs/);
+  // A capability object that still carries the retired kinds promises nothing:
+  // the instruction names exactly the kind that can really run.
+  const web = researchInstruction({ web: true, code: true, docs: true });
+  assert.match(web, /Available search kinds: web\./);
+  assert.doesNotMatch(web, /docs/);
   assert.match(web, /You get 1 search round in total/);
   assert.match(web, /untrusted reference data/);
   // After the first of two rounds the model is told what it already has; once
@@ -962,8 +990,9 @@ test("the research instruction is honest about what is available", () => {
       .available,
     true,
   );
-  // A keyless kind keeps research usable without any key at all.
-  assert.equal(researchStatus({ SEARCH_PROVIDER: "none" }).available, true);
+  // Nothing keyless is left, so without a key research reports itself as
+  // unavailable rather than quietly working from an anonymous source.
+  assert.equal(researchStatus({ SEARCH_PROVIDER: "none" }).available, false);
 });
 
 test("the sources block numbers every source and marks unreadable pages", () => {
@@ -1022,7 +1051,10 @@ test("a round only returns new sources, and the report counts what was really re
   assert.equal(round.rounds.length, 1);
 
   const numbered = [{ ...round.sources[0], index: 4 }];
-  const bodies = await readBodies(ctx, { sources: numbered as any, read: 5 });
+  const bodies = await readBodies(ctx, {
+    sources: numbered as any,
+    read: READ_SOURCES_MAX,
+  });
   // The read budget is exhausted, so nothing is fetched again.
   assert.deepEqual(bodies, []);
 
@@ -1073,13 +1105,18 @@ test("citations are mapped to real sources; invented numbers are flagged, not re
   assert.deepEqual(partial.uncited, [1]);
 });
 
-test("every provider that needs a key declares it, so nothing is charged by surprise", () => {
+test("every provider left needs a key, so nothing is called anonymously", () => {
+  const names = Object.keys(providers);
+  assert.ok(names.length >= 1, "setidaknya satu provider web harus ada");
   for (const [name, provider] of Object.entries(providers)) {
     assert.ok(provider.label, name);
-    assert.ok(["web", "code", "docs"].includes(provider.kind), name);
-    if (provider.kind === "web")
-      assert.equal(provider.env, "SEARCH_API_KEY", name);
-    else assert.equal(provider.env, "", name);
+    assert.equal(provider.kind, "web", name);
+    // The key is the whole gate: no key, no call.
+    assert.equal(provider.env, "SEARCH_API_KEY", name);
+  }
+  // The keyless vendors are gone from the registry entirely.
+  for (const retired of ["grepp", "context7"]) {
+    assert.equal(retired in providers, false, retired);
   }
 });
 
@@ -1133,6 +1170,164 @@ test("the grounding check is a heuristic, and it says so", () => {
   assert.deepEqual(quiet.unsupported, []);
   assert.equal(quiet.checked, 0);
   assert.equal(quiet.groundingNotice, "");
+});
+
+test("the cross-page synthesis is validated like any other model output", () => {
+  const sources = [
+    { index: 1, title: "Satu", url: "https://a.test/x", snippet: "" },
+    { index: 2, title: "Dua", url: "https://b.test/y", snippet: "" },
+  ];
+  // A fenced JSON answer is read as JSON, and the prose comes back as `text`.
+  const json = parseSummary(
+    '```json\n{"summary":"Kedua halaman sepakat [1].","covers":[1,2],"gaps":"tidak ada"}\n```',
+    { sources },
+  );
+  assert.equal(json.text, "Kedua halaman sepakat [1].");
+  assert.deepEqual(json.covers, [1, 2]);
+  assert.deepEqual(json.cited, [1]);
+  assert.equal(json.gaps, "tidak ada");
+  assert.equal(json.notice, "");
+
+  // Plain prose is a summary too: a model that skips the JSON envelope must not
+  // cost the synthesis.
+  const prose = parseSummary("Ringkasan biasa tanpa JSON.", { sources });
+  assert.equal(prose.text, "Ringkasan biasa tanpa JSON.");
+  assert.deepEqual(prose.covers, []);
+  assert.deepEqual(prose.cited, []);
+
+  // A ghost number is reported as a number, never resolved into a source.
+  const ghost = parseSummary(
+    '{"summary":"Menurut [7] hal ini rumit.","covers":[1,7],"gaps":""}',
+    { sources },
+  );
+  assert.deepEqual(ghost.invalid, [7]);
+  assert.deepEqual(ghost.covers, [1]);
+  assert.match(ghost.notice, /nomor sumber yang tidak pernah dikembalikan: 7/);
+  // A link that is not one of the sources is removed from the text, not kept.
+  const foreign = parseSummary(
+    '{"summary":"Lihat https://jahat.test/z untuk detail [1].","covers":[1],"gaps":""}',
+    { sources },
+  );
+  assert.doesNotMatch(foreign.text, /jahat\.test/);
+  assert.deepEqual(foreign.foreignUrls, ["https://jahat.test/z"]);
+  assert.match(foreign.notice, /Tautan yang bukan salah satu sumber dihapus/);
+  // A real source URL survives untouched.
+  const kept = parseSummary(
+    '{"summary":"Baca https://a.test/x dulu.","covers":[1],"gaps":""}',
+    { sources },
+  );
+  assert.match(kept.text, /https:\/\/a\.test\/x/);
+
+  // Nothing at all: reported as such instead of shown as an empty block.
+  const empty = parseSummary("   ", { sources });
+  assert.equal(empty.text, "");
+  assert.match(empty.notice, /tidak berisi apa pun/);
+
+  // The cap is enforced, and the truncation is said out loud.
+  const long = parseSummary("x".repeat(SUMMARY_CHARS_MAX + 50), { sources });
+  assert.equal(long.text.length, SUMMARY_CHARS_MAX + 1);
+  assert.match(long.notice, new RegExp(`dipotong pada ${SUMMARY_CHARS_MAX}`));
+});
+
+test("the summarization instructions keep the synthesis inside the sources", () => {
+  const instruction = summaryInstruction({
+    pages: 3,
+    question: "Apa itu retry?",
+  });
+  // Bounded, cited, and explicit that the pages are the only source of facts.
+  assert.match(instruction, /use only facts that are in the numbered sources/);
+  assert.match(instruction, /never invent a source, URL, number or quote/);
+  assert.match(instruction, /Apa itu retry\?/);
+  assert.match(instruction, new RegExp(String(SUMMARY_CHARS_MAX)));
+
+  // The block handed to the answer pass labels the synthesis as a model's words.
+  const block = summaryPromptBlock({
+    text: "Kedua halaman sepakat [1].",
+    covers: [1, 2],
+  });
+  assert.match(
+    block,
+    /RINGKASAN LINTAS HALAMAN \(dibuat AI dari halaman \[1\], \[2\]/,
+  );
+  assert.match(block, /BUKAN kutipan/);
+  assert.match(block, /bukan kata dari halaman mana pun/);
+  // No synthesis: no block, so a prompt never promises something that is absent.
+  assert.equal(summaryPromptBlock(null), "");
+  assert.equal(summaryPromptBlock({ text: "" }), "");
+
+  // The switch and the announced availability agree with each other.
+  assert.equal(summaryEnabled({}), true);
+  assert.equal(summaryEnabled({ RESEARCH_SUMMARY: "true" }), true);
+  for (const off of ["false", "FALSE", "0", "off", "no"])
+    assert.equal(summaryEnabled({ RESEARCH_SUMMARY: off }), false);
+  assert.equal(SUMMARY_PAGES_MIN >= 2, true);
+});
+
+test("a citation only the AI synthesis supports is reported as such, not as page-backed", () => {
+  const sources = [
+    { index: 1, title: "Panduan", url: "https://a.test", snippet: "" },
+  ];
+  const bodies = [
+    {
+      index: 1,
+      url: "https://a.test",
+      title: "Panduan",
+      text: "Gunakan pengulangan berjenjang untuk menangani galat jaringan.",
+    },
+  ];
+  const summary = {
+    text: "Sumber menyarankan backoff eksponensial berlapis.",
+    covers: [1],
+  };
+  const viaSummary = groundingReport(
+    "Pakai backoff eksponensial berlapis [1].",
+    sources as any,
+    bodies as any,
+    summary,
+  );
+  assert.deepEqual(viaSummary.viaSummary, [1]);
+  assert.deepEqual(viaSummary.unsupported, []);
+  assert.match(viaSummary.groundingNotice, /hanya didukung ringkasan AI/);
+
+  // A synthesis that does not cover that page cannot launder the citation: the
+  // claim stays unsupported rather than becoming summary-backed.
+  const uncovered = groundingReport(
+    "Pakai backoff eksponensial berlapis [1].",
+    sources as any,
+    bodies as any,
+    { text: summary.text, covers: [] },
+  );
+  assert.deepEqual(uncovered.viaSummary, []);
+  assert.deepEqual(uncovered.unsupported, [1]);
+  assert.equal(uncovered.groundingNotice.includes("hanya didukung"), false);
+
+  // Words the page really has still count as page-backed, summary or not.
+  const page = groundingReport(
+    "Gunakan pengulangan berjenjang untuk galat jaringan [1].",
+    sources as any,
+    bodies as any,
+    summary,
+  );
+  assert.deepEqual(page.viaSummary, []);
+  assert.deepEqual(page.unsupported, []);
+  assert.equal(page.checked, 1);
+});
+
+test("the sources block puts the synthesis in its own labelled section", () => {
+  const prompt = sourcesPrompt({
+    sources: [{ index: 1, title: "Satu", url: "https://a.test/x" }] as any,
+    bodies: [] as any,
+    summary: { text: "Ringkasan model [1].", covers: [1] },
+  });
+  assert.match(prompt, /\[1\] Satu/);
+  assert.match(prompt, /RINGKASAN LINTAS HALAMAN/);
+  assert.match(prompt, /BUKAN kutipan, tetap data tidak tepercaya/);
+  // Without a synthesis the block is exactly the deterministic excerpts.
+  const plain = sourcesPrompt({
+    sources: [{ index: 1, title: "Satu", url: "https://a.test/x" }] as any,
+    bodies: [] as any,
+  });
+  assert.doesNotMatch(plain, /RINGKASAN LINTAS HALAMAN/);
 });
 
 test("a PDF, a markdown page and a thin page are all read honestly", async () => {
@@ -1223,6 +1418,101 @@ test("a PDF, a markdown page and a thin page are all read honestly", async () =>
   );
 });
 
+test("a long page reaches the model as relevance-sized excerpts, never as invented prose", () => {
+  const page = [
+    "Pengantar tanpa kata kunci apa pun.",
+    "Retry berjenjang memakai backoff eksponensial dengan jitter supaya klien tidak menyerbu bersamaan.",
+    "Bagian lain yang tidak berhubungan sama sekali dengan pertanyaan pengguna.",
+    "Kegagalan 429 harus dihormati lewat header Retry-After sebelum mencoba lagi.",
+    "Penutup dokumen.",
+  ].join(" ");
+  const excerpt = selectExcerpt(page, ["retry", "backoff", "429"], 240);
+  // The sentences that share words with the queries survive, in page order,
+  // and the skips are marked so nobody reads a jump as the whole page.
+  assert.match(excerpt, /Retry berjenjang memakai backoff/);
+  assert.match(excerpt, /429 harus dihormati/);
+  assert.ok(
+    excerpt.indexOf("Retry berjenjang") <
+      excerpt.indexOf("429 harus dihormati"),
+  );
+  assert.match(excerpt, /\[…\]/);
+  assert.doesNotMatch(excerpt, /Pengantar tanpa kata kunci/);
+  assert.ok(excerpt.length <= 280);
+  // Every word comes from the page itself: an excerpt is evidence, not a summary.
+  const sourceWords = new Set(page.toLowerCase().match(/[\p{L}\p{N}]+/gu));
+  for (const word of excerpt.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [])
+    assert.ok(sourceWords.has(word), `kata "${word}" tidak ada di halaman`);
+
+  // Without query terms the opening is sent, still marked as cut.
+  const head = selectExcerpt(page, [], 60);
+  assert.ok(head.startsWith("Pengantar"));
+  assert.match(head, /\[…\]/);
+  // A page that already fits is passed through untouched.
+  assert.equal(selectExcerpt("pendek saja", ["retry"], 100), "pendek saja");
+  // Nothing matches the queries: the page is still evidence, so its opening is
+  // sent instead of an empty block.
+  const off = selectExcerpt(page, ["zzz-tidak-ada"], 70);
+  assert.ok(off.startsWith("Pengantar"));
+});
+
+test("a turn reads up to eight pages, and each one carries both the excerpt and the fuller text", async () => {
+  resetSearchCache();
+  const { ctx } = fixture();
+  const fetched: string[] = [];
+  const longHtml = `<html><title>Halaman panjang</title><body>${Array.from(
+    { length: 700 },
+    (_, i) => `Kalimat ${i} menjelaskan retry dan backoff untuk klien.`,
+  ).join(" ")}</body></html>`;
+  const bodies = await readBodies(
+    {
+      ...ctx,
+      fetcher: async (input: any) => {
+        fetched.push(String(input));
+        return new Response(longHtml, {
+          headers: { "Content-Type": "text/html" },
+        });
+      },
+      resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+    },
+    {
+      sources: Array.from({ length: 10 }, (_, i) => ({
+        index: i + 1,
+        title: "Halaman " + (i + 1),
+        url: `https://dokumen.example.test/h${i + 1}`,
+        snippet: "cuplikan",
+        query: "retry backoff",
+      })) as any[],
+      terms: ["retry", "backoff"],
+    },
+  );
+  // Eight pages, not five: the read budget grew, and the ninth is not fetched.
+  assert.equal(bodies.length, READ_SOURCES_MAX);
+  assert.equal(READ_SOURCES_MAX, 8);
+  assert.equal(fetched.length, 8);
+  const first = bodies[0] as any;
+  assert.ok(first.text.length > READ_EXCERPT_CHARS);
+  assert.ok(first.excerpt.length <= READ_EXCERPT_CHARS + 40);
+  assert.equal(first.truncated, true);
+  // The prompt shows the excerpt and says what it is, so a short block is never
+  // mistaken for a short page.
+  const prompt = sourcesPrompt({
+    sources: [
+      {
+        index: 1,
+        title: "Halaman 1",
+        url: "https://dokumen.example.test/h1",
+        provider: "tavily",
+        kind: "web",
+        snippet: "cuplikan",
+      },
+    ] as any[],
+    bodies,
+  });
+  assert.match(prompt, /kutipan relevan dari halaman/);
+  assert.ok(prompt.includes(first.excerpt.slice(0, 40)));
+  assert.ok(!prompt.includes(first.text.slice(READ_EXCERPT_CHARS)));
+});
+
 test("the search cache is shared across instances, and falls back when it cannot be", async () => {
   resetSearchCache();
   // Two caches, one table: the second instance pays nothing for the same query.
@@ -1298,4 +1588,275 @@ test("a shared hit answers a real search without calling the vendor", async () =
   assert.equal(result.cacheMode, "shared");
   assert.equal(result.sources[0].title, "Dari cache");
   resetSearchCache();
+});
+
+test("native tools are offered only for the kinds that exist, plus opening a page", () => {
+  const web = researchTools({ web: true, code: false, docs: false });
+  assert.deepEqual(
+    web.map((tool: any) => tool.function.name),
+    ["search", "read_page"],
+  );
+  const search = web[0].function as any;
+  // A pointer at the vendor-shaped tool field: the JSON schema handed to a
+  // provider has to be valid on its own.
+  assert.deepEqual(search.parameters.properties.type.enum, ["web"]);
+  assert.deepEqual(search.parameters.required, ["queries"]);
+  assert.equal(search.parameters.additionalProperties, false);
+  assert.equal(
+    search.parameters.properties.queries.maxItems,
+    SEARCH_QUERIES_MAX,
+  );
+  // Web is the only kind there is, so the schema never promises another one —
+  // even when a caller hands over a capability object with retired kinds in it.
+  const all = researchTools({ web: true, code: true, docs: true });
+  assert.deepEqual(all[0].function.parameters.properties.type.enum, ["web"]);
+  // No provider at all: the tool list never promises a search the server
+  // cannot run, it only offers to open a page the model already knows.
+  assert.deepEqual(
+    researchTools({ web: false, code: false, docs: false }).map(
+      (tool: any) => tool.function.name,
+    ),
+    ["read_page"],
+  );
+});
+
+test("tool calls become the same operations as the JSON protocol, and odd ones are named", () => {
+  const ops = toolCallsToOps([
+    {
+      id: "call_1",
+      function: {
+        name: "search",
+        arguments: '{"queries":["retry next.js","vite 6"]}',
+      },
+    },
+    {
+      id: "call_2",
+      function: { name: "search_code", arguments: '{"query":"retry helper"}' },
+    },
+    {
+      id: "call_3",
+      function: {
+        name: "read_page",
+        arguments: '{"url":"https://contoh.example.test/a"}',
+      },
+    },
+    { id: "call_4", function: { name: "read_page", arguments: '{"index":2}' } },
+    { id: "call_5", function: { name: "delete_repo", arguments: "{}" } },
+    { id: "call_6", function: { name: "search", arguments: "bukan json" } },
+    { id: "call_7", function: { name: "search", arguments: '{"queries":[]}' } },
+  ]);
+  assert.equal(ops.searches.length, 1);
+  assert.deepEqual(ops.searches[0], {
+    kind: "search",
+    queries: ["retry next.js", "vite 6"],
+    type: "web",
+    id: "call_1",
+  });
+  // `search_code` went away with the keyless code path, so it is reported as a
+  // tool we do not have instead of being answered as a web search.
+  assert.ok(ops.unknown.includes("search_code"));
+  assert.deepEqual(
+    ops.fetches.map((fetch: any) => fetch.url || fetch.index),
+    ["https://contoh.example.test/a", 2],
+  );
+  // A tool we do not have is reported, never quietly treated as a search.
+  assert.deepEqual(ops.unknown, ["search_code", "delete_repo"]);
+  assert.deepEqual(ops.invalid, ["search", "search"]);
+  // Nothing usable at all: no operation, and the caller can see why.
+  assert.deepEqual(toolCallsToOps([{ function: { name: "buka" } }]).unknown, [
+    "buka",
+  ]);
+  const many = toolCallsToOps([
+    {
+      id: "call_8",
+      function: {
+        name: "search",
+        arguments: JSON.stringify({
+          queries: ["a1", "b2", "c3", "d4", "e5"],
+        }),
+      },
+    },
+  ]);
+  assert.equal(many.searches[0].queries.length, SEARCH_QUERIES_MAX);
+});
+
+test("the model may open a page it found, and it becomes a numbered source", async () => {
+  const fetched: string[] = [];
+  const ctx = {
+    ...fixture().ctx,
+    fetcher: async (input: any) => {
+      fetched.push(String(input));
+      return new Response(
+        "<html><title>Panduan retry</title><body>Gunakan backoff eksponensial sebelum mencoba ulang. Kalimat lain tidak penting.</body></html>",
+        { headers: { "Content-Type": "text/html" } },
+      );
+    },
+    resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+  };
+  const opened = await openSources(ctx, {
+    fetches: [
+      { kind: "fetch", url: "https://baru.example.test/panduan", id: "call_1" },
+    ],
+    sources: [
+      {
+        index: 1,
+        title: "Lama",
+        url: "https://lama.example.test/a",
+        snippet: "cuplikan",
+        kind: "web",
+        provider: "tavily",
+        query: "q",
+      },
+    ] as any,
+    bodies: [
+      {
+        index: 1,
+        url: "https://lama.example.test/a",
+        title: "Lama",
+        text: "Isi lama",
+      },
+    ] as any,
+    read: 1,
+    terms: significantTerms("backoff mencoba ulang"),
+  });
+  assert.equal(fetched.length, 1);
+  // Numbering continues after the sources already numbered in this turn.
+  assert.equal(opened.sources.length, 1);
+  assert.equal(opened.sources[0].index, 2);
+  assert.equal(opened.sources[0].provider, OPENED_PROVIDER);
+  assert.match(opened.sources[0].title, /Panduan retry/);
+  assert.equal(opened.bodies.length, 1);
+  assert.match(opened.bodies[0].text, /backoff eksponensial/);
+  assert.equal(opened.results[0].id, "call_1");
+  assert.equal(opened.results[0].added, true);
+  assert.match(openResultText(opened.results[0]), /sumber baru \[2\]/);
+  assert.match(openResultText(opened.results[0]), /backoff eksponensial/);
+  // What the model is told about a search says what is new and what failed.
+  const told = toolResultText({
+    added: opened.sources,
+    bodies: opened.bodies,
+    rounds: [
+      { query: "gagal", error: "Sumber pencarian gagal dihubungi." },
+      { query: "oke", count: 1, error: "" },
+    ] as any,
+  });
+  assert.match(told, /\[2\] Panduan retry/);
+  assert.match(told, /"gagal" gagal: Sumber pencarian gagal dihubungi\./);
+  assert.match(toolResultText({}), /tidak menambah sumber baru/);
+});
+
+test("opening a page never fakes a source: known, refused, unreadable and over-budget", async () => {
+  const known = {
+    index: 3,
+    url: "https://lama.example.test/a",
+    title: "Lama",
+    text: "Isi yang sudah dibaca",
+  };
+  const sources = [
+    {
+      index: 3,
+      title: "Lama",
+      url: "https://lama.example.test/a",
+      snippet: "cuplikan",
+      kind: "web",
+      provider: "tavily",
+      query: "q",
+    },
+  ] as any;
+  let visits = 0;
+  const ctx = {
+    ...fixture().ctx,
+    fetcher: async (input: any) => {
+      visits += 1;
+      if (String(input).includes("mati.example.test"))
+        return new Response("no", { status: 500 });
+      return new Response(
+        "<html><title>Baru</title><body>Isi baru.</body></html>",
+        {
+          headers: { "Content-Type": "text/html" },
+        },
+      );
+    },
+    resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+  };
+  const already = await openSources(ctx, {
+    fetches: [{ kind: "fetch", index: 3, id: "call_1" }],
+    sources,
+    bodies: [known] as any,
+    read: 1,
+  });
+  // A source that already has a body is not fetched again.
+  assert.equal(visits, 0);
+  assert.equal(already.sources.length, 0);
+  assert.equal(already.results[0].added, false);
+  assert.match(openResultText(already.results[0]), /Isi yang sudah dibaca/);
+
+  const refused = await openSources(ctx, {
+    fetches: [
+      { kind: "fetch", url: "http://tidak-aman.example.test/x" },
+      { kind: "fetch", url: "bukan url" },
+      { kind: "fetch", url: "https://mati.example.test/x" },
+      // A fourth request fits the vendor cap, so it is dropped, not run.
+      { kind: "fetch", url: "https://baru.example.test/lain" },
+    ],
+    sources,
+    bodies: [known] as any,
+    read: 1,
+  });
+  // Nothing insecure, unknown or unreadable ever becomes a source.
+  assert.equal(refused.sources.length, 0);
+  assert.equal(refused.results.length, FETCH_MAX_DEFAULT);
+  assert.match(refused.results[0].note, /HTTPS/);
+  assert.match(refused.results[1].note, /tidak valid/);
+  assert.match(refused.results[2].note, /tidak dapat diakses/);
+  for (const result of refused.results)
+    assert.match(openResultText(result), /tidak dapat dibuka/);
+
+  const unknownIndex = await openSources(ctx, {
+    fetches: [{ kind: "fetch", index: 99 }],
+    sources,
+    bodies: [known] as any,
+    read: 1,
+  });
+  assert.match(unknownIndex.results[0].note, /tidak ada di daftar sumber/);
+
+  const over = await openSources(
+    {
+      ...ctx,
+      fetcher: async () => {
+        throw new Error("anggaran habis: tidak boleh ada panggilan jaringan");
+      },
+    },
+    {
+      fetches: [
+        { kind: "fetch", url: "https://baru.example.test/a" },
+        { kind: "fetch", url: "https://baru.example.test/b" },
+      ],
+      sources,
+      bodies: [known] as any,
+      read: READ_SOURCES_MAX,
+    },
+  );
+  assert.equal(over.sources.length, 0);
+  assert.match(over.results[0].note, new RegExp(`Batas ${READ_SOURCES_MAX}`));
+  // The per-round cap is enforced here, not only promised in the prompt.
+  assert.equal(FETCH_MAX_DEFAULT, 3);
+});
+
+test("researchInstruction teaches one protocol at a time", () => {
+  const withTools = researchInstruction(
+    { web: true, code: false, docs: false },
+    { max: 2, tools: true },
+  );
+  assert.match(withTools, /CALL the provided tools/);
+  assert.match(withTools, /`read_page`/);
+  assert.doesNotMatch(withTools, /"kind":"search"/);
+  const withoutTools = researchInstruction({ web: true }, { max: 2 });
+  assert.match(withoutTools, /"kind":"search"/);
+  assert.doesNotMatch(withoutTools, /CALL the provided tools/);
+  // Both protocols keep the same hard rules.
+  for (const prompt of [withTools, withoutTools]) {
+    assert.match(prompt, /Never invent a source/);
+    assert.match(prompt, /untrusted reference data/);
+  }
 });

@@ -4,6 +4,20 @@ import { IDEThemeProvider, useIDETheme } from "../workspace/IDETheme";
 import { SCENE_PATH, validateSceneChanges } from "../lib/roblox/scene";
 import "../workspace/roblox/roblox.css";
 import { readAttachment } from "../services/api";
+import { photoSamples } from "../lib/photo-palette";
+import type { PhotoPalette } from "../lib/photo-palette";
+import {
+  PROJECT_PHOTOS_MAX,
+  photoFromAttachment,
+  photoSize,
+} from "../lib/photo-assets";
+import type { ProjectPhotoMeta } from "../lib/photo-assets";
+import {
+  listProjectPhotos,
+  readProjectPhoto,
+  removeProjectPhoto,
+  saveProjectPhotos,
+} from "../services/project-photos";
 import type { Attachment } from "../services/api";
 import { saveRecording } from "../services/recordings";
 import type { ReplayEvent } from "../services/recordings";
@@ -86,7 +100,22 @@ import {
   PanelRight,
 } from "lucide-react";
 import { useStore } from "../lib/store";
-import type { Mode, Model, Project, SourceRef } from "../lib/types";
+import type {
+  Mode,
+  Model,
+  Project,
+  ResearchStep,
+  SourceRef,
+} from "../lib/types";
+import { researchStepLabel } from "../lib/research-step";
+import {
+  forgetPendingJob,
+  lostJobs,
+  readClaimedJobs,
+  readPendingJobs,
+  rememberClaimedJob,
+  rememberPendingJob,
+} from "../lib/research-jobs";
 import { Logo, Modal } from "../components/ui";
 import { compilePreview } from "../lib/preview";
 import { scopeFor } from "../lib/cloud/types";
@@ -113,30 +142,6 @@ const MODEL_PREFERENCE_KEY = "piwu-ai-model-v1";
 // Research mode is remembered per account too, so a user who wants sources
 // does not have to switch it on again in every session.
 const RESEARCH_PREFERENCE_KEY = "piwu-ai-research-v1";
-// Research answers already collected from the server, so a reload never shows
-// the same background answer twice even if the claim call was lost.
-const CLAIMED_JOBS_KEY = "piwu-ai-research-jobs-v1";
-const readClaimedJobs = (scope: string): string[] => {
-  try {
-    const stored = workspaceStorage.getItem(`${CLAIMED_JOBS_KEY}:${scope}`);
-    const list = typeof stored === "string" && stored ? JSON.parse(stored) : [];
-    return Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-};
-const rememberClaimedJob = (scope: string, requestId: string) => {
-  const list = readClaimedJobs(scope).filter((x) => x !== requestId);
-  list.push(requestId);
-  try {
-    workspaceStorage.setItem(
-      `${CLAIMED_JOBS_KEY}:${scope}`,
-      JSON.stringify(list.slice(-40)),
-    );
-  } catch {
-    /* memory only when storage is full or blocked */
-  }
-};
 const readStoredResearch = (scope: string): boolean =>
   workspaceStorage.getItem(`${RESEARCH_PREFERENCE_KEY}:${scope}`) === "1";
 const readStoredModel = (scope: string): Model => {
@@ -268,6 +273,8 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [chatTab, setChatTab] = useState("Chat");
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState("");
+  // Latest step reported by the research loop, shown while the turn runs.
+  const [researchStep, setResearchStep] = useState<ResearchStep | null>(null);
   const [error, setError] = useState("");
   const [aiError, setAiError] = useState("");
   const [logs, setLogs] = useState<string[]>(["Preview lokal siap."]);
@@ -288,6 +295,9 @@ function WorkspaceContent({ project }: { project: Project }) {
   );
   const [summaryOpen, setSummaryOpen] = useState("");
   const [sourcesOpen, setSourcesOpen] = useState("");
+  // True while a research turn this browser started is still running on the
+  // server, so the composer can say so instead of looking idle.
+  const [bgResearch, setBgResearch] = useState(false);
   const [comment, setComment] = useState("");
   const [designText, setDesignText] = useState("");
   const [designColor, setDesignColor] = useState("#2857aa");
@@ -298,7 +308,22 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [packageQuery, setPackageQuery] = useState("");
   const [line, setLine] = useState<number>();
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 });
-  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  // Up to three attachments, so a photo of the object can travel with the brief
+  // that describes it. The server numbers the photos in this order.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Colour grids sampled from the attached photos, in the same order as the
+  // photos themselves. A photo whose pixels could not be read is kept as null,
+  // so the server can say "no colour sample for photo 2" instead of guessing.
+  const [palettes, setPalettes] = useState<(PhotoPalette | null)[]>([]);
+  // Small redraws of those same photos, kept so a stored photo can be listed
+  // without decoding it again.
+  const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
+  // Photos this project already holds, in this browser. Sorted newest first.
+  const [projectPhotos, setProjectPhotos] = useState<ProjectPhotoMeta[]>([]);
+  // The photo opened large, to compare against the model it produced. The
+  // thumbnail shows immediately; the full bytes follow once they are read.
+  const [photoView, setPhotoView] = useState<ProjectPhotoMeta | null>(null);
+  const [photoViewSrc, setPhotoViewSrc] = useState<string | null>(null);
   const [references, setReferences] = useState<string[]>([]);
   const [scans, setScans] = useState<
     { title: string; file: string; level: string }[] | null
@@ -322,6 +347,7 @@ function WorkspaceContent({ project }: { project: Project }) {
   // Requests already being collected, so two visibility events cannot claim the
   // same background answer twice.
   const collecting = useRef(new Set<string>());
+  const bgInformed = useRef(false);
   const record = useCallback(
     (label: string) => {
       if (recording)
@@ -356,6 +382,59 @@ function WorkspaceContent({ project }: { project: Project }) {
     if (window.innerWidth <= 850) setLeft(false);
     setLine(line);
     setReviewPath("");
+  };
+  const account = useStore((s) => scopeFor(s.user));
+  const refreshProjectPhotos = useCallback(async () => {
+    try {
+      setProjectPhotos(await listProjectPhotos(account, id));
+    } catch {
+      // A browser without IndexedDB (private mode) simply has no stored photos;
+      // the panel stays empty instead of breaking the workspace.
+      setProjectPhotos([]);
+    }
+  }, [account, id]);
+  useEffect(() => {
+    void refreshProjectPhotos();
+  }, [refreshProjectPhotos]);
+  // Puts a stored photo back into the composer, with the colours that were
+  // sampled from those exact bytes — so the next model is built from the photo
+  // again, not from a recollection of it.
+  const reuseProjectPhoto = async (photo: ProjectPhotoMeta) => {
+    if (attachments.length >= 3) {
+      store.notify("Maksimal 3 lampiran per pesan. Hapus salah satu dulu.");
+      return;
+    }
+    const full = await readProjectPhoto(account, id, photo.id);
+    if (!full) {
+      store.notify("Foto itu sudah tidak ada di penyimpanan browser ini.");
+      await refreshProjectPhotos();
+      return;
+    }
+    let palette = full.palette ?? null;
+    if (!palette) {
+      const samples = await photoSamples(full);
+      palette = samples.palette;
+    }
+    setAttachments((list) => [
+      ...list,
+      { name: full.name, mime: full.mime, data: full.data },
+    ]);
+    setPalettes((list) => [...list, palette]);
+    setThumbnails((list) => [...list, full.thumbnail ?? null]);
+    store.notify(`Foto ${full.name} dipakai lagi sebagai lampiran.`);
+  };
+  const openProjectPhoto = async (photo: ProjectPhotoMeta) => {
+    setPhotoView(photo);
+    setPhotoViewSrc(photo.thumbnail || null);
+    const full = await readProjectPhoto(account, id, photo.id);
+    if (full) setPhotoViewSrc(`data:${full.mime};base64,${full.data}`);
+  };
+  const dropProjectPhoto = async (photo: ProjectPhotoMeta) => {
+    await removeProjectPhoto(account, id, photo.id).catch(() => undefined);
+    setPhotoView((open) => (open?.id === photo.id ? null : open));
+    setPhotoViewSrc(null);
+    await refreshProjectPhotos();
+    store.notify("Aset foto dihapus dari project ini.");
   };
   const addMessage = (
     role: "user" | "assistant",
@@ -494,6 +573,7 @@ function WorkspaceContent({ project }: { project: Project }) {
       setBusy(true);
       setAiError("");
       setStreaming("");
+      setResearchStep(null);
       setChatTab("Chat");
       const contextual = selected
         ? text +
@@ -512,10 +592,20 @@ function WorkspaceContent({ project }: { project: Project }) {
       // The id travels with the request so a research turn that finished after
       // the tab closed can be claimed from the background store.
       const requestId = crypto.randomUUID();
+      // Tracked until the answer is in hand, so a run that dies with the server
+      // is reported honestly instead of silently disappearing.
+      if (research) rememberPendingJob(id, requestId);
       try {
         const result = await streamAI({
           projectId: id,
-          attachments: attachment ? [attachment] : [],
+          attachments,
+          // One slot per photo, in photo order: the server indexes them by the
+          // photo number the model cites.
+          photoPalettes: attachments
+            .map((file, at) =>
+              file.mime.startsWith("image/") ? (palettes[at] ?? null) : null,
+            )
+            .filter((_, at) => attachments[at].mime.startsWith("image/")),
           references,
           prompt: contextual,
           files: project.files,
@@ -524,13 +614,54 @@ function WorkspaceContent({ project }: { project: Project }) {
           research,
           requestId,
           onToken: setStreaming,
+          onStep: setResearchStep,
           signal: controller.signal,
         });
         if (controller.signal.aborted) return;
         setProviderVerified(true);
-        setAttachment(null);
-        setReferences([]);
         const answerId = crypto.randomUUID();
+        // The photos of this turn are kept with the project before the composer
+        // is cleared, so the finished model can be compared against the picture
+        // it came from and the same photo can be used in a later session.
+        const answered = attachments.filter((file: Attachment) =>
+          file.mime.startsWith("image/"),
+        );
+        if (answered.length)
+          void saveProjectPhotos(
+            account,
+            id,
+            answered.flatMap((file: Attachment) => {
+              const at = attachments.indexOf(file);
+              try {
+                return [
+                  photoFromAttachment(file, {
+                    palette: palettes[at] ?? null,
+                    thumbnail: thumbnails[at] ?? undefined,
+                    from: answerId,
+                  }),
+                ];
+              } catch {
+                // A file the store refuses is simply not kept: the turn already
+                // succeeded, and nothing is claimed about a photo that was not
+                // stored.
+                return [];
+              }
+            }),
+          )
+            .then(async ({ saved, dropped }) => {
+              await refreshProjectPhotos();
+              if (saved)
+                store.notify(
+                  dropped.length
+                    ? `${saved} foto disimpan sebagai aset project; ${dropped.length} foto terlama dihapus (batas ${PROJECT_PHOTOS_MAX} foto / 16 MB).`
+                    : `${saved} foto disimpan sebagai aset project (di browser ini).`,
+                );
+            })
+            .catch(() => undefined);
+        setAttachments([]);
+        setPalettes([]);
+        setThumbnails([]);
+        setReferences([]);
         store.addMessage(id, {
           id: answerId,
           role: "assistant",
@@ -540,6 +671,8 @@ function WorkspaceContent({ project }: { project: Project }) {
           ops: result.ops,
           sources: result.sources,
           research: result.research,
+          tools: result.tools,
+          notes: result.notes,
           model: result.model,
           mode: currentMode,
           at: Date.now(),
@@ -597,6 +730,7 @@ function WorkspaceContent({ project }: { project: Project }) {
         if (research) {
           void claimResearchJob(id, requestId);
           rememberClaimedJob(id, requestId);
+          forgetPendingJob(id, requestId);
         }
       } catch (e) {
         setInput((current) => current || text);
@@ -607,6 +741,7 @@ function WorkspaceContent({ project }: { project: Project }) {
       } finally {
         setBusy(false);
         setStreaming("");
+        setResearchStep(null);
         abortRef.current = null;
       }
     },
@@ -623,7 +758,8 @@ function WorkspaceContent({ project }: { project: Project }) {
       useReview,
       id,
       record,
-      attachment,
+      attachments,
+      palettes,
       references,
     ],
   );
@@ -635,9 +771,35 @@ function WorkspaceContent({ project }: { project: Project }) {
     if (store.sync[id]?.phase !== "synced") return;
     if (!store.user || store.user.demo) return;
     let stopped = false;
+    let timer: number | undefined;
     const collect = async () => {
       const jobs = await fetchResearchJobs(id);
       if (stopped) return;
+      // A run that is still going is reported as such and checked again, so the
+      // answer lands in the chat without a reload — the reason the job store
+      // exists at all.
+      const running = jobs.some((job) => job.state === "running");
+      setBgResearch(running);
+      if (running && !bgInformed.current) {
+        bgInformed.current = true;
+        store.notify(
+          "Riset yang Anda tinggalkan masih berjalan di server. Hasilnya muncul di chat begitu selesai; bila proses server dimulai ulang sebelum selesai, jawaban itu tidak bisa diambil lagi dan kreditnya dipulihkan.",
+        );
+      }
+      if (running && !stopped) timer = window.setTimeout(collect, 5000);
+      // A run this browser started that the server no longer knows about: the
+      // process restarted before the answer was finished, or the job list was
+      // cleared. Neither can be recovered, so it is said once (never while the
+      // job is still listed, and never for a turn that was just sent).
+      for (const lost of lostJobs(
+        readPendingJobs(id),
+        jobs.map((job) => job.requestId),
+      )) {
+        forgetPendingJob(id, lost);
+        store.notify(
+          "Riset yang Anda tinggalkan tidak lagi tersedia di server (proses server berhenti atau daftar job-nya dibersihkan), jadi jawabannya tidak bisa diambil. Kredit ronde yang tidak selesai dipulihkan otomatis — silakan kirim ulang pertanyaannya.",
+        );
+      }
       for (const job of jobs) {
         if (job.state === "running") continue;
         if (collecting.current.has(job.requestId)) continue;
@@ -650,6 +812,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           continue;
         }
         rememberClaimedJob(id, job.requestId);
+        forgetPendingJob(id, job.requestId);
         if (taken.state === "failed") {
           setAiError("Riset latar belakang gagal: " + taken.error);
           continue;
@@ -666,6 +829,8 @@ function WorkspaceContent({ project }: { project: Project }) {
           ops: result.ops,
           sources: result.sources,
           research: result.research,
+          tools: result.tools,
+          notes: result.notes,
           model: result.model,
           mode: (job.mode as Mode) || "Ask",
           at: Date.now(),
@@ -711,6 +876,7 @@ function WorkspaceContent({ project }: { project: Project }) {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
+      if (timer) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [id, initializing, provider, kind, useReview, store.sync[id]?.phase]);
@@ -2135,11 +2301,77 @@ function WorkspaceContent({ project }: { project: Project }) {
                                       : "Tanpa perubahan scene"}
                                 </span>
                                 {m.ops.applied.map((op, i) => (
-                                  <p key={"applied" + i}>
-                                    <Check size={11} />
-                                    <strong>{op.name || op.target}</strong>
-                                    {(op.changes || []).join(" · ")}
-                                  </p>
+                                  <div
+                                    className="ops-applied"
+                                    key={"applied" + i}
+                                  >
+                                    <p>
+                                      <Check size={11} />
+                                      <strong>{op.name || op.target}</strong>
+                                      {(op.changes || []).join(" · ")}
+                                    </p>
+                                    {op.kind === "scene.build" && (
+                                      <div className="ops-build">
+                                        <small>
+                                          Geometri dibuat server
+                                          {op.photo
+                                            ? ` dari foto ${op.photo}`
+                                            : ""}
+                                          {op.geometry
+                                            ? ` · ${op.geometry.vertices} vertex, ${op.geometry.faces} face`
+                                            : " · bagian Roblox, tanpa mesh"}
+                                          {op.asMesh
+                                            ? " · satu mesh gabungan, bisa diekspor OBJ dari editor"
+                                            : ""}
+                                        </small>
+                                        {!!op.colorGroups?.length && (
+                                          <p
+                                            className="ops-colors"
+                                            aria-label={`Warna dari piksel foto ${op.photo || 1}: ${op.colorGroups
+                                              .map(
+                                                (group) =>
+                                                  `${group.color} untuk ${group.faces} sisi`,
+                                              )
+                                              .join(", ")}`}
+                                          >
+                                            <span aria-hidden="true">
+                                              {op.colorGroups.map(
+                                                (group, at) => (
+                                                  <i
+                                                    key={
+                                                      "color" + at + group.color
+                                                    }
+                                                    style={{
+                                                      background: group.color,
+                                                    }}
+                                                  />
+                                                ),
+                                              )}
+                                            </span>
+                                            {op.colorGroups.length} warna dari
+                                            piksel foto {op.photo || 1}
+                                          </p>
+                                        )}
+                                        {(op.parts?.length || 0) > 1 && (
+                                          <ul>
+                                            {(op.parts || []).map(
+                                              (part, at) => (
+                                                <li key={"part" + at}>
+                                                  {part.name}
+                                                  <span>
+                                                    {part.kind === "mesh" &&
+                                                    part.vertices
+                                                      ? `mesh ${part.shape} · ${part.vertices} vertex`
+                                                      : `${part.shape} → ${part.kind}`}
+                                                  </span>
+                                                </li>
+                                              ),
+                                            )}
+                                          </ul>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 ))}
                                 {m.ops.rejected.map((op, i) => (
                                   <p className="rejected" key={"rejected" + i}>
@@ -2178,6 +2410,43 @@ function WorkspaceContent({ project }: { project: Project }) {
                                   </button>
                                   {sourcesOpen === m.id && (
                                     <>
+                                      {m.research?.summary?.text && (
+                                        <div className="research-summary">
+                                          <strong>
+                                            Ringkasan lintas halaman
+                                          </strong>
+                                          <span>
+                                            Dibuat AI dari{" "}
+                                            {m.research.summary.covers.length
+                                              ? `halaman ${m.research.summary.covers
+                                                  .map((n) => `[${n}]`)
+                                                  .join(", ")}`
+                                              : "halaman yang terbaca"}
+                                            {m.research.summary.pages
+                                              ? ` (${m.research.summary.pages} halaman terbaca saat itu)`
+                                              : ""}{" "}
+                                            — bukan kutipan dan bukan kata-kata
+                                            halaman.
+                                          </span>
+                                          <p>{m.research.summary.text}</p>
+                                          {m.research.summary.gaps && (
+                                            <small>
+                                              Belum diselesaikan sumber:{" "}
+                                              {m.research.summary.gaps}
+                                            </small>
+                                          )}
+                                          {m.research.summary.notice && (
+                                            <small className="warn">
+                                              {m.research.summary.notice}
+                                            </small>
+                                          )}
+                                          <small>
+                                            Dibuat di dalam kredit ronde riset —
+                                            tidak ada kredit tambahan — dan
+                                            hanya sekali per permintaan.
+                                          </small>
+                                        </div>
+                                      )}
                                       {m.sources?.length ? (
                                         <ol>
                                           {m.sources.map((s) => (
@@ -2237,6 +2506,14 @@ function WorkspaceContent({ project }: { project: Project }) {
                                           {m.research.groundingNotice}
                                         </small>
                                       )}
+                                      {!!m.research?.viaSummary?.length && (
+                                        <small>
+                                          Sitasi{" "}
+                                          {m.research.viaSummary.join(", ")}{" "}
+                                          didukung ringkasan AI, bukan kata-kata
+                                          halaman sumbernya.
+                                        </small>
+                                      )}
                                       {!!m.research?.insufficient?.length && (
                                         <small>
                                           Sitasi yang belum bisa diperiksa:{" "}
@@ -2251,6 +2528,26 @@ function WorkspaceContent({ project }: { project: Project }) {
                                         </small>
                                       )}
                                     </>
+                                  )}
+                                </div>
+                              )}
+                            {m.role === "assistant" &&
+                              (m.tools || m.notes?.length) && (
+                                <div className="ai-tools">
+                                  {m.tools && (
+                                    <small>
+                                      {m.tools.notice}
+                                      {m.tools.refused.length
+                                        ? ` Ditolak: ${m.tools.refused.join(", ")}.`
+                                        : ""}
+                                    </small>
+                                  )}
+                                  {!!m.notes?.length && (
+                                    <ul className="sources-failed">
+                                      {m.notes.map((note) => (
+                                        <li key={note}>{note}</li>
+                                      ))}
+                                    </ul>
                                   )}
                                 </div>
                               )}
@@ -2306,7 +2603,9 @@ function WorkspaceContent({ project }: { project: Project }) {
                               <LoaderCircle className="spin" size={11} />
                             </div>
                             <p>
-                              {streaming || "Membaca konteks project…"}
+                              {streaming ||
+                                researchStepLabel(researchStep) ||
+                                "Membaca konteks project…"}
                               <span className="stream-cursor" />
                             </p>
                           </div>
@@ -2382,16 +2681,118 @@ function WorkspaceContent({ project }: { project: Project }) {
                         </button>
                       </div>
                     ))}
-                    {attachment && (
-                      <div className="context-chip">
-                        <Paperclip size={11} />
-                        {attachment.name}
-                        <button
-                          aria-label="Hapus lampiran"
-                          onClick={() => setAttachment(null)}
-                        >
-                          <X size={11} />
-                        </button>
+                    {attachments.some((a) => a.mime.startsWith("image/")) &&
+                      kind === "roblox" &&
+                      mode === "Builder" && (
+                        <p className="context-hint">
+                          Foto akan dibaca di server: minta “buatkan model 3D
+                          dari foto ini” dan AI menyusun bentuknya dalam stud,
+                          bukan menjiplak tekstur foto. Warna tiap bagian
+                          diambil dari piksel foto Anda (rata-rata area, bukan
+                          peta tekstur UV).
+                        </p>
+                      )}
+                    {!!projectPhotos.length && (
+                      <div className="project-photos">
+                        <div className="project-photos-head">
+                          <b>
+                            Foto project <span>{projectPhotos.length}</span>
+                          </b>
+                          <small>
+                            Tersimpan di browser ini untuk project ini — belum
+                            ikut ke perangkat lain. Foto dipakai lagi tanpa
+                            diunggah ulang.
+                          </small>
+                        </div>
+                        <ul>
+                          {projectPhotos.map((photo) => (
+                            <li key={photo.id}>
+                              <button
+                                className="photo-thumb"
+                                aria-label={`Buka foto ${photo.name}`}
+                                onClick={() => void openProjectPhoto(photo)}
+                              >
+                                {photo.thumbnail ? (
+                                  <img src={photo.thumbnail} alt="" />
+                                ) : (
+                                  <span aria-hidden="true">
+                                    {photo.name.slice(0, 1).toUpperCase()}
+                                  </span>
+                                )}
+                              </button>
+                              <div>
+                                <b>{photo.name}</b>
+                                <small>
+                                  {photoSize(photo.bytes)} ·{" "}
+                                  {new Date(photo.at).toLocaleDateString(
+                                    "id-ID",
+                                  )}
+                                  {photo.palette
+                                    ? ` · ${photo.palette.colors.length} sel warna`
+                                    : " · sampel warna tidak tersedia"}
+                                </small>
+                              </div>
+                              <button
+                                className="ws-icon"
+                                aria-label={`Pakai lagi foto ${photo.name}`}
+                                title="Pakai lagi sebagai lampiran"
+                                onClick={() => void reuseProjectPhoto(photo)}
+                              >
+                                <Paperclip size={12} />
+                              </button>
+                              <button
+                                className="ws-icon"
+                                aria-label={`Hapus aset foto ${photo.name}`}
+                                title="Hapus dari aset project"
+                                onClick={() => void dropProjectPhoto(photo)}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {!!attachments.length && (
+                      <div className="context-chips">
+                        {attachments.map((file, i) => (
+                          <div
+                            className="context-chip"
+                            key={file.name + i + file.data.length}
+                          >
+                            <Paperclip size={11} />
+                            {attachments.length > 1 && (
+                              <span className="chip-photo">
+                                {file.mime.startsWith("image/")
+                                  ? `foto ${
+                                      attachments
+                                        .slice(0, i + 1)
+                                        .filter((a) =>
+                                          a.mime.startsWith("image/"),
+                                        ).length
+                                    }`
+                                  : "berkas"}
+                              </span>
+                            )}
+                            {file.name}
+                            <button
+                              aria-label={"Hapus lampiran " + file.name}
+                              onClick={() => {
+                                setAttachments((list) =>
+                                  list.filter((_, at) => at !== i),
+                                );
+                                setPalettes((list) =>
+                                  list.filter((_, at) => at !== i),
+                                );
+                                setThumbnails((list) =>
+                                  list.filter((_, at) => at !== i),
+                                );
+                              }}
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                     <div className="chat-composer">
@@ -2451,19 +2852,46 @@ function WorkspaceContent({ project }: { project: Project }) {
                             hidden
                             ref={attachmentRef}
                             type="file"
+                            multiple
                             accept="image/png,image/jpeg,image/webp,.pdf,.txt"
                             onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                try {
-                                  setAttachment(await readAttachment(file));
-                                } catch (error) {
-                                  store.notify(
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Lampiran gagal dibaca.",
-                                  );
+                              const picked = [...(e.target.files || [])];
+                              e.target.value = "";
+                              if (!picked.length) return;
+                              if (attachments.length >= 3) {
+                                store.notify(
+                                  "Maksimal 3 lampiran per pesan. Hapus salah satu dulu.",
+                                );
+                                return;
+                              }
+                              try {
+                                const fresh: Attachment[] = [];
+                                const sampled: (PhotoPalette | null)[] = [];
+                                const thumbs: (string | null)[] = [];
+                                for (const file of picked.slice(
+                                  0,
+                                  3 - attachments.length,
+                                )) {
+                                  const read = await readAttachment(file);
+                                  fresh.push(read);
+                                  // Only photos can carry colours; a brief has
+                                  // no palette slot to send. One decode yields
+                                  // both the colour grid and the redraw.
+                                  const sample = read.mime.startsWith("image/")
+                                    ? await photoSamples(read)
+                                    : { palette: null, thumbnail: null };
+                                  sampled.push(sample.palette);
+                                  thumbs.push(sample.thumbnail);
                                 }
+                                setAttachments((list) => [...list, ...fresh]);
+                                setPalettes((list) => [...list, ...sampled]);
+                                setThumbnails((list) => [...list, ...thumbs]);
+                              } catch (error) {
+                                store.notify(
+                                  error instanceof Error
+                                    ? error.message
+                                    : "Lampiran gagal dibaca.",
+                                );
                               }
                               e.target.value = "";
                             }}
@@ -2554,6 +2982,14 @@ function WorkspaceContent({ project }: { project: Project }) {
                         </div>
                       </div>
                     </div>
+                    {bgResearch && (
+                      <p className="bg-research" role="status">
+                        <LoaderCircle className="spin" size={11} /> Riset latar
+                        belakang masih berjalan di server. Hasilnya muncul di
+                        chat begitu selesai, walau tab ini sempat ditutup — asal
+                        proses server tidak dimulai ulang di tengah ronde.
+                      </p>
+                    )}
                     <div className="composer-footer">
                       <AiModelPicker
                         value={model}
@@ -2573,7 +3009,7 @@ function WorkspaceContent({ project }: { project: Project }) {
                               tiers: catalog?.tiers,
                               prompt: input,
                               hasAttachments:
-                                !!attachment || references.length > 0,
+                                attachments.length > 0 || references.length > 0,
                             })} kredit · belum ditagih`}
                       </span>
                     </div>
@@ -2665,6 +3101,97 @@ function WorkspaceContent({ project }: { project: Project }) {
           </button>
         </div>
       </footer>
+      {photoView && (
+        <Modal
+          title={`Foto project · ${photoView.name}`}
+          onClose={() => {
+            setPhotoView(null);
+            setPhotoViewSrc(null);
+          }}
+          wide
+        >
+          <div className="photo-view">
+            <p className="photo-view-note">
+              <ShieldCheck size={13} />
+              Foto ini disimpan di browser ini untuk project ini, bukan di
+              cloud. Warnanya dibaca dari piksel foto (rata-rata per area) —
+              bukan peta tekstur UV.
+            </p>
+            {photoViewSrc && (
+              <img src={photoViewSrc} alt={`Foto project ${photoView.name}`} />
+            )}
+            <dl>
+              <div>
+                <dt>Ukuran</dt>
+                <dd>{photoSize(photoView.bytes)}</dd>
+              </div>
+              <div>
+                <dt>Jenis</dt>
+                <dd>{photoView.mime}</dd>
+              </div>
+              <div>
+                <dt>Ditambahkan</dt>
+                <dd>
+                  {new Date(photoView.at).toLocaleString("id-ID", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </dd>
+              </div>
+              <div>
+                <dt>Datang dengan</dt>
+                <dd>
+                  {photoView.from
+                    ? "balasan AI di chat project ini"
+                    : "lampiran chat"}
+                </dd>
+              </div>
+            </dl>
+            {photoView.palette ? (
+              <div className="photo-view-colors">
+                <b>Warna yang dibaca dari foto ini</b>
+                <span
+                  aria-label={`${photoView.palette.colors.length} sel warna dari foto ${photoView.name}`}
+                >
+                  {photoView.palette.colors.map((color, at) => (
+                    <i key={"cell" + at} style={{ background: color }} />
+                  ))}
+                </span>
+                <small>
+                  {photoView.palette.columns}×{photoView.palette.rows} sel (
+                  {photoView.palette.colors.length} warna) — inilah yang dipakai
+                  server untuk mewarnai model, bukan gambar aslinya.
+                </small>
+              </div>
+            ) : (
+              <p className="photo-view-note warn">
+                <AlertTriangle size={13} />
+                Sampel warna foto ini tidak tersedia, jadi model tidak memakai
+                warna dari foto. Lampirkan ulang fotonya untuk mencoba lagi.
+              </p>
+            )}
+            <div className="photo-view-actions">
+              <button
+                className="button button-dark"
+                onClick={() => {
+                  void reuseProjectPhoto(photoView);
+                  setPhotoView(null);
+                }}
+              >
+                <Paperclip size={13} />
+                Pakai lagi sebagai lampiran
+              </button>
+              <button
+                className="button button-outline"
+                onClick={() => void dropProjectPhoto(photoView)}
+              >
+                <Trash2 size={13} />
+                Hapus dari aset project
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {dialog && (
         <Modal
           title={

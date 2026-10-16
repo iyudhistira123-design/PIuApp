@@ -312,6 +312,43 @@ test("Viewer cannot execute a shell or publish by supplying a forged actor in JS
   }
 });
 
+test("attached photos are numbered, so a model can only cite a photo that exists", async () => {
+  const { attachmentParts } = await import("../server/lib/attachments.mjs");
+  const png = Buffer.from(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489" +
+      "0000000a49444154789c6300010000050001",
+    "hex",
+  ).toString("base64");
+  const parts = await attachmentParts([
+    { name: "kursi-depan.png", mime: "image/png", data: png },
+    {
+      name: "brief.txt",
+      mime: "text/plain",
+      data: Buffer.from("kursi kayu").toString("base64"),
+    },
+    { name: "kursi-samping.jpg", mime: "image/jpeg", data: "/9j/4AAQ" },
+  ]);
+  // The label lists the photos in attachment order, and only photos: a brief is
+  // not something a scene.build op may claim to have been read from.
+  assert.match(parts[0].text, /LAMPIRAN FOTO \(2\): 1 = kursi-depan\.png/);
+  assert.match(parts[0].text, /2 = kursi-samping\.jpg/);
+  assert.doesNotMatch(parts[0].text, /brief\.txt/);
+  // The photos themselves still travel as images, and the brief as untrusted text.
+  assert.deepEqual(
+    parts.map((p: any) => p.type),
+    ["text", "image_url", "text", "image_url"],
+  );
+  // No photo at all: no photo list, so no number to cite.
+  const textOnly = await attachmentParts([
+    {
+      name: "brief.txt",
+      mime: "text/plain",
+      data: Buffer.from("kursi kayu").toString("base64"),
+    },
+  ]);
+  assert.doesNotMatch(textOnly[0].text, /LAMPIRAN FOTO/);
+});
+
 test("PDF attachment is extracted in the bounded worker, not treated as a filename", async () => {
   const { attachmentParts } = await import("../server/lib/attachments.mjs");
   const stream = "BT /F1 12 Tf 30 100 Td (Brief desain PiwuApp) Tj ET";

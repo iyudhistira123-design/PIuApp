@@ -37,7 +37,9 @@ export function createApp({
   if (resolver) ctx.resolver = resolver;
   // Research keeps running when the tab closes; finished answers wait here for
   // the same account and project. In-process and bounded by design.
-  ctx.researchJobs ||= createResearchJobs();
+  // Finished research answers are mirrored to the shared table (009) so they
+  // survive a restart; without it the store stays in-process and says so.
+  ctx.researchJobs ||= createResearchJobs({ admin: ctx.admin, env });
   const coordination = createCoordination(ctx);
   app.locals.coordination = coordination;
   sandbox ||= new SandboxProvider(env, coordination);

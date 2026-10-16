@@ -7,6 +7,22 @@ export interface OpsChange {
   name?: string;
   changes?: string[];
   reason?: string;
+  /** scene.build only: which attached photo the model was read from. */
+  photo?: number | null;
+  /** scene.build only: true when the whole model became one merged mesh. */
+  asMesh?: boolean;
+  /** scene.build only: triangle budget the server really generated. */
+  geometry?: { vertices: number; faces: number } | null;
+  /** scene.build only: colours sampled from the photo, biggest group first. */
+  colorGroups?: { color: string; faces: number }[];
+  /** scene.build only: one row per part the model was built from. */
+  parts?: {
+    name: string;
+    kind: string;
+    shape: string;
+    vertices?: number;
+    faces?: number;
+  }[];
 }
 /** What the server actually did with a structured scene ops batch. */
 export interface OpsReport {
@@ -36,6 +52,29 @@ export interface ResearchRound {
   count: number;
   error: string;
 }
+/**
+ * Model-written synthesis of the pages that were read. It is not a quote: the
+ * panel says so, and citations inside it are validated like any other.
+ */
+export interface ResearchSummary {
+  text: string;
+  /** Source numbers the synthesis covers, as it declared them. */
+  covers: number[];
+  cited: number[];
+  invalid: number[];
+  gaps?: string;
+  notice?: string;
+  /** How many pages existed when the synthesis was made. */
+  pages?: number;
+  round?: number;
+}
+/** What the read-only server tools actually did, in a plain report. */
+export interface ToolReport {
+  rounds: number;
+  calls: { name: string; ok: boolean }[];
+  refused: string[];
+  notice: string;
+}
 /** Honest report of the research round: what was searched, what was cited. */
 export interface ResearchReport {
   rounds: ResearchRound[];
@@ -52,6 +91,23 @@ export interface ResearchReport {
   insufficient?: number[];
   checked?: number;
   groundingNotice?: string;
+  /** Citations backed only by the AI's own synthesis, not by page wording. */
+  viaSummary?: number[];
+  /** Present when an abstractive cross-page synthesis was built. */
+  summary?: ResearchSummary;
+}
+/**
+ * One step of the research loop, streamed while the turn is still running so
+ * the wait is explainable instead of a spinner with no story.
+ */
+export interface ResearchStep {
+  phase: "search" | "read" | "open" | "tool" | "summary";
+  round?: number;
+  queries?: string[];
+  pages?: number;
+  urls?: string[];
+  /** Names of the server tools that ran in this step. */
+  tools?: string[];
 }
 export interface Message {
   id: string;
@@ -63,6 +119,10 @@ export interface Message {
   /** Numbered sources behind the answer, kept so the citations stay checkable. */
   sources?: SourceRef[];
   research?: ResearchReport;
+  /** Read-only server tools that ran for this reply (files, ops dry run). */
+  tools?: ToolReport;
+  /** Non-research notes: an ignored tool request is never silent. */
+  notes?: string[];
   summary?: string[];
   /** Model the provider answered with, shown on the reply. */
   model?: string;

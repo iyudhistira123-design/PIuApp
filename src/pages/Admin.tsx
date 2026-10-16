@@ -824,13 +824,22 @@ export function AdminPanel({
                           </dd>
                           <dt>Jenis yang tersedia</dt>
                           <dd>
-                            {[
-                              data.search.web ? "web" : "",
-                              data.search.code ? "kode" : "",
-                              data.search.docs ? "dokumentasi" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(", ") || "tidak ada"}
+                            {data.search.web
+                              ? "web (provider berkunci)"
+                              : "tidak ada"}
+                          </dd>
+                          <dt>Ringkasan lintas halaman</dt>
+                          <dd>
+                            {data.search.summary
+                              ? "aktif — satu pass model per permintaan, ikut kredit ronde (bukan kredit baru)"
+                              : "dimatikan (RESEARCH_SUMMARY=false)"}
+                          </dd>
+                          <dt>Alat server (baca-saja)</dt>
+                          <dd>
+                            {(data.search.tools?.names || []).join(", ") ||
+                              "tidak dilaporkan"}{" "}
+                            · maksimum {data.search.tools?.rounds ?? 2} ronde
+                            alat per permintaan · tanpa kredit, tanpa jaringan
                           </dd>
                           <dt>Ronde riset maksimum</dt>
                           <dd>{data.search.rounds}</dd>
@@ -857,14 +866,14 @@ export function AdminPanel({
                           <dt>Riset latar</dt>
                           <dd>
                             {data.search.jobs
-                              ? `${data.search.jobs.jobs} tersimpan · ${data.search.jobs.running} berjalan · simpan ${data.search.jobs.ttlMinutes} menit`
+                              ? `${data.search.jobs.jobs} di memori · ${
+                                  data.search.jobs.running
+                                } berjalan · ${
+                                  data.search.jobs.durable
+                                    ? `${data.search.jobs.stored ?? 0} tahan restart (tabel 009)`
+                                    : "hanya per-proses (migration 009 belum diterapkan)"
+                                } · simpan ${data.search.jobs.ttlMinutes} menit`
                               : "tidak tersedia"}
-                          </dd>
-                          <dt>Kunci Context7</dt>
-                          <dd>
-                            {data.search.context7KeyConfigured
-                              ? "terpasang"
-                              : "tidak diisi (dokumentasi tetap bisa dicari tanpa kunci)"}
                           </dd>
                         </dl>
                         <p>{data.search.notice}</p>

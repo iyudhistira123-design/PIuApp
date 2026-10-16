@@ -7,7 +7,7 @@ import {
 } from "./search-cache.mjs";
 
 // Retrieval foundation for "Riset & Pencarian". One normalized result shape for
-// several providers, so a new vendor is a new entry in `providers` and an env
+// several vendors, so a new vendor is a new entry in `providers` and an env
 // value — never a rewrite of the agent loop.
 //
 // Two rules hold for every provider:
@@ -17,10 +17,17 @@ import {
 //     control characters, capped, and every URL is re-validated before the app
 //     fetches it (the existing SSRF guard in references.mjs).
 //
-// Types: `web` needs a key; `code` and `docs` are keyless so they work in a
-// local setup. Keys never leave the server: providers are called from here.
+// There is exactly one kind left: `web`, and every provider that serves it needs
+// its own API key (`SEARCH_API_KEY`). The keyless code/docs paths (grep.app and
+// Context7) were removed on purpose, so nothing here calls a vendor anonymously
+// and no result can ever come from a source nobody paid for. Keys never leave
+// the server: providers are called from here.
 
-export const SEARCH_KINDS = ["web", "code", "docs"];
+export const SEARCH_KINDS = ["web"];
+// Kinds that used to be served by keyless providers. A model that still asks for
+// one gets a plain, per-query explanation instead of a crash or an empty list.
+const RETIRED_KINDS = ["code", "docs"];
+const RETIRED_LABELS = { code: "indeks kode", docs: "dokumentasi pustaka" };
 export const SEARCH_QUERIES_MAX = 3;
 export const SEARCH_RESULTS_MAX = 8;
 const SNIPPET_MAX = 320;
@@ -33,8 +40,8 @@ const clean = (value, max = SNIPPET_MAX) =>
     .trim()
     .slice(0, max);
 
-// Provider text may carry markup (grep.app highlights hits with <mark>, snippets
-// arrive HTML-escaped). Neither the prompt nor the chat should show tags, so
+// Provider text may carry markup or arrive HTML-escaped (search vendors return
+// page fragments verbatim). Neither the prompt nor the chat should show tags, so
 // provider text is flattened to plain text here — user queries are not, because
 // `#include <stdio.h>` is a legitimate search.
 const ENTITIES = {
@@ -184,8 +191,8 @@ const getJson = async (ctx, url, headers = {}, timeout = 15000) => {
 };
 
 /**
- * Registry. `web` providers bill per call and therefore need a key; `code` and
- * `docs` are keyless so they are always available.
+ * Registry. Every entry serves `web` and every entry bills per call, so a key is
+ * mandatory: no key, no call, no source.
  */
 export const providers = {
   // Tavily — contract checked against the official SDKs (tavily-js `src/utils.ts`
@@ -326,79 +333,13 @@ export const providers = {
       );
     },
   },
-  // Keyless: real code in public repositories. Results are file/line hits.
-  grepp: {
-    kind: "code",
-    label: "grep.app",
-    env: "",
-    async run(ctx, query) {
-      const data = await getJson(
-        ctx,
-        "https://grep.app/api/search?q=" + encodeURIComponent(query),
-      );
-      const hits = data.hits?.hits || [];
-      return normalize(
-        "grepp",
-        "code",
-        hits.map((hit) => ({
-          title: `${hit.repo?.raw || data.facets?.repo?.buckets?.[0]?.val || "repo"} · ${hit.path?.raw || ""}`,
-          url:
-            hit.repo?.raw && hit.path?.raw
-              ? `https://github.com/${hit.repo.raw}/blob/HEAD/${hit.path.raw}`
-              : "",
-          snippet: hit.content?.snippet || "",
-        })),
-      );
-    },
-  },
-  // Keyless: version-specific library documentation.
-  context7: {
-    kind: "docs",
-    label: "Context7",
-    env: "",
-    async run(ctx, query) {
-      const headers = ctx.env.CONTEXT7_API_KEY
-        ? { Authorization: "Bearer " + ctx.env.CONTEXT7_API_KEY }
-        : {};
-      const found = await getJson(
-        ctx,
-        "https://context7.com/api/v1/search?query=" + encodeURIComponent(query),
-        headers,
-      );
-      const libraries = (
-        Array.isArray(found) ? found : found.results || []
-      ).slice(0, 3);
-      const rows = [];
-      for (const library of libraries) {
-        const id = library.id || library.libraryId;
-        if (!id) continue;
-        const docs = await getJson(
-          ctx,
-          "https://context7.com/api/v1/" +
-            id.replace(/^\//, "") +
-            "?query=" +
-            encodeURIComponent(query) +
-            "&type=txt",
-          headers,
-        ).catch(() => null);
-        rows.push({
-          title: `${library.title || id} — dokumentasi`,
-          url: "https://context7.com" + (id.startsWith("/") ? id : "/" + id),
-          snippet: typeof docs === "string" ? docs : library.description || "",
-        });
-      }
-      return normalize("context7", "docs", rows);
-    },
-  },
 };
 
-/** Which provider serves a kind, and whether its key is present. */
+/** Which provider serves the single remaining kind, and whether its key is there. */
 export function searchCapability(env) {
   if (searchDisabled(env))
     return {
       web: false,
-      code: false,
-      docs: false,
       selected: "none",
       selectedAvailable: false,
       disabled: true,
@@ -408,19 +349,13 @@ export function searchCapability(env) {
     return Boolean(provider) && (!provider.env || Boolean(env[provider.env]));
   };
   const selected = String(env.SEARCH_PROVIDER || "none").toLowerCase();
-  const keyless = (kind) =>
-    Object.keys(providers).some(
-      (name) => providers[name].kind === kind && !providers[name].env,
-    );
   return {
     // A key alone never tells us the vendor, so web search needs a NAMED
-    // provider. Code and docs providers are keyless, so they stay available.
+    // provider; there is no keyless path left to fall back to.
     web:
       selected !== "none" &&
       providers[selected]?.kind === "web" &&
       configured(selected),
-    code: keyless("code"),
-    docs: keyless("docs"),
     selected,
     selectedAvailable: selected !== "none" && configured(selected),
     disabled: false,
@@ -437,6 +372,11 @@ export function resolveProvider(env, kind, requested) {
     throw new HttpError(
       503,
       "Pencarian dinonaktifkan di server ini (SEARCH_ENABLED=false).",
+    );
+  if (RETIRED_KINDS.includes(kind))
+    throw new HttpError(
+      503,
+      `Pencarian ${RETIRED_LABELS[kind]} tidak lagi tersedia: jalur tanpa kunci sudah dihapus. Pakai pencarian web (SEARCH_PROVIDER + SEARCH_API_KEY).`,
     );
   if (!SEARCH_KINDS.includes(kind))
     throw new HttpError(400, `Jenis pencarian "${kind}" tidak dikenal.`);
@@ -462,17 +402,12 @@ export function resolveProvider(env, kind, requested) {
   const chosen =
     selected !== "none" &&
     providers[selected]?.kind === kind &&
-    (!providers[selected].env || env[providers[selected].env])
-      ? selected
-      : Object.keys(providers).find(
-          (n) => providers[n].kind === kind && !providers[n].env,
-        );
+    (!providers[selected].env || env[providers[selected].env]) &&
+    selected;
   if (chosen) return chosen;
   throw new HttpError(
     503,
-    kind === "web"
-      ? "Pencarian web belum dikonfigurasi. Isi SEARCH_PROVIDER dan SEARCH_API_KEY di server."
-      : `Pencarian ${kind} belum tersedia.`,
+    "Pencarian web belum dikonfigurasi. Isi SEARCH_PROVIDER dan SEARCH_API_KEY di server.",
   );
 }
 
@@ -480,7 +415,11 @@ export function resolveProvider(env, kind, requested) {
 // client is available, the shared table from migration 009.
 let store = null;
 const ensureStore = (ctx) => {
-  if (!store) store = createSearchCache({ admin: ctx?.admin || null, env: ctx?.env || {} });
+  if (!store)
+    store = createSearchCache({
+      admin: ctx?.admin || null,
+      env: ctx?.env || {},
+    });
   else store.attach(ctx?.admin || null);
   return store;
 };
@@ -521,8 +460,7 @@ export async function searchOne(ctx, { query, kind = "web", provider } = {}) {
   const cache = ensureStore(ctx);
   const key = cacheKey([name, kind, text.toLowerCase()]);
   const hit = await cache.get(key);
-  if (hit)
-    return { ...hit.value, cached: true, cacheMode: hit.mode };
+  if (hit) return { ...hit.value, cached: true, cacheMode: hit.mode };
   const sources = await providers[name].run(ctx, text);
   const value = {
     provider: name,
@@ -695,10 +633,92 @@ const redact = (text) =>
  * Reads the first N sources so the model can cite real page content instead of
  * a snippet. Bodies are capped and treated as untrusted data.
  */
+/** Words for scoring, case-folded and without punctuation. */
+const words = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .match(/[\p{L}\p{N}]+/gu) || [];
+
+const splitSentences = (text) =>
+  String(text || "")
+    .split(/(?<=[.!?])\s+|\n{2,}/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+/**
+ * Deterministic extractive excerpt: the sentences that share the most words with
+ * the queries, in document order, with an honest marker where text was skipped.
+ * Nothing is paraphrased — every word of the result appears in the page itself,
+ * so a reader can always check it.
+ */
+export function selectExcerpt(text, terms = [], budget = 2500) {
+  const source = String(text || "");
+  const wanted = new Set(
+    (terms || []).map((term) => String(term).toLowerCase()),
+  );
+  if (source.length <= budget) return source;
+  if (!wanted.size) return source.slice(0, budget).trimEnd() + " […]";
+  const sentences = splitSentences(source);
+  const scored = sentences
+    .map((sentence, position) => ({
+      sentence,
+      position,
+      found: new Set(words(sentence).filter((word) => wanted.has(word))),
+    }))
+    .filter((item) => item.found.size > 0);
+  if (!scored.length) return source.slice(0, budget).trimEnd() + " […]";
+  // Greedy cover of the query words: each pick adds something the excerpt does
+  // not have yet, shortest sentence first on a tie, then page order. Skipping
+  // a sentence that does not fit the remaining room keeps the budget honest.
+  const covered = new Set();
+  const chosen = [];
+  const skipped = new Set();
+  let used = 0;
+  while (chosen.length + skipped.size < scored.length) {
+    let best = null;
+    let bestFresh = 0;
+    for (const item of scored) {
+      if (chosen.includes(item) || skipped.has(item)) continue;
+      const fresh = [...item.found].filter((word) => !covered.has(word)).length;
+      if (!fresh) continue;
+      if (
+        !best ||
+        fresh > bestFresh ||
+        (fresh === bestFresh && item.sentence.length < best.sentence.length) ||
+        (fresh === bestFresh &&
+          item.sentence.length === best.sentence.length &&
+          item.position < best.position)
+      ) {
+        best = item;
+        bestFresh = fresh;
+      }
+    }
+    if (!best) break;
+    if (used + best.sentence.length > budget) {
+      skipped.add(best);
+      continue;
+    }
+    chosen.push(best);
+    used += best.sentence.length;
+    for (const word of best.found) covered.add(word);
+  }
+  if (!chosen.length) return source.slice(0, budget).trimEnd() + " […]";
+  chosen.sort((a, b) => a.position - b.position);
+  let out = "";
+  let previous = -1;
+  for (const item of chosen) {
+    if (item.position > previous + 1) out += (out ? " " : "") + "[…] ";
+    out += (out && !out.endsWith(" ") ? " " : "") + item.sentence;
+    previous = item.position;
+  }
+  if (previous < sentences.length - 1) out += " […]";
+  return out.trim();
+}
+
 export async function fetchSourceBodies(
   ctx,
   sources,
-  { limit = 3, characters = 6000 } = {},
+  { limit = 3, characters = 6000, excerptChars = 0, terms = [] } = {},
 ) {
   const out = [];
   // The fetcher is injectable (tests, and the production default is fetch); the
@@ -715,6 +735,12 @@ export async function fetchSourceBodies(
         text: redact(clean(page.text, characters)),
         kind: page.kind || "html",
       };
+      // The model gets a relevance-sized excerpt, while the citation check keeps
+      // the fuller text: trimming the prompt must never weaken verification.
+      if (excerptChars > 0 && entry.text.length > excerptChars) {
+        entry.excerpt = selectExcerpt(entry.text, terms, excerptChars);
+        entry.truncated = true;
+      }
       // A page with almost no text is usually JavaScript-rendered or behind a
       // login. Keep whatever came back, but say why it is thin.
       if (page.thin)

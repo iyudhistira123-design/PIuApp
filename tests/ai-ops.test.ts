@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  BUILD_NODES_MAX,
   OPS_MAX,
   SCENE_LIMITS,
   applyResultOps,
@@ -8,6 +9,7 @@ import {
   parseOps,
   validateResultOps,
 } from "../server/lib/ai-ops.mjs";
+import { shapeMesh } from "../server/lib/lowpoly.mjs";
 import { validateAIResult } from "../server/routes/ai.mjs";
 
 const scene = (objects: any[]) =>
@@ -311,3 +313,332 @@ test("the AI reply schema carries ops only for Builder replies", () => {
 });
 
 const SCENE_PATH_FOR_TEST = "scene.roblox.json";
+
+// scene.build: the model describes shapes, the server makes the geometry. These
+// tests pin the rules that keep a description from becoming nonsense (a container
+// that is also a shape, a mesh beside a shape, a photo that was never sent).
+test("scene.build turns a description into objects, one Part where a Part exists", () => {
+  const result = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Kursi kayu",
+        position: [4, 0, 0],
+        nodes: [
+          {
+            name: "Dudukan",
+            shape: "box",
+            position: [0, 1.5, 0],
+            size: [3, 0.4, 3],
+            color: "#8B5A2B",
+          },
+          {
+            name: "Kaki",
+            shape: "cylinder",
+            segments: 8,
+            position: [0, 0.7, 0],
+            rotation: [0, 0, 90],
+            size: [0.4, 1.4, 0.4],
+          },
+          { name: "Kerucut", shape: "cone", size: [1, 2, 1] },
+          { name: "Rangka", nodes: [{ name: "Palang", shape: "box" }] },
+        ],
+      },
+    ],
+  });
+  assert.equal(result.report.sceneChanged, true);
+  const applied = result.report.applied[0];
+  assert.equal(applied.kind, "scene.build");
+  assert.equal(applied.id, "ai-kursi-kayu");
+  // Every built node is listed, the nested one included: nothing is hidden.
+  assert.equal(applied.parts.length, 5);
+  assert.deepEqual(
+    applied.parts.map((p: any) => `${p.name}:${p.kind}`),
+    [
+      "Dudukan:block",
+      "Kaki:mesh",
+      "Kerucut:mesh",
+      "Rangka:model",
+      "Palang:block",
+    ],
+  );
+  const built = read(result);
+  const dudukan = built.objects.find((o: any) => o.name === "Dudukan");
+  assert.equal(dudukan.parent, "ai-kursi-kayu");
+  assert.equal(dudukan.color, "#8b5a2b");
+  assert.deepEqual(dudukan.size, [3, 0.4, 3]);
+  // The container is the model, and the nested container hangs off it.
+  assert.equal(
+    built.objects.find((o: any) => o.id === "ai-kursi-kayu").kind,
+    "model",
+  );
+  assert.equal(
+    built.objects.find((o: any) => o.name === "Palang").parent,
+    built.objects.find((o: any) => o.name === "Rangka").id,
+  );
+  // The nested container is a model, not a faked Part.
+  assert.equal(
+    built.objects.find((o: any) => o.name === "Rangka").kind,
+    "model",
+  );
+  // A mesh part carries real triangles inside the budget.
+  const kaki = built.objects.find((o: any) => o.name === "Kaki");
+  assert.equal(kaki.kind, "mesh");
+  assert.ok(kaki.mesh.vertices.length > 8);
+  assert.ok(kaki.mesh.faces.length <= 1024);
+});
+
+test("scene.build with asMesh bakes the model into one stitched mesh", () => {
+  const result = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Meja",
+        asMesh: true,
+        nodes: [
+          {
+            name: "Atas",
+            shape: "box",
+            position: [0, 2, 0],
+            size: [4, 0.3, 2],
+          },
+          { name: "Kaki", shape: "box", position: [1.7, 1, 0.7] },
+        ],
+      },
+    ],
+  });
+  assert.equal(result.report.sceneChanged, true);
+  const built = read(result);
+  const tables = built.objects.filter((o: any) => o.name === "Meja");
+  assert.equal(tables.length, 1);
+  assert.equal(tables[0].kind, "mesh");
+  assert.equal(
+    tables[0].mesh.vertices.length,
+    result.report.applied[0].geometry.vertices,
+  );
+  // Nested nodes are refused here: a merged mesh cannot honestly keep a child's
+  // own transform, so it says so instead of guessing.
+  const nested = parseOps([
+    {
+      kind: "scene.build",
+      name: "X",
+      asMesh: true,
+      nodes: [{ name: "Induk", nodes: [{ name: "Anak", shape: "box" }] }],
+    },
+  ]);
+  assert.match(nested.issues.join(" "), /asMesh hanya untuk daftar node datar/);
+});
+
+test("scene.build refuses a photo that was not attached, and says which were", () => {
+  const one = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Kursi",
+        photo: 2,
+        nodes: [{ name: "Dudukan", shape: "box" }],
+      },
+    ],
+    photos: 1,
+  });
+  assert.equal(one.report.sceneChanged, false);
+  assert.match(one.report.rejected[0].reason, /hanya melampirkan 1 foto/);
+  // No photo at all: the reason asks for the photo instead of inventing one.
+  const none = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Kursi",
+        photo: 1,
+        nodes: [{ name: "Dudukan", shape: "box" }],
+      },
+    ],
+  });
+  assert.match(none.report.rejected[0].reason, /tidak melampirkan foto/);
+  // Cited photo 1 of 2: accepted, and the report says which photo it came from.
+  const ok = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Kursi",
+        photo: 2,
+        nodes: [{ name: "Dudukan", shape: "box" }],
+      },
+    ],
+    photos: 2,
+  });
+  assert.equal(ok.report.sceneChanged, true);
+  assert.equal(ok.report.applied[0].photo, 2);
+  assert.ok(ok.report.applied[0].changes.includes("dari foto 2"));
+});
+
+test("scene.build rejects what it cannot build honestly, and writes nothing", () => {
+  const nodes = (value: any) =>
+    parseOps([{ kind: "scene.build", name: "X", nodes: value }]).issues.join(
+      " ",
+    );
+  // A node cannot be both a shape and a mesh, and a container cannot be a shape.
+  assert.match(
+    nodes([{ name: "A", shape: "box", mesh: shapeMesh("box") }]),
+    /Pilih salah satu/,
+  );
+  assert.match(
+    nodes([{ name: "A", shape: "box", nodes: [{ name: "B", shape: "box" }] }]),
+    /wadah model tanpa bentuk sendiri/,
+  );
+  // A leaf needs something to build, and segments only mean something round.
+  assert.match(nodes([{ name: "A" }]), /harus punya shape atau mesh/);
+  assert.match(
+    nodes([{ name: "A", shape: "box", segments: 12 }]),
+    /segments hanya berlaku/,
+  );
+  assert.match(nodes([]), /minimal satu bagian/);
+  assert.match(nodes([{ name: "A", shape: "torus" }]), /Invalid option|shape/);
+
+  // An over-budget merged model is rejected with the numbers, and the scene is
+  // left exactly as it was.
+  const balls = Array.from({ length: 4 }, (_, i) => ({
+    name: "Bola " + i,
+    shape: "sphere",
+    segments: 24,
+    position: [i * 2, 0, 0],
+  }));
+  const simple = balls.map((ball, i) => ({
+    ...ball,
+    segments: 6,
+    name: `Bola ${i}`,
+  }));
+  const saved = scene([model()]);
+  const big = applySceneOps({
+    scene: saved,
+    ops: [
+      { kind: "scene.build", name: "Gumpalan", asMesh: true, nodes: balls },
+    ],
+  });
+  assert.equal(big.report.sceneChanged, false);
+  assert.equal(big.scene, null);
+  assert.match(big.report.rejected[0].reason, /512/);
+  assert.match(big.report.rejected[0].reason, /segments|asMesh/);
+  // Without asMesh the same parts are fine: they are separate Part/mesh objects.
+  // (Smaller spheres here: four 24-segment spheres would outgrow the scene file
+  // itself, and that refusal has its own test below.)
+  const parts = applySceneOps({
+    scene: saved,
+    ops: [{ kind: "scene.build", name: "Gumpalan", nodes: simple }],
+  });
+  assert.equal(parts.report.sceneChanged, true);
+  assert.equal(parts.report.applied[0].asMesh, false);
+  assert.equal(parts.report.applied[0].parts.length, 4);
+});
+
+test("a generated model too big for the scene file is refused with advice", () => {
+  const saved = scene([model()]);
+  const huge = applySceneOps({
+    scene: saved,
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Bola raksasa",
+        nodes: [
+          { name: "Bola", shape: "sphere", segments: 24 },
+          {
+            name: "Bola 2",
+            shape: "sphere",
+            segments: 24,
+            position: [1, 0, 0],
+          },
+          {
+            name: "Bola 3",
+            shape: "sphere",
+            segments: 24,
+            position: [2, 0, 0],
+          },
+          {
+            name: "Bola 4",
+            shape: "sphere",
+            segments: 24,
+            position: [3, 0, 0],
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(huge.report.sceneChanged, false);
+  // The reason names the limit and what to change, not just "failed".
+  assert.match(
+    huge.report.rejected[huge.report.rejected.length - 1].reason,
+    /terlalu besar untuk disimpan/,
+  );
+  assert.match(
+    huge.report.rejected[huge.report.rejected.length - 1].reason,
+    /segments/,
+  );
+});
+
+test("scene.build keeps the scene and object limits, and never half-applies", () => {
+  const full = scene(
+    Array.from({ length: SCENE_LIMITS.objects }, (_, i) =>
+      block({ id: `b${i}`, name: `B${i}` }),
+    ),
+  );
+  const refuse = applySceneOps({
+    scene: full,
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Baru",
+        nodes: [{ name: "A", shape: "box" }],
+      },
+    ],
+  });
+  assert.equal(refuse.report.sceneChanged, false);
+  assert.match(refuse.report.rejected[0].reason, /melewati batas 250/);
+
+  const tooMany = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Besar",
+        nodes: Array.from({ length: BUILD_NODES_MAX + 1 }, (_, i) => ({
+          name: `Bagian ${i}`,
+          shape: "box" as const,
+        })),
+      },
+    ],
+  });
+  assert.match(tooMany.report.rejected[0].reason, /maksimum 40|batasnya 40/);
+
+  // One bad op in a batch cancels the whole batch, exactly like a transform.
+  const mixed = applySceneOps({
+    scene: scene([model()]),
+    ops: [
+      {
+        kind: "scene.build",
+        name: "Kursi",
+        nodes: [{ name: "A", shape: "box" }],
+      },
+      {
+        kind: "scene.transform",
+        ops: [{ target: "tidak-ada", move: [1, 0, 0] }],
+      },
+    ],
+  });
+  assert.equal(mixed.report.sceneChanged, false);
+  assert.equal(JSON.parse(scene([model()])).objects.length, 1);
+});
+
+test("an unknown op kind is reported by name, never guessed at", () => {
+  const { issues } = parseOps([
+    { kind: "scene.texture", url: "https://x.test/a.png" },
+  ] as any);
+  assert.match(
+    issues.join(" "),
+    /jenis operasi tidak didukung \(hanya scene.transform dan scene.build\)/,
+  );
+});

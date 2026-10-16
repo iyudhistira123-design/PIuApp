@@ -1,4 +1,5 @@
 import type { Attachment } from "../services/api";
+import type { PhotoPalette } from "./photo-palette";
 import type {
   Mode,
   Model,
@@ -6,6 +7,8 @@ import type {
   Plan,
   SourceRef,
   ResearchReport,
+  ResearchStep,
+  ToolReport,
 } from "./types";
 import { supabase } from "./supabase";
 import { useStore } from "./store";
@@ -23,6 +26,10 @@ export interface AIResult {
   /** Numbered sources plus the citation report, when research mode ran. */
   sources?: SourceRef[];
   research?: ResearchReport;
+  /** Read-only server tools that ran, with what they answered. */
+  tools?: ToolReport;
+  /** Honest notes for turns without a research report. */
+  notes?: string[];
 }
 
 /** Tier presets; any other value is a concrete model id from the API key. */
@@ -107,7 +114,8 @@ async function verifiedHeaders(): Promise<Record<string, string> | null> {
     ? (await supabase.auth.getSession()).data.session
     : null;
   const user = useStore.getState().user;
-  if (!session || !user || user.demo || session.user.id !== user.id) return null;
+  if (!session || !user || user.demo || session.user.id !== user.id)
+    return null;
   return { Authorization: "Bearer " + session.access_token };
 }
 
@@ -163,6 +171,7 @@ export async function claimResearchJob(
 export async function streamAI({
   projectId,
   attachments,
+  photoPalettes,
   references,
   prompt,
   files,
@@ -171,10 +180,13 @@ export async function streamAI({
   research = false,
   requestId,
   onToken,
+  onStep,
   signal,
 }: {
   projectId: string;
   attachments?: Attachment[];
+  /** Sampled colour grids, one slot per attached photo (null when sampling failed). */
+  photoPalettes?: (PhotoPalette | null)[];
   references?: string[];
   prompt: string;
   files: Record<string, string>;
@@ -185,6 +197,8 @@ export async function streamAI({
   /** Caller-owned id: the same id claims the background job after delivery. */
   requestId?: string;
   onToken: (s: string) => void;
+  /** What the research loop is doing right now, so the wait is explainable. */
+  onStep?: (step: ResearchStep) => void;
   signal?: AbortSignal;
 }): Promise<AIResult> {
   const headers = await verifiedHeaders();
@@ -203,6 +217,7 @@ export async function streamAI({
       attachments,
       references,
       research,
+      ...(photoPalettes?.length ? { photoPalettes } : {}),
     }),
     signal,
   });
@@ -236,6 +251,7 @@ export async function streamAI({
         result.content += p.content;
         onToken(result.content);
       }
+      if (p.type === "step") onStep?.(p.step as ResearchStep);
       if (p.type === "result") {
         result = p.result;
         completed = true;

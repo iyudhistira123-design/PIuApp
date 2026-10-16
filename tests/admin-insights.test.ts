@@ -324,8 +324,10 @@ test("diagnostics reports the search provider and cache without ever leaking the
     assert.equal(body.search.keyConfigured, true);
     assert.equal(body.search.disabled, false);
     assert.equal(body.search.web, true);
-    assert.equal(body.search.code, true);
-    assert.equal(body.search.docs, true);
+    // The keyless code/docs paths are gone, so only web can be reported.
+    assert.equal("code" in body.search, false);
+    assert.equal("docs" in body.search, false);
+    assert.equal("context7KeyConfigured" in body.search, false);
     assert.equal(body.search.rounds, 2);
     assert.deepEqual(body.search.locale, {
       country: "indonesia",

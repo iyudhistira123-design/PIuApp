@@ -92,10 +92,63 @@ async function fixture(page: Page) {
       result.sources = sources;
       result.research = research;
       result.creditsUsed = 2;
+    } else if (/ringkasan/i.test(prompt)) {
+      // A cross-page synthesis: the panel must say it is a model artifact, not a
+      // quote, and must mark the citations only the synthesis backs.
+      result.content =
+        "Kedua halaman sepakat [1], dan rinciannya hanya di ringkasan [2].";
+      result.sources = sources;
+      result.research = {
+        ...research,
+        cited: [1, 2],
+        uncited: [],
+        unsupported: [],
+        groundingNotice:
+          "Sitasi 2 hanya didukung ringkasan AI, bukan kata-kata halaman sumbernya — periksa ulang bila penting.",
+        viaSummary: [2],
+        summary: {
+          text: "Kedua halaman menekankan pengulangan berjenjang dan pencatatan kegagalan.",
+          covers: [1, 2],
+          cited: [1, 2],
+          invalid: [],
+          gaps: "Tidak ada sumber soal biaya.",
+          notice:
+            "Tautan yang bukan salah satu sumber dihapus dari ringkasan: https://jahat.test/z.",
+          pages: 2,
+          round: 1,
+        },
+      };
+      result.creditsUsed = 2;
+    } else if (/daftar berkas/i.test(prompt)) {
+      // An ordinary turn that used the read-only server tools.
+      result.content = "Berkas project sudah saya daftar.";
+      result.tools = {
+        rounds: 1,
+        calls: [
+          { name: "list_files", ok: true },
+          { name: "read_file", ok: false },
+        ],
+        refused: ["read_file"],
+        notice:
+          "1 ronde alat server (list_files, read_file); hanya membaca berkas project — tanpa kredit, tanpa jaringan.",
+      };
+      result.notes = [
+        "Argumen tool read_file tidak lengkap atau bukan JSON yang sah; tidak ada yang dijalankan.",
+      ];
     }
     return r.fulfill({
       contentType: "text/event-stream",
-      body: `data: ${JSON.stringify({ type: "result", result })}\n\n`,
+      // A step event travels before the answer, exactly like the real loop, so
+      // the client is proven to tolerate progress lines mid-stream.
+      body:
+        `data: ${JSON.stringify({
+          type: "step",
+          step: {
+            phase: "search",
+            round: 1,
+            queries: ["retry next.js"],
+          },
+        })}\n\n` + `data: ${JSON.stringify({ type: "result", result })}\n\n`,
     });
   });
   return body;
@@ -165,6 +218,63 @@ test("the research toggle is off by default, persists and is sent as research:tr
   await expect(
     page.getByRole("button", { name: "Mode riset" }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+// A run that is still going when the user comes back is reported as running and
+// collected without a reload — that is why the job store exists.
+test("a research turn still running is shown, then collected by itself", async ({
+  page,
+}) => {
+  await fixture(page);
+  const requestId = "b41f7c6d-2222-4333-8444-555566667777";
+  const base = {
+    requestId,
+    prompt: "Riset latar belakang soal retry",
+    mode: "Ask",
+    model: "deepseek-chat",
+    startedAt: Date.now() - 5000,
+    creditsUsed: 0,
+    error: "",
+  };
+  const ready = {
+    ...base,
+    state: "ready",
+    finishedAt: Date.now(),
+    creditsUsed: 2,
+    result: {
+      content: "Pakai pengulangan berjenjang [1].",
+      creditsUsed: 2,
+      sources,
+      research,
+      model: "deepseek-chat",
+      tier: "Seimbang",
+    },
+  };
+  let listed = 0;
+  await page.route(/\/api\/projects\/[^/]+\/ai\/jobs(\/[^/]+)?$/, async (r) => {
+    if (r.request().method() === "DELETE")
+      return r.fulfill({ json: { job: ready } });
+    listed += 1;
+    // Still running for the first checks, so the honest "still running" state is
+    // observable, then finished: the answer must appear on its own.
+    return r.fulfill({
+      json: { jobs: listed <= 2 ? [{ ...base, state: "running" }] : [ready] },
+    });
+  });
+  await openProject(page);
+  // Honest while it runs: the composer says the work continues on the server.
+  await expect(
+    page.getByText(/Riset latar belakang masih berjalan di server/),
+  ).toBeVisible();
+  // Then it lands in the chat on its own, without a reload.
+  await expect(page.getByText("Pakai pengulangan berjenjang [1].")).toBeVisible(
+    {
+      timeout: 30000,
+    },
+  );
+  await expect(
+    page.getByText(/Riset latar belakang masih berjalan di server/),
+  ).toHaveCount(0);
 });
 
 // Research that finished while the tab was closed: the workspace collects the
@@ -292,5 +402,120 @@ test("the chat lists the numbered sources and flags an invented citation", async
   await expect(
     page.locator(".ai-sources").last().locator(".sources-headline"),
   ).toHaveText("Sumber · 2 dari 1 pencarian");
+  expect(errors).toEqual([]);
+});
+
+// A run whose process died before the answer was finished cannot be recovered
+// (only finished answers survive a restart), so this is said once instead of
+// leaving the user waiting for an answer that will never arrive.
+test("a run the server no longer knows about is reported honestly", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.route(/\/api\/projects\/[^/]+\/ai\/jobs(\/[^/]+)?$/, (r) =>
+    r.fulfill({ json: { jobs: [] } }),
+  );
+  await openProject(page);
+  const projectId = new URL(page.url()).pathname
+    .split("/")
+    .filter(Boolean)
+    .pop()!;
+  const requestId = "5c9d1f70-3333-4444-8555-666677778888";
+  // The tab that sent the question is gone; this browser still remembers it.
+  await page.evaluate(
+    ([scope, id]) => {
+      localStorage.setItem(
+        `piwu-ai-research-pending-v1:${scope}`,
+        JSON.stringify([{ requestId: id, at: Date.now() - 120000 }]),
+      );
+    },
+    [projectId, requestId] as const,
+  );
+  await page.reload();
+  const notice = page.getByRole("status");
+  await expect(notice).toContainText("tidak lagi tersedia di server");
+  await expect(notice).toContainText(
+    "Kredit ronde yang tidak selesai dipulihkan",
+  );
+  // Said once and then forgotten, so returning to the project is quiet again.
+  const left = await page.evaluate(
+    (scope) => localStorage.getItem(`piwu-ai-research-pending-v1:${scope}`),
+    projectId,
+  );
+  expect(left === null || JSON.parse(left).length === 0).toBe(true);
+});
+
+test("the chat shows the cross-page synthesis as a model artifact, never as a quote", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await fixture(page);
+  await openProject(page);
+  await page.getByRole("button", { name: "Mode riset" }).click();
+  // Deliberately not the word "retry": that prompt drives the other fixture
+  // branch, which is about citations rather than the synthesis.
+  await sendMessage(page, "Ringkasan soal pengulangan jaringan di Next.js?");
+  const panel = page.locator(".ai-sources").last();
+  const summary = panel.locator(".research-summary");
+  await expect(summary.locator("strong")).toHaveText(
+    "Ringkasan lintas halaman",
+  );
+  // The label is the point: model words, not the pages' words.
+  await expect(summary).toContainText(
+    "bukan kutipan dan bukan kata-kata halaman",
+  );
+  await expect(summary).toContainText("halaman [1], [2]");
+  await expect(summary).toContainText(
+    "Kedua halaman menekankan pengulangan berjenjang",
+  );
+  await expect(summary).toContainText(
+    "Belum diselesaikan sumber: Tidak ada sumber soal biaya.",
+  );
+  // A URL that was not a source is reported, never silently kept.
+  await expect(summary.locator("small.warn")).toContainText(
+    "Tautan yang bukan salah satu sumber dihapus",
+  );
+  // The price rule is stated where the synthesis is shown.
+  await expect(summary).toContainText("tidak ada kredit tambahan");
+  // And the citation it alone supports is called out as such.
+  await expect(panel).toContainText(
+    "Sitasi 2 didukung ringkasan AI, bukan kata-kata halaman sumbernya.",
+  );
+  // Nothing in the panel pretends the synthesis was verified.
+  await expect(panel).not.toContainText("terverifikasi");
+  await page.reload();
+  // The synthesis is kept with the answer, and the panel starts folded after a
+  // reload, so it is opened the way a user would open it.
+  const reopened = page.locator(".ai-sources").last();
+  await reopened.locator(".sources-headline").click();
+  await expect(reopened.locator(".research-summary")).toContainText(
+    "Ringkasan lintas halaman",
+  );
+  // Still labelled as a model artifact, and still not a quote.
+  await expect(reopened.locator(".research-summary")).toContainText(
+    "bukan kutipan dan bukan kata-kata halaman",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("an ordinary turn reports the server tools it really ran, and the ones it refused", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await fixture(page);
+  await openProject(page);
+  await sendMessage(page, "Daftar berkas project ini");
+  const report = page.locator(".ai-tools").last();
+  await expect(report).toContainText(
+    "1 ronde alat server (list_files, read_file)",
+  );
+  await expect(report).toContainText("tanpa kredit, tanpa jaringan");
+  // The refused call is named, and so is the reason it was refused.
+  await expect(report).toContainText("Ditolak: read_file.");
+  await expect(report.locator("ul.sources-failed li")).toContainText(
+    "Argumen tool read_file tidak lengkap",
+  );
   expect(errors).toEqual([]);
 });

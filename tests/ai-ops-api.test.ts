@@ -103,7 +103,13 @@ function fixture({ kind = "roblox", reply }: { kind?: string; reply: any }) {
   return { fetcher, calls };
 }
 
-async function run(options: { kind?: string; mode?: string; reply: any }) {
+async function run(options: {
+  kind?: string;
+  mode?: string;
+  reply: any;
+  attachments?: any[];
+  photoPalettes?: any[];
+}) {
   const fx = fixture(options);
   const { app } = createApp({
     env: {
@@ -133,6 +139,10 @@ async function run(options: { kind?: string; mode?: string; reply: any }) {
         mode: options.mode || "Builder",
         model: "Otomatis",
         files: { [SCENE_PATH]: savedScene("text") },
+        ...(options.attachments ? { attachments: options.attachments } : {}),
+        ...(options.photoPalettes
+          ? { photoPalettes: options.photoPalettes }
+          : {}),
       }),
     },
   );
@@ -243,4 +253,273 @@ test("AI ops wiring: a broken ops payload fails the turn instead of half-applyin
   assert.ok(error, "expected an error event");
   assert.match(error.message, /jenis operasi tidak didukung/);
   assert.equal(resultOf(events), undefined);
+});
+
+// The 3D-from-photo path, end to end: a photo travels with the prompt, the model
+// answers with a scene.build tree of shapes, and the SERVER generates the
+// geometry — the reply never carries a vertex list the model made up.
+test("a photo becomes a real 3D model: the server builds the geometry the model described", async () => {
+  const { status, events } = await run({
+    kind: "roblox",
+    // A real PNG signature: the attachment layer checks the bytes, not the name.
+    attachments: [
+      {
+        name: "kursi-depan.png",
+        mime: "image/png",
+        data: Buffer.from(
+          "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+            "01f15c4890000000a49444154789c6300010000050001",
+          "hex",
+        ).toString("base64"),
+      },
+    ],
+    reply: {
+      content:
+        "Dari foto ini saya baca kursi kayu: dudukan, sandaran, dan empat kaki. Warnanya saya ambil dari foto; bagian belakang kursi tidak terlihat jadi saya tebak simetris.",
+      ops: [
+        {
+          kind: "scene.build",
+          name: "Kursi kayu",
+          photo: 1,
+          position: [4, 0, 0],
+          asMesh: true,
+          nodes: [
+            {
+              name: "Dudukan",
+              shape: "box",
+              position: [0, 1.5, 0],
+              size: [3, 0.4, 3],
+              color: "#8b5a2b",
+            },
+            {
+              name: "Sandaran",
+              shape: "box",
+              position: [0, 3, 1.2],
+              size: [3, 3, 0.4],
+              color: "#7a4a22",
+            },
+            {
+              name: "Kaki depan",
+              shape: "cylinder",
+              segments: 8,
+              position: [-1.2, 0.7, 1.2],
+              rotation: [0, 0, 90],
+              size: [0.4, 1.4, 0.4],
+              color: "#4a3018",
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(status, 200);
+  const result = resultOf(events);
+  assert.equal(result.ops.sceneChanged, true);
+  const applied = result.ops.applied[0];
+  assert.equal(applied.kind, "scene.build");
+  assert.equal(applied.name, "Kursi kayu");
+  assert.equal(applied.photo, 1);
+  assert.equal(applied.asMesh, true);
+  // The server really generated triangles, inside the mesh budget.
+  assert.ok(applied.geometry.vertices > 8, "meshes were merged, not copied");
+  assert.ok(applied.geometry.faces <= 1024);
+  assert.match(applied.changes.join(" "), /dari foto 1/);
+  assert.match(applied.changes.join(" "), /vertex/);
+  const scene = JSON.parse(result.files[SCENE_PATH]);
+  const model = scene.objects.find((o: any) => o.id === applied.id);
+  assert.equal(model.kind, "mesh");
+  assert.equal(model.parent, null);
+  assert.deepEqual(model.position, [4, 0, 0]);
+  assert.equal(model.mesh.vertices.length, applied.geometry.vertices);
+  // No face references a vertex that is not there, and no face is degenerate.
+  for (const face of model.mesh.faces) {
+    assert.equal(new Set(face).size, 3);
+    for (const index of face) assert.ok(index < model.mesh.vertices.length);
+  }
+  // The one-colour limit of a merged mesh is said out loud, never hidden.
+  assert.match(applied.changes.join(" "), /satu warna/);
+});
+
+test("the colours sampled from the photo reach the model, per side", async () => {
+  const photo = {
+    name: "kursi-depan.png",
+    mime: "image/png",
+    data: Buffer.from(
+      "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+        "01f15c4890000000a49444154789c6300010000050001",
+      "hex",
+    ).toString("base64"),
+  };
+  // Red top half, blue bottom half: the model names the seat and the legs.
+  const photoPalettes = [
+    {
+      columns: 4,
+      rows: 4,
+      colors: Array.from({ length: 16 }, (_, at) =>
+        at < 8 ? "#c02020" : "#2040c0",
+      ),
+    },
+  ];
+  const { status, events } = await run({
+    kind: "roblox",
+    attachments: [photo],
+    photoPalettes,
+    reply: {
+      content:
+        "Warna dudukan dan kaki saya ambil dari area foto masing-masing.",
+      ops: [
+        {
+          kind: "scene.build",
+          name: "Kursi",
+          photo: 1,
+          asMesh: true,
+          nodes: [
+            {
+              name: "Dudukan",
+              shape: "box",
+              position: [0, 1.5, 0],
+              size: [3, 0.4, 3],
+              region: [0, 0, 1, 0.5],
+            },
+            {
+              name: "Kaki",
+              shape: "box",
+              position: [0, 0.7, 0],
+              region: [0, 0.5, 1, 1],
+            },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(status, 200);
+  const result = resultOf(events);
+  assert.equal(result.ops.sceneChanged, true);
+  const applied = result.ops.applied[0];
+  assert.equal(applied.colorSource, "photo-faces");
+  assert.ok(applied.groups >= 2);
+  const text = applied.changes.join(" ");
+  assert.match(text, /piksel foto 1/);
+  assert.match(text, /bukan peta tekstur UV/);
+  const scene = JSON.parse(result.files[SCENE_PATH]);
+  const model = scene.objects.find((o: any) => o.id === applied.id);
+  // Every face was painted, and both halves of the photo are on the model.
+  const covered = model.mesh.groups
+    .flatMap((group: any) => group.faces)
+    .sort((a: number, b: number) => a - b);
+  assert.deepEqual(
+    covered,
+    model.mesh.faces.map((_: any, index: number) => index),
+  );
+  assert.deepEqual(
+    [...new Set(model.mesh.groups.map((g: any) => g.color))].sort(),
+    ["#2040c0", "#c02020"],
+  );
+  // The report carries the colours, one row per colour, covering every face.
+  assert.deepEqual(
+    applied.colorGroups.map((group: any) => group.color).sort(),
+    ["#2040c0", "#c02020"],
+  );
+  assert.equal(
+    applied.colorGroups.reduce((n: number, g: any) => n + g.faces, 0),
+    model.mesh.faces.length,
+  );
+});
+
+test("a region without a usable colour sample is refused, never guessed", async () => {
+  const { events } = await run({
+    kind: "roblox",
+    attachments: [
+      {
+        name: "kursi.png",
+        mime: "image/png",
+        data: Buffer.from(
+          "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
+            "01f15c4890000000a49444154789c6300010000050001",
+          "hex",
+        ).toString("base64"),
+      },
+    ],
+    // The browser says it could not read the pixels of this photo.
+    photoPalettes: [null],
+    reply: {
+      content: "Saya pakai warna foto untuk dudukannya.",
+      ops: [
+        {
+          kind: "scene.build",
+          name: "Kursi",
+          photo: 1,
+          nodes: [{ name: "Dudukan", shape: "box", region: [0, 0, 1, 1] }],
+        },
+      ],
+    },
+  });
+  const result = resultOf(events);
+  assert.equal(result.ops.sceneChanged, false);
+  assert.equal(result.files, undefined);
+  assert.match(
+    result.ops.rejected[0].reason,
+    /sampel warna foto itu tidak ada/,
+  );
+});
+
+test("a model built from a photo that was never attached is refused, not accepted", async () => {
+  const { events } = await run({
+    kind: "roblox",
+    reply: {
+      content: "Saya buatkan kursinya dari foto tadi.",
+      ops: [
+        {
+          kind: "scene.build",
+          name: "Kursi",
+          photo: 1,
+          nodes: [{ name: "Dudukan", shape: "box" }],
+        },
+      ],
+    },
+  });
+  const result = resultOf(events);
+  // Nothing was applied: the request carried no photo at all.
+  assert.equal(result.ops.sceneChanged, false);
+  assert.equal(result.files, undefined);
+  assert.match(result.ops.rejected[0].reason, /tidak melampirkan foto/);
+  assert.match(result.ops.note, /tidak ada perubahan diterapkan/);
+});
+
+test("a scene.build that would break the mesh budget is rejected with a usable reason", async () => {
+  const { events } = await run({
+    kind: "roblox",
+    reply: {
+      content: "Saya gabungkan semuanya jadi satu mesh.",
+      ops: [
+        {
+          kind: "scene.build",
+          name: "Bola rumit",
+          asMesh: true,
+          nodes: [
+            { name: "Bola besar", shape: "sphere", segments: 24 },
+            {
+              name: "Bola kedua",
+              shape: "sphere",
+              segments: 24,
+              position: [1, 0, 0],
+            },
+            {
+              name: "Bola ketiga",
+              shape: "sphere",
+              segments: 24,
+              position: [2, 0, 0],
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const result = resultOf(events);
+  assert.equal(result.ops.sceneChanged, false);
+  const reason = result.ops.rejected[0].reason;
+  assert.match(reason, /vertex/);
+  assert.match(reason, /512/);
+  // The reason says what to do next instead of only what went wrong.
+  assert.match(reason, /segments|asMesh|bagian/);
 });

@@ -41,6 +41,19 @@ export async function attachmentParts(attachments = [], references = []) {
   )
     throw new HttpError(400, "Maksimal 3 lampiran dan 2 URL per pesan.");
   const parts = [];
+  // Photos are numbered in the order they were attached, and that number is what
+  // a `scene.build` op must cite. A photo that is not listed here cannot be
+  // referenced, so "built from photo 2" is never accepted out of nowhere.
+  const photos = attachments.filter((a) =>
+    String(a?.mime || "").startsWith("image/"),
+  );
+  if (photos.length)
+    parts.push({
+      type: "text",
+      text: `LAMPIRAN FOTO (${photos.length}): ${photos
+        .map((a, i) => `${i + 1} = ${String(a.name).slice(0, 80)} (${a.mime})`)
+        .join(", ")}. Rujuk foto ini hanya dengan nomor tersebut.`,
+    });
   for (const a of attachments) {
     const bytes = inspectAttachment(a);
     if (a.mime.startsWith("image/"))

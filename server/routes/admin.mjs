@@ -1,6 +1,7 @@
 import { adminFilters, applyAdminFilters } from "../lib/admin-query.mjs";
 import { createReadinessReader } from "../lib/readiness.mjs";
 import { researchStatus } from "../lib/research.mjs";
+import { GENERAL_TOOL_NAMES, toolRoundsMax } from "../lib/tools.mjs";
 import { searchCacheInfo, searchCapability } from "../lib/search.mjs";
 import { createPublicSiteReader } from "../lib/public-site.mjs";
 import { z } from "zod";
@@ -346,7 +347,9 @@ export function registerAdmin(app, ctx) {
         },
         // Read-only search status: which provider is selected, whether its key
         // is present, and what the cache is doing. Never the key itself.
-        search: (() => {
+        // `await` matters here: the job store reports the durable half from the
+        // database, not only this process's memory.
+        search: await (async () => {
           const capability = searchCapability(ctx.env);
           return {
             ...researchStatus(ctx.env),
@@ -354,7 +357,13 @@ export function registerAdmin(app, ctx) {
             selectedAvailable: capability.selectedAvailable,
             disabled: capability.disabled,
             keyConfigured: Boolean(ctx.env.SEARCH_API_KEY),
-            context7KeyConfigured: Boolean(ctx.env.CONTEXT7_API_KEY),
+            // The read-only server tools that run on ordinary turns too: their
+            // names and their round budget, and never a claim that a model used
+            // them. The synthesis switch is already part of researchStatus().
+            tools: {
+              names: [...GENERAL_TOOL_NAMES],
+              rounds: toolRoundsMax(ctx.env),
+            },
             locale: {
               country: ctx.env.SEARCH_COUNTRY || "",
               language: ctx.env.SEARCH_LANGUAGE || "",
@@ -362,7 +371,7 @@ export function registerAdmin(app, ctx) {
             cache: searchCacheInfo(ctx),
             // Research that outlived its tab: how many answers wait to be
             // collected, with no prompt or credential in the count.
-            jobs: ctx.researchJobs?.stats?.() || null,
+            jobs: ctx.researchJobs ? await ctx.researchJobs.stats() : null,
             notice:
               "Status konfigurasi, bukan bukti panggilan vendor berhasil. Untuk uji nyata jalankan npm run verify:search di server.",
           };
