@@ -4,6 +4,7 @@ import { PlatformNotices, AdminLink } from "../components/admin/Platform";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  Cloud,
   Plus,
   Search,
   LayoutGrid,
@@ -37,6 +38,52 @@ import {
   CloudSyncBanner,
 } from "../components/storage/StorageStatus";
 import { scopeFor } from "../lib/cloud/types";
+import { listProjectPhotos } from "../services/project-photos";
+import CreditSummary from "../components/dashboard/CreditSummary";
+import WaitingForYou from "../components/dashboard/WaitingForYou";
+import {
+  continueLine,
+  formatBytes,
+  projectFootprint,
+  syncNotice,
+} from "../lib/dashboard/attention";
+import type { Project } from "../lib/types";
+
+/** One dense line per card: what the project holds, not just when it changed. */
+function footprintLine(
+  project: Project,
+  photos?: { count: number; bytes: number },
+) {
+  const footprint = projectFootprint(project, photos);
+  const parts = [
+    `${footprint.files} file`,
+    `${footprint.versions} riwayat`,
+    formatBytes(footprint.bytes),
+  ];
+  if (footprint.photos)
+    parts.push(`foto ${footprint.photos.count}/${footprint.photos.limit}`);
+  if (footprint.scene) {
+    const { objects, meshes, meshesWithAsset } = footprint.scene;
+    parts.push(`scene ${objects} objek`);
+    if (meshes)
+      parts.push(
+        meshesWithAsset
+          ? `${meshes} mesh · ${meshesWithAsset} beraset`
+          : `${meshes} mesh tanpa aset`,
+      );
+  }
+  return parts.join(" · ");
+}
+
+function SyncBadge({ phase }: { phase?: string }) {
+  const notice = syncNotice(phase);
+  if (!notice) return null;
+  return (
+    <span className={"project-sync tone-" + notice.tone}>
+      <Cloud size={11} /> {notice.label}
+    </span>
+  );
+}
 export default function Dashboard() {
   const store = useStore();
   const navigate = useNavigate();
@@ -52,6 +99,9 @@ export default function Dashboard() {
   const [projectKind, setProjectKind] = useState<ProjectKind>("webapp");
   const [newPrompt, setNewPrompt] = useState("");
   const [mobile, setMobile] = useState(false);
+  const [photos, setPhotos] = useState<
+    Record<string, { count: number; bytes: number }>
+  >({});
   const [promptTitle, setPromptTitle] = useState("");
   const [promptContent, setPromptContent] = useState("");
   const continued = useRef(false);
@@ -86,6 +136,42 @@ export default function Dashboard() {
           ? a.updatedAt - b.updatedAt
           : b.updatedAt - a.updatedAt,
     );
+  // Photo counts live in this browser only, so they are read here rather than
+  // asked from the cloud. A read that fails simply leaves the count out.
+  useEffect(() => {
+    if (!store.user) return;
+    let live = true;
+    const wanted = store.projects
+      .filter((project) => project.kind === "roblox")
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 8);
+    void (async () => {
+      const found: Record<string, { count: number; bytes: number }> = {};
+      for (const project of wanted) {
+        try {
+          const list = await listProjectPhotos(
+            scopeFor(store.user),
+            project.id,
+          );
+          if (list.length)
+            found[project.id] = {
+              count: list.length,
+              bytes: list.reduce(
+                (total, photo) => total + (photo.bytes || 0),
+                0,
+              ),
+            };
+        } catch {
+          // Photos are a bonus on the card; never block the dashboard for them.
+        }
+      }
+      if (live) setPhotos(found);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [store.user, store.projects]);
+
   function create() {
     if (!newPrompt.trim()) return;
     if (!store.user) {
@@ -158,6 +244,7 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          <CreditSummary />
           <div className="upgrade-card">
             <span>
               <Sparkles size={15} />
@@ -278,6 +365,7 @@ export default function Dashboard() {
           <CloudSyncBanner />
           {(tab === "projects" || tab === "shared") && (
             <>
+              <WaitingForYou projects={store.projects} />
               <div className="dashboard-banner">
                 <div>
                   <span className="banner-label">
@@ -355,6 +443,15 @@ export default function Dashboard() {
                             {isCloud
                               ? store.sync[p.id]?.role || "Cloud"
                               : "Project lokal"}
+                          </span>
+                          <SyncBadge phase={store.sync[p.id]?.phase} />
+                          {continueLine(p) && (
+                            <span className="project-continue">
+                              Terakhir: {continueLine(p)}
+                            </span>
+                          )}
+                          <span className="project-footprint">
+                            {footprintLine(p, photos[p.id])}
                           </span>
                         </Link>
                         <div className="project-menu">

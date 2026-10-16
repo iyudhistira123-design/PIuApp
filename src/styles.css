@@ -2354,6 +2354,166 @@ section h2 {
   font-size: 9px;
   color: #62774c;
 }
+
+/* Credit balance where the session starts. Sage card, like the upgrade card
+   below it, but it carries numbers instead of a pitch. */
+.dashboard-credit {
+  display: grid;
+  gap: 3px;
+  padding: 12px 13px;
+  margin-bottom: 14px;
+  border: 1px solid #e0e6d5;
+  border-radius: 8px;
+  background: #f2f5ea;
+}
+.dashboard-credit > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 7px;
+  letter-spacing: 1.2px;
+  color: #93a27e;
+}
+.dashboard-credit b {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  color: #455638;
+}
+.dashboard-credit small {
+  font-size: 9px;
+  line-height: 1.5;
+  color: #8b9a76;
+}
+.dashboard-credit a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 3px;
+  font-size: 9px;
+  color: #455638;
+}
+.dashboard-credit[data-phase="error"] {
+  border-color: #f0dccf;
+  background: #fbf3ee;
+}
+
+/* "Menunggu Anda": the decisions a project is waiting for. */
+.dashboard-waiting {
+  padding: 16px 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.dashboard-waiting header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-waiting h2 {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+.dashboard-waiting header .waiting-count {
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #e8ecdf;
+  font-size: 9px;
+  color: #455638;
+}
+.dashboard-waiting header .icon-button {
+  margin-left: auto;
+}
+.dashboard-waiting ul {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-waiting li > a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 9px 8px;
+  border-radius: 6px;
+  color: var(--ink);
+}
+.dashboard-waiting li > a:hover {
+  background: #f6f7f2;
+}
+.dashboard-waiting li b {
+  font-size: 11px;
+  font-weight: 500;
+}
+.dashboard-waiting li span {
+  grid-column: 1;
+  font-size: 10px;
+  color: #55603f;
+}
+.dashboard-waiting li small {
+  grid-column: 1;
+  font-size: 9px;
+  color: var(--muted);
+}
+.dashboard-waiting li svg {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  color: #b4bfa6;
+}
+.dashboard-waiting .waiting-note {
+  margin-top: 10px;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.dashboard-waiting .waiting-warn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: 9px;
+  color: #b4553f;
+}
+
+/* The card's second half: what the project holds and where you stopped. */
+.project-card-footer > a > span.project-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  margin-top: 6px;
+}
+.project-card-footer > a > span.project-sync.tone-ok {
+  color: #9dac8d;
+}
+.project-card-footer > a > span.project-sync.tone-wait {
+  color: #b9852f;
+}
+.project-card-footer > a > span.project-sync.tone-warn {
+  color: #b4553f;
+}
+.project-card-footer > a > span.project-continue {
+  display: block;
+  max-width: 100%;
+  margin-top: 6px;
+  overflow: hidden;
+  font-size: 9px;
+  color: #8b9a76;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-card-footer > a > span.project-footprint {
+  display: block;
+  margin-top: 3px;
+  font-size: 8px;
+  line-height: 1.5;
+  color: #a8b39f;
+}
 .sidebar-settings {
   display: flex;
   align-items: center;

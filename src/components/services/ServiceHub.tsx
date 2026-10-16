@@ -16,12 +16,19 @@ const tabs = [
 ];
 export default function ServiceHub({
   projectId,
+  initialTab,
   onReference,
 }: {
   projectId: string;
+  /** Panel to open first, when a link asked for one (see Workspace ?services=). */
+  initialTab?: string;
   onReference?: (url: string, title: string) => void;
 }) {
-  const [tab, setTab] = useState("integrations");
+  const [tab, setTab] = useState(
+    initialTab && tabs.some(([key]) => key === initialTab)
+      ? initialTab
+      : "integrations",
+  );
   return (
     <div className="service-panel">
       <nav className="service-tabs" aria-label="Layanan project">

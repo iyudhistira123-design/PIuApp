@@ -31,7 +31,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import {
   Sun,
   Moon,
@@ -219,10 +224,24 @@ function WorkspaceRoute() {
     );
   return <WorkspaceContent key={id} project={project} />;
 }
+/** Panel names a link may ask for, with the title the modal shows. */
+const DIALOG_TITLES: Record<string, string> = {
+  settings: "Pengaturan workspace",
+  invite: "Bangun bersama tim",
+  publish: "Bawa ide Anda ke dunia",
+  services: "Layanan project",
+  integrations: "Integrasi",
+  comments: "Komentar pada elemen",
+  analytics: "Analytics project",
+  recording: "Rekaman & pemutar sesi",
+  credits: "Paket & penggunaan",
+};
+
 function WorkspaceContent({ project }: { project: Project }) {
   const { theme, setTheme, persistenceError } = useIDETheme();
   const store = useStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const id = project.id;
   const kind = project.kind || "webapp";
   const initialFile =
@@ -285,6 +304,17 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [reviewPath, setReviewPath] = useState("");
   const [useReview, setUseReview] = useState(true);
   const [dialog, setDialog] = useState("");
+
+  // A dashboard link may name the panel it wants (`?dialog=services&services=comments`),
+  // so an item like "3 komentar belum diselesaikan" opens where it can be fixed.
+  // Only the names the modal already knows are accepted; anything else is ignored.
+  useEffect(() => {
+    const asked = searchParams.get("dialog") || "";
+    if (Object.prototype.hasOwnProperty.call(DIALOG_TITLES, asked))
+      setDialog(asked);
+    // First render only: after that the user owns which panel is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [projectMenu, setProjectMenu] = useState(false);
   const [newName, setNewName] = useState(project.name);
   const [query, setQuery] = useState("");
@@ -3197,6 +3227,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           title={
             {
               rename: "Ganti nama project",
+              ...DIALOG_TITLES,
               delete: "Hapus project?",
               invite: "Bangun bersama tim",
               publish: "Bawa ide Anda ke dunia",
@@ -3223,6 +3254,7 @@ function WorkspaceContent({ project }: { project: Project }) {
               <Suspense fallback={<p>Memuat layanan…</p>}>
                 <ServiceHub
                   projectId={id}
+                  initialTab={searchParams.get("services") || undefined}
                   onReference={(url, title) => {
                     setReferences([url]);
                     setInput(
