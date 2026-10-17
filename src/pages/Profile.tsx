@@ -15,6 +15,7 @@ import {
 } from "../lib/profile";
 import { periodLeft, rupiah } from "../lib/dashboard/plans";
 import PayoutSection from "../components/services/PayoutSection";
+import DisputeSection from "../components/services/DisputeSection";
 import "../components/services/services.css";
 import "../components/services/profile.css";
 
@@ -398,6 +399,7 @@ export default function Profile({
               )}
             </section>
             {signedIn && <PayoutSection />}
+            {signedIn && <DisputeSection />}
 
             <section className="profile-card">
               <h2>Workspace</h2>

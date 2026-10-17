@@ -22,6 +22,7 @@ const MIGRATIONS = [
   "011_account_deletion",
   "012_notifications",
   "013_marketplace_payouts",
+  "014_marketplace_disputes",
 ];
 
 const setup = async (db: PGlite) =>
@@ -99,6 +100,7 @@ test("KYC, saldo, dan payout mengikuti aturan yang dinyatakan", async () => {
       pending: 0,
       paid: 0,
       available: 80000,
+      frozen: 0,
       currency: "IDR",
     });
 
@@ -159,6 +161,7 @@ test("KYC, saldo, dan payout mengikuti aturan yang dinyatakan", async () => {
       pending: 60000,
       paid: 0,
       available: 20000,
+      frozen: 0,
       currency: "IDR",
     });
     await assert.rejects(
@@ -213,6 +216,7 @@ test("KYC, saldo, dan payout mengikuti aturan yang dinyatakan", async () => {
       pending: 0,
       paid: 50000,
       available: 30000,
+      frozen: 0,
       currency: "IDR",
     });
 
@@ -258,7 +262,7 @@ test("KYC, saldo, dan payout mengikuti aturan yang dinyatakan", async () => {
         seller,
       ])
     ).rows[0].p;
-    assert.deepEqual(purged, { verification: 1, payouts: 2 });
+    assert.deepEqual(purged, { verification: 1, payouts: 2, disputes: 0 });
     assert.equal(
       await scalar(
         db,

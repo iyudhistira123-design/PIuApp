@@ -7,11 +7,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 ## A. Project Supabase baru, belum pernah dipasang PiwuApp
 
 1. Pastikan project benar-benar baru/dikhususkan untuk PiwuApp. Auth dan Storage bawaan Supabase harus tersedia.
-2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–013** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
-3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–013 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
+2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–014** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
+3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–014 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
 4. Lanjutkan bootstrap admin di bagian C.
 
-**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–013 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
+**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–014 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
 
 ## B. Database lama / pernah menjalankan sebagian migration
 
@@ -35,6 +35,7 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 | 011    | [011_account_deletion.sql](011_account_deletion.sql)         | Penghapusan akun superadmin: data pribadi, arsip template, audit tetap                      |
 | 012    | [012_notifications.sql](012_notifications.sql)               | Notifikasi per akun: dedupe, RLS baca sendiri, RPC service-only                             |
 | 013    | [013_marketplace_payouts.sql](013_marketplace_payouts.sql)   | Verifikasi penjual (KYC) dan payout marketplace yang ditinjau superadmin                    |
+| 014    | [014_marketplace_disputes.sql](014_marketplace_disputes.sql) | Sengketa pembeli/penjual, pembekuan saldo, keputusan superadmin                             |
 
 Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 013. Jika baru 001–005, jalankan 006 sampai 013. File 001–006 tidak didesain untuk dijalankan berulang.
 
@@ -42,7 +43,9 @@ Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 013. Ji
 
 **Migration 012 menambah tabel `notifications` dan RPC `piwu_notification_add`/`piwu_notifications`/`piwu_notification_read`/`piwu_notification_read_all`.** Browser hanya boleh `select` barisnya sendiri (untuk Realtime); penulisan lewat service role. Notifikasi muncul di lonceng dashboard/workspace dan disimpan server, jadi perangkat lain melihat daftar yang sama. Tidak ada provider email/push; browser yang tertutup melihatnya saat dibuka kembali. Tabel ditambahkan ke publication `supabase_realtime` bila publication itu ada; tanpa Realtime, polling 60 detik tetap berjalan.
 
-**Migration 013 menambah tabel `seller_verifications` dan `marketplace_payouts` serta lima RPC service-only.** Saldo penjual dihitung dari `marketplace_sales` berstatus `accrued` dikurangi payout yang diminta/disetujui/dibayar; minimum payout Rp50.000, maksimum Rp50.000.000. Payout hanya bisa diminta setelah KYC berstatus `verified`, menahan saldo sejak diminta, dan ditinjau superadmin (`approved`/`paid`/`rejected`; `paid` wajib menyertakan referensi transfer). RLS hanya mengizinkan penjual membaca barisnya sendiri; penulisan lewat service role. PiwuApp tidak memindahkan uang: transfer dilakukan di luar aplikasi lalu referensinya dicatat. Saat akun dihapus, `piwu_purge_seller_pii` menghapus KYC dan menulis ulang tujuan transfer menjadi `[dihapus]`, sementara nominal/status/referensi tetap sebagai catatan keuangan.
+**Migration 013 menambah tabel `seller_verifications` dan `marketplace_payouts` serta lima RPC service-only.** Saldo penjual dihitung dari `marketplace_sales` berstatus `accrued` dikurangi payout yang diminta/disetujui/dibayar; minimum payout Rp50.000, maksimum Rp50.000.000. Payout hanya bisa diminta setelah KYC berstatus `verified`, menahan saldo sejak diminta, dan ditinjau superadmin (`approved`/`paid`/`rejected`; `paid` wajib menyertakan referensi transfer). RLS hanya mengizinkan penjual membaca barisnya sendiri; penulisan lewat service role. PiwuApp tidak memindahkan uang: transfer dilakukan di luar aplikasi lalu referensinya dicatat. Saat akun dihapus, `piwu_purge_seller_pii` menghapus KYC dan sengketa yang melibatkan akun itu serta menulis ulang tujuan transfer menjadi `[dihapus]`, sementara nominal/status/referensi payout tetap sebagai catatan keuangan.
+
+**Migration 014 menambah tabel `marketplace_disputes` dan RPC `piwu_dispute_open`/`piwu_dispute_reply`/`piwu_dispute_withdraw`/`piwu_dispute_review`.** Pembeli bisa melaporkan satu pesanan dalam 30 hari; penjual membalas sekali; superadmin memutuskan `refund_approved` atau `rejected` dengan catatan wajib. Selama status `open`, `seller_replied`, atau `refund_approved`, bagian penjual dari penjualan itu dibekukan dari saldo payout (`piwu_seller_balance` mengembalikan `frozen`). Migration ini **tidak memindahkan uang**: refund tetap diproses lewat penyedia pembayaran, dan PiwuApp hanya mencatat keputusan. RLS hanya mengizinkan pembeli/penjual membaca barisnya sendiri.
 
 **Migration 011 menambah RPC `piwu_admin_delete_account` untuk tombol “Hapus akun” di panel admin.** Penghapusan tidak menghapus baris `auth.users` — 24 kolom di 18 tabel mereferensikannya tanpa cascade, termasuk invoice dan audit. RPC menangguhkan akun, menghapus project pribadi beserta turunannya, mengosongkan profil publik, mengarsipkan template yang dijual, dan mempertahankan baris keuangan/audit tanpa email. Server lalu mengganti email Auth menjadi alamat token `deleted+<uuid>@piwu.invalid` melalui Admin API dan melakukan soft-delete, sehingga email asli bisa dipakai mendaftar lagi tetapi akun lama tidak bisa masuk. Ini bukan jaminan penghapusan fisik seluruh jejak di luar database aplikasi (backup, log provider); atur retensi backup sesuai kebijakan Anda.
 

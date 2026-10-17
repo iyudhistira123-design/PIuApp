@@ -100,6 +100,33 @@ async function fixture(
               },
             ],
           };
+        if (path === "/admin/disputes")
+          return {
+            applied: true,
+            items: [
+              {
+                id: "33333333-3333-4333-8333-333333333333",
+                order_id: "44444444-4444-4444-8444-444444444444",
+                template_id: "55555555-5555-4555-8555-555555555555",
+                buyer_name: "Pembeli Fixture",
+                seller_name: "Penjual Fixture",
+                category: "broken",
+                body: "File yang diunduh rusak dan tidak bisa dipakai sama sekali.",
+                status: "open",
+                opened_at: "2026-10-12T00:00:00.000Z",
+                title: "Template Fixture",
+              },
+            ],
+          };
+        if (path.startsWith("/admin/disputes/")) {
+          state.actions.push({ path, ...structuredClone(body) });
+          return {
+            result: {
+              status: body?.status,
+              notice: "Keputusan sengketa tersimpan.",
+            },
+          };
+        }
         if (path.startsWith("/admin/payouts/")) {
           state.actions.push({ path, ...structuredClone(body) });
           return { result: { status: body?.status } };
@@ -147,6 +174,42 @@ async function fixture(
       page.getByRole("heading", { name: "Broadcast", exact: true }),
     ).toBeVisible();
 }
+test("dispute queue: superadmin approves a refund only after a reason", async ({
+  page,
+}) => {
+  await fixture(page, "superadmin", "marketplace");
+  await expect(
+    page.getByRole("heading", { name: "Sengketa marketplace" }),
+  ).toBeVisible();
+  await expect(page.getByText("Template Fixture").first()).toBeVisible();
+  await page
+    .getByRole("row", { name: /44444444/ })
+    .getByRole("button", { name: "Setujui refund" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Keputusan sengketa");
+  await expect(
+    dialog.getByRole("button", { name: "Konfirmasi perubahan" }),
+  ).toBeDisabled();
+  await dialog
+    .getByLabel("Alasan perubahan")
+    .fill("Bukti kerusakan sesuai dan refund disetujui");
+  await dialog.getByRole("button", { name: "Konfirmasi perubahan" }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Keputusan sengketa tersimpan" }),
+  ).toBeVisible();
+  const sent = await page.evaluate(
+    () => (window as any).__adminFixture.actions[0],
+  );
+  expect(sent.path).toBe(
+    "/admin/disputes/33333333-3333-4333-8333-333333333333",
+  );
+  expect(sent.status).toBe("refund_approved");
+  expect(sent.note).toContain("Bukti kerusakan");
+});
+
 test("payout queue: superadmin reviews KYC and marks a transfer paid with a reference", async ({
   page,
 }) => {

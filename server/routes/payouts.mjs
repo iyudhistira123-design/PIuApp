@@ -177,10 +177,10 @@ export function registerPayouts(app, ctx) {
     rateLimit({ max: 60 }),
     wrap(async (req, res) => {
       const admin = ctx.needAdmin();
-      const [sales, verifications, payouts] = await Promise.all([
+      const [sales, verifications, payouts, disputes] = await Promise.all([
         admin
           .from("marketplace_sales")
-          .select("seller_id,net,status")
+          .select("order_id,seller_id,net,status")
           .eq("status", "accrued")
           .limit(5000),
         admin
@@ -197,6 +197,11 @@ export function registerPayouts(app, ctx) {
           )
           .order("created_at", { ascending: false })
           .limit(200),
+        admin
+          .from("marketplace_disputes")
+          .select("order_id")
+          .in("status", ["open", "seller_replied", "refund_approved"])
+          .limit(5000),
       ]);
       if (
         schemaMissing(sales.error) ||
@@ -212,15 +217,28 @@ export function registerPayouts(app, ctx) {
         });
       if (sales.error || verifications.error || payouts.error)
         throw new HttpError(503, "Antrean payout belum dapat dimuat.");
+      if (disputes.error && !schemaMissing(disputes.error))
+        throw new HttpError(503, "Status sengketa belum dapat dibaca.");
 
       const balances = new Map();
       const entry = (id) => {
         if (!balances.has(id))
-          balances.set(id, { accrued: 0, pending: 0, paid: 0 });
+          balances.set(id, { accrued: 0, pending: 0, paid: 0, frozen: 0 });
         return balances.get(id);
       };
-      for (const row of sales.data || [])
-        entry(row.seller_id).accrued += Number(row.net) || 0;
+      // A dispute freezes the seller's share of that order (migration 014) so
+      // the queue shows the same available amount the seller sees.
+      const frozenOrders = new Set(
+        disputes.error && schemaMissing(disputes.error)
+          ? []
+          : (disputes.data || []).map((row) => row.order_id),
+      );
+      for (const row of sales.data || []) {
+        const value = entry(row.seller_id);
+        if (frozenOrders.has(row.order_id))
+          value.frozen += Number(row.net) || 0;
+        else value.accrued += Number(row.net) || 0;
+      }
       for (const row of payouts.data || []) {
         const target = entry(row.seller_id);
         if (row.status === "paid") target.paid += Number(row.amount) || 0;
@@ -250,6 +268,7 @@ export function registerPayouts(app, ctx) {
           accrued: value.accrued,
           pending: value.pending,
           paid: value.paid,
+          frozen: value.frozen,
           available: Math.max(0, value.accrued - value.pending - value.paid),
           kyc_status: verification?.status || "unverified",
           legal_name: verification?.legal_name || "",

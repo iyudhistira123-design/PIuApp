@@ -20,7 +20,8 @@ with markers(migration,table_name,function_signature) as (values
  ('011',null,'public.piwu_admin_delete_account(uuid,uuid,uuid,jsonb,text)'),
  ('012','public.notifications','public.piwu_notifications(uuid,integer)'),
  ('013','public.marketplace_payouts','public.piwu_request_payout(uuid,integer,text,text)'),
- ('013',null,'public.piwu_purge_seller_pii(uuid)')
+ ('013',null,'public.piwu_purge_seller_pii(uuid)'),
+ ('014','public.marketplace_disputes','public.piwu_dispute_open(uuid,uuid,text,text)')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)
@@ -77,7 +78,8 @@ with required(name) as (values
  ('public.runtime_rate_buckets'),
  ('public.runtime_sandbox_slots'),
  ('public.seller_verifications'),
- ('public.marketplace_payouts')
+ ('public.marketplace_payouts'),
+ ('public.marketplace_disputes')
 )
 select r.name as object,
   case when c.oid is null then 'TABEL_BELUM_ADA'
@@ -105,7 +107,12 @@ with required(signature,browser_allowed) as (values
  ('public.piwu_reserve_credits(uuid,uuid,integer,text)',false),
  ('public.piwu_finish_credits(uuid,boolean)',false),
  ('public.piwu_apply_payment(uuid,integer,text,text)',false),
- ('public.piwu_claim_publish()',false)
+ ('public.piwu_claim_publish()',false),
+ ('public.piwu_dispute_open(uuid,uuid,text,text)',false),
+ ('public.piwu_dispute_reply(uuid,uuid,text)',false),
+ ('public.piwu_dispute_withdraw(uuid,uuid)',false),
+ ('public.piwu_dispute_review(uuid,uuid,uuid,text,text)',false),
+ ('public.piwu_seller_balance(uuid)',false)
 ), checks as (
  select *,to_regprocedure(signature) as fn from required
 )

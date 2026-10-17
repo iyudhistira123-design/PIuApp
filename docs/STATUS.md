@@ -2,7 +2,21 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): verifikasi penjual & payout marketplace (tahap 5)
+## Pembaruan terbaru (17 Oktober 2026): sengketa marketplace (tahap 6)
+
+**382/382 unit/integrasi** dan **120/120 tes browser lengkap** lulus (1 worker, 7,4 menit), `tsc -b` dan `format:check` bersih, build produksi 41,17 detik, `check:bundle` editor **3.202.180 B** / gzip 822.901 B / 40 aset JavaScript / total 13.935.144 B — di bawah anggaran. **Migration 014.**
+
+- **Satu laporan per pesanan, dari pembeli aslinya.** `marketplace_disputes` menyimpan pesanan, template, pembeli, penjual, kategori (`not_as_described`/`broken`/`access`/`other`), isi 20–2.000 karakter, balasan penjual, keputusan, dan waktu. RPC `piwu_dispute_open` memeriksa kepemilikan pesanan, status penjualan `accrued`, jendela **30 hari**, dan menolak laporan kedua (`PIWU_DUPLICATE`). Pembeli tidak mengirim ID penjual/template; server yang mengambilnya.
+- **Penjual menjawab sekali.** `piwu_dispute_reply` hanya untuk penjual pesanan itu, hanya saat status `open`, 10–2.000 karakter. Pembeli bisa menarik laporan (`piwu_dispute_withdraw`) selama belum diputuskan; setelah ditarik, saldo penjual untuk pesanan itu dibuka kembali.
+- **Keputusan manusia, bukan refund otomatis.** Hanya superadmin yang boleh memanggil `piwu_dispute_review` (`refund_approved` atau `rejected`) dengan catatan 8–500 karakter. Keputusan idempoten lewat `requestId` + hash audit, tercatat sebagai `dispute_review`. Menyetujui refund **tidak** mengubah pesanan/pembayaran: refund tetap diproses lewat penyedia pembayaran di luar PiwuApp.
+- **Saldo dibekukan, bukan diklaim hangus.** `piwu_seller_balance` (didefinisikan ulang di 014) tidak menghitung penjualan dengan sengketa `open`/`seller_replied`/`refund_approved`, dan mengembalikan `frozen`. Permintaan payout otomatis ditolak karena memakai angka yang sama; antrean admin menampilkan bagian yang dibekukan.
+- **UI penjual/pembeli di `/profile#sengketa`.** Pembeli memilih pembelian yang masih memenuhi syarat, jenis masalah, dan penjelasan; melihat balasan penjual serta keputusan. Penjual melihat laporan atas penjualannya dan membalas. Notifikasi in-app dikirim saat laporan dibuka, saat penjual membalas, dan saat superadmin memutuskan.
+- **Antrean admin di tab Marketplace.** Auditor membaca; superadmin memilih **Setujui refund** atau **Tolak laporan**, dengan alasan wajib. Panel menyatakan bahwa refund dieksekusi penyedia pembayaran dan bagian penjual tetap dibekukan sampai itu terkonfirmasi.
+- **Dihapus bersama akun.** `piwu_purge_seller_pii` (didefinisikan ulang di 014) menghapus baris sengketa yang melibatkan akun yang dihapus, di samping menghapus KYC dan menulis ulang tujuan transfer; nominal/status/referensi payout tetap untuk catatan keuangan.
+- **Batas jujur.** Tidak ada unggah bukti/foto, percakapan bebas, refund otomatis, atau arbitrase pihak ketiga. Satu sengketa per pesanan; laporan yang ditarik tidak bisa dibuka lagi. Antrean admin membaca maksimum 200 sengketa dan 5.000 baris penjualan untuk estimasi saldo — RPC per penjual tetap sumber angka saat payout diminta.
+- **Verifikasi**: `tests/disputes.test.ts` (PGlite 001–014: kepemilikan, jendela 30 hari, satu laporan, balasan/tarik, pembekuan dan pelepasan saldo, idempotensi, audit, RLS), `tests/disputes-api.test.ts` (HTTP: token menentukan identitas, error 409, hanya superadmin memutuskan, notifikasi), `tests/admin-ui.spec.ts` (antrean sengketa + alasan wajib). Installer, `CHECK_INSTALLATION.sql`, `supabase/README.md`, `docs/ADMIN.md`, dan `docs/SECURITY.md` diperbarui ke **001–014**.
+
+## Pembaruan sebelumnya (17 Oktober 2026): verifikasi penjual & payout marketplace (tahap 5)
 
 **380/380 unit/integrasi** dan **119/119 tes browser lengkap** lulus (1 worker, 7,5 menit), `tsc -b` dan `format:check` bersih, build produksi 40,93 detik, `check:bundle` editor **3.202.180 B** / gzip 822.907 B / 40 aset JavaScript / total 13.924.052 B — di bawah anggaran. **Migration 013.**
 

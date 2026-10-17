@@ -107,6 +107,7 @@ const names: Record<string, string> = {
   payment_reconcile: "Rekonsiliasi pembayaran",
   kyc_review: "Tinjauan verifikasi penjual",
   payout_review: "Tinjauan payout",
+  dispute_review: "Keputusan sengketa",
   broadcast_save: "Simpan broadcast",
   settings: "Pengaturan situs",
 };
@@ -1291,6 +1292,12 @@ export function AdminPanel({
                       canReview={superadmin}
                       ask={ask}
                     />
+                    <DisputeQueue
+                      key={"disputes-" + reload}
+                      client={client}
+                      canReview={superadmin}
+                      ask={ask}
+                    />
                   </>
                 )}
                 {tab === "broadcasts" && (
@@ -1643,6 +1650,7 @@ function ActionDialog({
     [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const payoutReview = command.action === "payout_review";
   const kycReview = command.action === "kyc_review";
+  const disputeReview = command.action === "dispute_review";
   const reset = () => setRequestId(crypto.randomUUID());
   return (
     <Modal
@@ -1658,10 +1666,12 @@ function ActionDialog({
           setBusy(true);
           setError("");
           try {
-            if (payoutReview || kycReview) {
+            if (payoutReview || kycReview || disputeReview) {
               const path = payoutReview
                 ? "/admin/payouts/" + command.target
-                : "/admin/payouts/kyc";
+                : kycReview
+                  ? "/admin/payouts/kyc"
+                  : "/admin/disputes/" + command.target;
               const body = payoutReview
                 ? {
                     requestId,
@@ -1669,14 +1679,24 @@ function ActionDialog({
                     reference,
                     note: reason,
                   }
-                : {
-                    requestId,
-                    userId: command.payload?.userId,
-                    status: command.payload?.status,
-                    note: reason,
-                  };
+                : kycReview
+                  ? {
+                      requestId,
+                      userId: command.payload?.userId,
+                      status: command.payload?.status,
+                      note: reason,
+                    }
+                  : {
+                      requestId,
+                      status: command.payload?.status,
+                      note: reason,
+                    };
               await client(path, body);
-              onDone("Tinjauan tersimpan dan dicatat di audit.");
+              onDone(
+                disputeReview
+                  ? "Keputusan sengketa tersimpan dan dicatat di audit."
+                  : "Tinjauan tersimpan dan dicatat di audit.",
+              );
               return;
             }
             const payload = {
@@ -2356,6 +2376,168 @@ function SettingsForm({
 }
 
 /** Model catalogue for the configured API key, read straight from the provider. */
+/** Open marketplace disputes, decided only by a superadmin (migration 014). */
+function DisputeQueue({
+  client,
+  canReview,
+  ask,
+}: {
+  client: AdminClient;
+  canReview: boolean;
+  ask: (
+    action: string,
+    target: string | null,
+    payload: Row,
+    detail: string,
+  ) => void;
+}) {
+  const [data, setData] = useState<Row | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    client("/admin/disputes")
+      .then((d) => alive && setData(d))
+      .catch((e) => {
+        if (alive)
+          setError(e instanceof Error ? e.message : "Sengketa gagal dimuat.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [client]);
+  if (error)
+    return (
+      <div className="ad-error" role="alert">
+        {error}
+      </div>
+    );
+  if (!data) return <p className="ad-muted">Memuat antrean sengketa…</p>;
+  if (data.applied === false)
+    return <div className="ad-info">{data.notice}</div>;
+  const open = (data.items || []).filter((row: Row) =>
+    ["open", "seller_replied"].includes(row.status),
+  );
+  const recent = (data.items || [])
+    .filter((row: Row) => !["open", "seller_replied"].includes(row.status))
+    .slice(0, 8);
+  const categories: Row = {
+    not_as_described: "Tidak sesuai deskripsi",
+    broken: "Rusak / tidak bisa dipakai",
+    access: "Tidak bisa diakses",
+    other: "Lainnya",
+  };
+  const statuses: Row = {
+    open: "Menunggu penjual",
+    seller_replied: "Dibalas penjual",
+    refund_approved: "Refund disetujui",
+    rejected: "Ditolak",
+    withdrawn: "Ditarik",
+  };
+  const row = (r: Row, actionable: boolean) => (
+    <tr key={r.id}>
+      <td>
+        <strong>{r.title}</strong>
+        <code title={r.order_id}>{short(r.order_id)}</code>
+        <small>{date(r.opened_at)}</small>
+      </td>
+      <td>
+        {r.buyer_name || "Tanpa nama"}
+        <small>{categories[r.category] || r.category}</small>
+      </td>
+      <td>{r.seller_name || "Tanpa nama"}</td>
+      <td>
+        <p className="ad-excerpt">{r.body}</p>
+        {r.seller_reply && <small>Balasan: {r.seller_reply}</small>}
+        {r.resolution_note && <small>Keputusan: {r.resolution_note}</small>}
+      </td>
+      <td>
+        <Badge warn={actionable}>{statuses[r.status] || r.status}</Badge>
+      </td>
+      <td>
+        {actionable && (
+          <>
+            <button
+              className="ad-action"
+              disabled={!canReview}
+              onClick={() =>
+                ask(
+                  "dispute_review",
+                  r.id,
+                  { status: "refund_approved" },
+                  (r.title || "Sengketa") + " · refund",
+                )
+              }
+              title="Refund tetap diproses lewat penyedia pembayaran di luar PiwuApp."
+            >
+              Setujui refund
+            </button>
+            <button
+              className="ad-action ad-danger"
+              disabled={!canReview}
+              onClick={() =>
+                ask(
+                  "dispute_review",
+                  r.id,
+                  { status: "rejected" },
+                  (r.title || "Sengketa") + " · tolak laporan",
+                )
+              }
+              title="Bagian penjual untuk pesanan ini dibuka kembali."
+            >
+              Tolak laporan
+            </button>
+          </>
+        )}
+      </td>
+    </tr>
+  );
+  const table = (rows: Row[], actionable: boolean) => (
+    <div className="ad-table-wrap">
+      <table className="ad-table">
+        <thead>
+          <tr>
+            <th>Template</th>
+            <th>Pembeli</th>
+            <th>Penjual</th>
+            <th>Laporan</th>
+            <th>Status</th>
+            <th>Tindakan</th>
+          </tr>
+        </thead>
+        <tbody>{rows.map((r) => row(r, actionable))}</tbody>
+      </table>
+    </div>
+  );
+  return (
+    <section className="ad-card ad-payout-queue">
+      <div className="ad-card-heading">
+        <div>
+          <h2>Sengketa marketplace</h2>
+          <p>
+            Laporan pembeli dan balasan penjual. Menyetujui refund membekukan
+            bagian penjual sampai refund benar-benar dikonfirmasi penyedia
+            pembayaran; PiwuApp tidak mengirim uang sendiri. Menolak laporan
+            membuka kembali saldo untuk payout.
+          </p>
+        </div>
+        <ShieldCheck size={20} />
+      </div>
+      <h3>Menunggu keputusan</h3>
+      {!open.length ? (
+        <p className="ad-muted">Tidak ada sengketa terbuka.</p>
+      ) : (
+        table(open, true)
+      )}
+      {recent.length > 0 && (
+        <>
+          <h3>Keputusan terbaru</h3>
+          {table(recent, false)}
+        </>
+      )}
+    </section>
+  );
+}
+
 /**
  * Seller KYC and payout queue. Every action goes to the dedicated payout route
  * so migration 013's RPC (and its audit row) is the only writer.

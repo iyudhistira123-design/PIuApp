@@ -138,6 +138,7 @@ export default function PayoutSection() {
     pending: 0,
     paid: 0,
     available: 0,
+    frozen: 0,
   };
   const status = data?.verification?.status || "unverified";
   const verified = status === "verified";
@@ -190,6 +191,13 @@ export default function PayoutSection() {
               <strong>{money(balance.paid)}</strong>
               <small>Payout dengan referensi transfer</small>
             </div>
+            {Number(balance.frozen) > 0 && (
+              <div>
+                <span>Dibekukan sengketa</span>
+                <strong>{money(balance.frozen)}</strong>
+                <small>Tidak bisa dipayout sampai sengketa selesai</small>
+              </div>
+            )}
           </div>
           <div className="payout-grid">
             <div className="payout-card">

@@ -18,6 +18,7 @@ import { registerMarketplace } from "./routes/marketplace.mjs";
 import { registerRecordings } from "./routes/recordings.mjs";
 import { registerNotifications } from "./routes/notifications.mjs";
 import { registerPayouts } from "./routes/payouts.mjs";
+import { registerDisputes } from "./routes/disputes.mjs";
 import { SandboxProvider } from "./providers/sandbox.mjs";
 import { fetchReference } from "./lib/references.mjs";
 import { createResearchJobs } from "./lib/research-jobs.mjs";
@@ -126,6 +127,7 @@ export function createApp({
   );
   app.use("/api", platformGate(ctx));
   registerPayouts(app, ctx);
+  registerDisputes(app, ctx);
   registerAdmin(app, ctx);
   registerData(app, ctx);
   registerStudio(app, ctx);

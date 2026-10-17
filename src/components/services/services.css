@@ -440,3 +440,100 @@
   grid-column: 1 / -1;
   margin-top: 0;
 }
+.dispute-section {
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--ide-border, #dce0e5);
+  border-radius: 10px;
+  background: var(--ide-surface, #fff);
+}
+.profile-grid > .dispute-section {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+.payout-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.dispute-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dispute-card {
+  padding: 12px 14px;
+  border: 1px solid var(--ide-border, #e3e7eb);
+  border-radius: 8px;
+  background: var(--ide-bg, #fbfcfd);
+}
+.dispute-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.dispute-card small {
+  display: block;
+  font-size: 9px;
+  color: var(--ide-muted, #7b8794);
+  margin-bottom: 6px;
+}
+.dispute-card p {
+  margin: 6px 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.dispute-reply {
+  padding-left: 8px;
+  border-left: 2px solid var(--ide-border, #d5dce3);
+  color: var(--ide-text, #33404d);
+}
+.dispute-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.dispute-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.dispute-reply-form textarea {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid var(--ide-border, #d5dce3);
+  border-radius: 5px;
+  background: var(--ide-input-bg, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  resize: vertical;
+}
+.dispute-form {
+  max-width: 620px;
+}
+.dispute-form textarea {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid var(--ide-border, #d5dce3);
+  border-radius: 5px;
+  background: var(--ide-input-bg, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  resize: vertical;
+}
+.payout-badge.open,
+.payout-badge.seller_replied {
+  background: #fdf3e2;
+  color: #8a5a1c;
+}
+.payout-badge.refund_approved {
+  background: #e3f3e8;
+  color: #2f6b44;
+}
+.payout-badge.withdrawn {
+  background: var(--ide-bg, #eef2f6);
+  color: var(--ide-muted, #64748b);
+}
