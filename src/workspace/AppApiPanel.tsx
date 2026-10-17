@@ -311,6 +311,35 @@ export default function AppApiPanel({
       <pre className="app-api-example">
         <code>{"curl -H 'x-piwu-key: <kunci>' " + base + "/<tableId>"}</code>
       </pre>
+      <h3>Contoh Roblox (HttpService)</h3>
+      <p className="app-api-note">
+        Jalankan di Script server, bukan LocalScript. Di Game Settings →
+        Security, HttpService dan permintaan HTTP harus aktif. Kunci yang
+        tertanam di place dapat dibaca dari berkas place, jadi pakai kunci baca
+        saja; operasi tulis sebaiknya lewat server Anda sendiri.
+      </p>
+      <pre className="app-api-example">
+        <code>{`local HttpService = game:GetService("HttpService")
+local KEY = "<kunci>"
+local URL = "${base}/<tableId>"
+
+local res = HttpService:RequestAsync({
+  Url = URL,
+  Method = "GET",
+  Headers = { ["x-piwu-key"] = KEY },
+})
+if not res.Success then
+  warn("PIWU", res.StatusCode, res.Body)
+  return
+end
+local rowData = HttpService:JSONDecode(res.Body).table
+print(rowData.name, #rowData.rows)`}</code>
+      </pre>
+      <p className="app-api-note">
+        Nilai kolom harus sesuai tipenya: <code>text</code>, <code>number</code>
+        , atau <code>boolean</code> (ya/tidak). Baris yang ditolak tidak
+        disimpan sebagian; seluruh permintaan dibatalkan.
+      </p>
       <p className="app-api-note">
         Batas: 1.000 baris, 32 kolom, dan 2 MB per tabel mengikuti batas data
         cloud. Kunci hanya memberi akses ke tabel project ini — bukan ke file
