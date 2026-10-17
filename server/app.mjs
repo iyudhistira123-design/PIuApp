@@ -14,12 +14,9 @@ import { registerCollaboration } from "./routes/collaboration.mjs";
 import { registerAssets } from "./routes/assets.mjs";
 import { registerBilling } from "./routes/billing.mjs";
 import { registerSandbox } from "./routes/sandbox.mjs";
-import { registerPublish, startPublishWorker } from "./routes/publish.mjs";
-import { registerAnalytics } from "./routes/analytics.mjs";
 import { registerMarketplace } from "./routes/marketplace.mjs";
 import { registerRecordings } from "./routes/recordings.mjs";
 import { SandboxProvider } from "./providers/sandbox.mjs";
-import { NetlifyHosting } from "./providers/hosting.mjs";
 import { fetchReference } from "./lib/references.mjs";
 import { createResearchJobs } from "./lib/research-jobs.mjs";
 export function createApp({
@@ -27,9 +24,7 @@ export function createApp({
   fetcher = fetch,
   context,
   sandbox,
-  hosting,
   resolver,
-  worker = false,
 } = {}) {
   const app = express(),
     ctx = context || createContext(env, fetcher);
@@ -43,7 +38,6 @@ export function createApp({
   const coordination = createCoordination(ctx);
   app.locals.coordination = coordination;
   sandbox ||= new SandboxProvider(env, coordination);
-  hosting ||= new NetlifyHosting(env, fetcher);
   app.disable("x-powered-by");
   if (env.TRUST_PROXY_CIDRS)
     app.set(
@@ -137,8 +131,6 @@ export function createApp({
   registerAssets(app, ctx);
   registerBilling(app, ctx);
   registerSandbox(app, ctx, sandbox);
-  registerPublish(app, ctx, hosting);
-  registerAnalytics(app, ctx);
   registerMarketplace(app, ctx);
   registerRecordings(app, ctx);
   app.post(
@@ -179,25 +171,19 @@ export function createApp({
       code: error instanceof HttpError ? error.code : "SERVICE_ERROR",
     });
   });
-  const stopWorker = worker
-    ? startPublishWorker(ctx, sandbox, hosting)
-    : () => {};
-  // The sweep also expires credit lots (010), which matters even when no
-  // publish worker is configured, so it runs whenever the service client is
-  // there. piwu_recover_credits already expires lots; without a worker the
-  // expiry call is the whole sweep.
+  // PiwuApp is a builder: it has no deploy worker. The 60-second sweep still
+  // expires credit lots (migration 010) and releases reservations left behind
+  // by a crashed request, so it runs whenever the service client exists. The
+  // legacy publish/analytics branches inside the SQL function stay inert.
   const recovery = ctx.admin
     ? setInterval(() => {
-        void Promise.resolve(
-          ctx.admin.rpc(
-            worker ? "piwu_recover_credits" : "piwu_expire_credits",
-          ),
-        ).catch(() => {});
+        void Promise.resolve(ctx.admin.rpc("piwu_recover_credits")).catch(
+          () => {},
+        );
       }, 60000)
     : null;
   recovery?.unref();
   const stop = () => {
-    stopWorker();
     if (recovery) clearInterval(recovery);
   };
   return { app, stop };

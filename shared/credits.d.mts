@@ -7,7 +7,6 @@ export const CREDIT_COSTS: {
   sandboxCommand: number;
   sandboxJob: number;
   audit: number;
-  publish: number;
 };
 export const PLAN_PERIOD_DAYS: number;
 export const DAILY_RESET_UTC_HOUR: number;
@@ -64,7 +63,6 @@ export interface UsageProfile {
   researchRounds?: number;
   sandboxJobsPerWeek?: number;
   auditsPerMonth?: number;
-  publishesPerMonth?: number;
 }
 export const USAGE_PROFILES: UsageProfile[];
 export function creditsPerDay(profile?: UsageProfile): number;

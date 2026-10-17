@@ -180,14 +180,6 @@ export function capabilities(env) {
         env.SUPABASE_SMS_HOOK_SECRET,
       ),
     sandbox: db && Boolean(env.E2B_API_KEY),
-    publish:
-      db &&
-      Boolean(
-        env.E2B_API_KEY &&
-        env.E2B_TEMPLATE &&
-        env.NETLIFY_TOKEN &&
-        env.APP_BASE_URL,
-      ),
     payments:
       db &&
       Boolean(

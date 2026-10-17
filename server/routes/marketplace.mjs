@@ -88,13 +88,6 @@ export function registerMarketplace(app, ctx) {
         .parse(req.body);
       const { payload } = await ctx.snapshot(req.project.id);
       validFiles(payload.files);
-      const site = check(
-        await ctx.admin
-          .from("project_sites")
-          .select("url")
-          .eq("project_id", req.project.id)
-          .maybeSingle(),
-      );
       const { confirmRights, ...metadata } = fields;
       const template = check(
         await ctx.admin
@@ -110,7 +103,7 @@ export function registerMarketplace(app, ctx) {
             },
             price: fields.price,
             status: "published",
-            preview_url: site?.url || null,
+            preview_url: null,
           })
           .select("id,title,price,status")
           .single(),

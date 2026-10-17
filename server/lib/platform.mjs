@@ -9,7 +9,6 @@ export const defaultSite = {
   enabled_services: {
     ai: true,
     sandbox: true,
-    publish: true,
     payments: true,
     marketplace: true,
   },
@@ -146,18 +145,13 @@ export async function enforcePlatform(ctx, req) {
     ? "ai"
     : /\/sandbox|\/packages|\/audit$/.test(path)
       ? "sandbox"
-      : /\/publish$|\/domain|\/rollback/.test(path)
-        ? "publish"
-        : path === "/checkout"
-          ? "payments"
-          : /^\/marketplace|\/template$/.test(path)
-            ? "marketplace"
-            : null;
+      : path === "/checkout"
+        ? "payments"
+        : /^\/marketplace|\/template$/.test(path)
+          ? "marketplace"
+          : null;
   if (
     (service && value.enabled_services?.[service] === false) ||
-    (req.method === "POST" &&
-      /\/publish$/.test(path) &&
-      value.enabled_services?.sandbox === false) ||
     (path === "/checkout" &&
       req.body?.sku === "template" &&
       value.enabled_services?.marketplace === false)

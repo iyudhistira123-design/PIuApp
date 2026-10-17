@@ -37,8 +37,6 @@ export const CREDIT_COSTS = {
   sandboxJob: 2,
   /** One Lighthouse audit run. */
   audit: 3,
-  /** One publish/deploy attempt. */
-  publish: 5,
 };
 
 /**
@@ -179,26 +177,24 @@ export const USAGE_PROFILES = [
     id: "normal",
     label: "pemakaian normal",
     detail:
-      "10 chat Seimbang + 1 tanya-jawab + 1 ronde riset per hari, 4 build/preview per minggu, 2 audit + 1 publish per bulan",
+      "10 chat Seimbang + 1 tanya-jawab + 1 ronde riset per hari, 4 build/preview per minggu, 2 audit per bulan",
     chatSeimbang: 10,
     ask: 1,
     researchRounds: 1,
     sandboxJobsPerWeek: 4,
     auditsPerMonth: 2,
-    publishesPerMonth: 1,
   },
   {
     id: "intens",
     label: "pemakaian intens",
     detail:
-      "20 chat Seimbang + 4 chat Kuat + 2 tanya-jawab + 4 ronde riset per hari, 1 build/preview per hari, 8 audit + 4 publish per bulan",
+      "20 chat Seimbang + 4 chat Kuat + 2 tanya-jawab + 4 ronde riset per hari, 1 build/preview per hari, 8 audit per bulan",
     chatSeimbang: 20,
     chatKuat: 4,
     ask: 2,
     researchRounds: 4,
     sandboxJobsPerWeek: 7,
     auditsPerMonth: 8,
-    publishesPerMonth: 4,
   },
 ];
 
@@ -218,7 +214,7 @@ export function costLine() {
   const chat = Object.entries(CREDIT_COSTS.chat)
     .map(([tier, cost]) => `${tier} ${cost}`)
     .join(" / ");
-  return `chat ${chat} kredit, tanya-jawab ${CREDIT_COSTS.ask}, plan ${CREDIT_COSTS.plan}, ronde riset ${CREDIT_COSTS.researchRound} (maks ${CREDIT_COSTS.researchRoundsPerRequest} per permintaan), perintah sandbox ${CREDIT_COSTS.sandboxCommand}, build/preview ${CREDIT_COSTS.sandboxJob}, audit Lighthouse ${CREDIT_COSTS.audit}, publish ${CREDIT_COSTS.publish}`;
+  return `chat ${chat} kredit, tanya-jawab ${CREDIT_COSTS.ask}, plan ${CREDIT_COSTS.plan}, ronde riset ${CREDIT_COSTS.researchRound} (maks ${CREDIT_COSTS.researchRoundsPerRequest} per permintaan), perintah sandbox ${CREDIT_COSTS.sandboxCommand}, build/preview ${CREDIT_COSTS.sandboxJob}, audit Lighthouse ${CREDIT_COSTS.audit}`;
 }
 
 /** Credits one day of this usage mix costs, from CREDIT_COSTS. */
@@ -233,8 +229,7 @@ export function creditsPerDay(profile) {
     per(profile.plan) * CREDIT_COSTS.plan +
     per(profile.researchRounds) * CREDIT_COSTS.researchRound +
     (per(profile.sandboxJobsPerWeek) * CREDIT_COSTS.sandboxJob) / 7 +
-    (per(profile.auditsPerMonth) * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS +
-    (per(profile.publishesPerMonth) * CREDIT_COSTS.publish) / PLAN_PERIOD_DAYS
+    (per(profile.auditsPerMonth) * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS
   );
 }
 

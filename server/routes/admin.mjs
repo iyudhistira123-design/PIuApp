@@ -37,7 +37,6 @@ export const siteSchema = z
       .object({
         ai: z.boolean(),
         sandbox: z.boolean(),
-        publish: z.boolean(),
         payments: z.boolean(),
         marketplace: z.boolean(),
       })
@@ -80,9 +79,6 @@ const schemas = {
     .object({ status: z.enum(["published", "archived"]) })
     .strict(),
   recording_revoke: z.object({}).strict(),
-  publish_cancel: z.object({}).strict(),
-  hosting_retry: z.object({}).strict(),
-  unpublish: z.object({}).strict(),
   payment_reconcile: z.object({}).strict(),
   broadcast_save: broadcast,
   settings: z
@@ -163,7 +159,6 @@ export function registerAdmin(app, ctx) {
         pending,
         templates,
         broadcasts,
-        cleanup,
         lowBalance,
         dormantWorkspaces,
       ] = await Promise.all([
@@ -173,7 +168,6 @@ export function registerAdmin(app, ctx) {
         ),
         count("templates", (q) => q.eq("status", "published")),
         count("platform_broadcasts", (q) => q.eq("status", "published")),
-        count("hosting_cleanup_jobs"),
         optionalCount("credit_accounts", (q) => q.lt("balance", LOW_BALANCE)),
         optionalCount("project_workspaces", (q) => q.lt("updated_at", cutoff)),
       ]);
@@ -183,7 +177,6 @@ export function registerAdmin(app, ctx) {
           pending,
           templates,
           broadcasts,
-          cleanup,
           lowBalance,
           dormantWorkspaces,
           lowBalanceThreshold: LOW_BALANCE,
@@ -299,20 +292,6 @@ export function registerAdmin(app, ctx) {
     ...auth,
     wrap(async (req, res) =>
       res.json({
-        jobs: platformResult(
-          await ctx.admin
-            .from("publish_jobs")
-            .select("id,project_id,user_id,status,error,attempts,created_at")
-            .order("created_at", { ascending: false })
-            .limit(30),
-        ),
-        cleanup: platformResult(
-          await ctx.admin
-            .from("hosting_cleanup_jobs")
-            .select("id,provider_site_id,attempts,error,created_at")
-            .order("created_at", { ascending: false })
-            .limit(30),
-        ),
         recordings: platformResult(
           await ctx.admin
             .from("recording_shares")
@@ -494,10 +473,7 @@ export function registerAdmin(app, ctx) {
       );
       res.json({
         result,
-        notice:
-          command.action === "unpublish"
-            ? "Penghapusan hosting masuk antrean; periksa status cleanup, bukan langsung dianggap offline."
-            : "Perubahan dikonfirmasi dan dicatat dalam audit log.",
+        notice: "Perubahan dikonfirmasi dan dicatat dalam audit log.",
       });
     }),
   );
