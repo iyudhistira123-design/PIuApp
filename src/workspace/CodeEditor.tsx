@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useIDETheme } from "./IDETheme";
 import Editor, { DiffEditor, loader } from "@monaco-editor/react";
 // Explicit language registration avoids bundling every language shipped by Monaco.
@@ -77,6 +78,7 @@ export default function CodeEditor({
   line,
   readOnly = false,
   onCursorChange,
+  peers = [],
 }: {
   path: string;
   content: string;
@@ -85,7 +87,14 @@ export default function CodeEditor({
   line?: number;
   readOnly?: boolean;
   onCursorChange?: (p: { lineNumber: number; column: number }) => void;
+  /** Members with their cursor on this file; drawn as line markers, not edits. */
+  peers?: { id: string; name: string; line: number }[];
 }) {
+  const [mounted, setMounted] = useState(false);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const decorations = useRef<monaco.editor.IEditorDecorationsCollection | null>(
+    null,
+  );
   const { theme } = useIDETheme();
   const editorTheme =
     theme === "light" ? "piwu-workbench-light" : "piwu-workbench";
@@ -117,6 +126,39 @@ export default function CodeEditor({
     tabSize: 2,
     wordWrap: "on" as const,
   };
+  useEffect(() => {
+    const editor = editorRef.current;
+    const collection = decorations.current;
+    if (!editor || !collection) return;
+    const lines = editor.getModel()?.getLineCount() ?? 0;
+    // set() replaces the previous list; no edit is ever applied to the model.
+    collection.set(
+      peers
+        .filter((peer) => peer.line >= 1 && peer.line <= lines)
+        .slice(0, 8)
+        .map((peer) => ({
+          range: new monaco.Range(peer.line, 1, peer.line, 1),
+          options: {
+            isWholeLine: true,
+            className: "piwu-peer-line",
+            linesDecorationsClassName: "piwu-peer-gutter",
+            hoverMessage: { value: `${peer.name} · baris ${peer.line}` },
+            after: {
+              content: `  ${peer.name} `,
+              inlineClassName: "piwu-peer-label",
+            },
+          },
+        })),
+    );
+  }, [peers, mounted]);
+  useEffect(
+    () => () => {
+      decorations.current?.clear();
+      decorations.current = null;
+      editorRef.current = null;
+    },
+    [],
+  );
   if (original !== undefined)
     return (
       <DiffEditor
@@ -139,6 +181,9 @@ export default function CodeEditor({
       loading={<div className="ws-loading">Memuat editor…</div>}
       onChange={(value) => onChange(value || "")}
       onMount={(editor) => {
+        editorRef.current = editor;
+        decorations.current = editor.createDecorationsCollection([]);
+        setMounted(true);
         onCursorChange?.(editor.getPosition() || { lineNumber: 1, column: 1 });
         const positionListener = editor.onDidChangeCursorPosition((e) =>
           onCursorChange?.(e.position),

@@ -21,7 +21,7 @@ import {
 import type { Attachment } from "../services/api";
 import { saveRecording } from "../services/recordings";
 import type { ReplayEvent } from "../services/recordings";
-import Presence from "../components/services/Presence";
+import Presence, { useProjectPresence } from "../components/services/Presence";
 import { NotificationBell } from "../components/admin/Platform";
 import {
   lazy,
@@ -338,6 +338,14 @@ function WorkspaceContent({ project }: { project: Project }) {
   const [packageQuery, setPackageQuery] = useState("");
   const [line, setLine] = useState<number>();
   const [cursor, setCursor] = useState({ lineNumber: 1, column: 1 });
+  const presence = useProjectPresence(id, activeFile, cursor);
+  const editorPeers = useMemo(
+    () =>
+      presence.peers
+        .filter((peer) => peer.file === (reviewPath || activeFile))
+        .map((peer) => ({ id: peer.id, name: peer.name, line: peer.line })),
+    [presence.peers, reviewPath, activeFile],
+  );
   // Up to three attachments, so a photo of the object can travel with the brief
   // that describes it. The server numbers the photos in this order.
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1850,6 +1858,7 @@ function WorkspaceContent({ project }: { project: Project }) {
                         }
                         line={line}
                         readOnly={readOnly}
+                        peers={editorPeers}
                         onCursorChange={setCursor}
                         onChange={(s) => store.writeFile(id, activeFile, s)}
                       />
@@ -3080,7 +3089,11 @@ function WorkspaceContent({ project }: { project: Project }) {
               </span>
             </span>
           )}
-          <Presence projectId={id} file={activeFile} />
+          <Presence
+            peers={presence.peers}
+            state={presence.state}
+            activeFile={activeFile}
+          />
           <button onClick={() => setDialog("services")}>Layanan</button>
           {recording && (
             <span className="recording-indicator">

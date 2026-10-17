@@ -1620,6 +1620,55 @@
 .ws-statusbar .recording-indicator > svg {
   color: var(--ide-danger, #bd727a);
 }
+.presence-stack {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+}
+.presence-avatar {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: 0 0 0 1px var(--ide-bg, #10161f);
+}
+.presence-more {
+  font-size: 8px;
+  color: var(--ide-accent, #9cb8d7);
+}
+.presence-status {
+  font-size: 9px;
+  color: var(--ide-success, #8aa68c);
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.presence-status.degraded {
+  color: var(--ide-warning, #b08a4a);
+}
+.piwu-peer-line {
+  background: #47729614;
+}
+.piwu-peer-gutter {
+  width: 3px !important;
+  margin-left: 4px;
+  border-radius: 2px;
+  background: var(--ide-accent, #477296);
+}
+.piwu-peer-label {
+  color: var(--ide-accent, #477296);
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.9;
+}
 .ws-dropdown {
   position: absolute;
   top: 100%;

@@ -179,14 +179,6 @@
   height: 330px;
   background: white;
 }
-.presence-status {
-  font-size: 10px;
-  color: var(--ide-success, #8aa68c);
-  max-width: 170px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .service-bar {
   height: 5px;
   background: var(--ide-surface, #e5e9ee);
