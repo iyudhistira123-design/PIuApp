@@ -89,28 +89,6 @@ test.beforeEach(async ({ page }) => {
       },
     }),
   );
-  await page.route("**/api/projects/*/deployments", (route) =>
-    route.fulfill({
-      json: {
-        site: {
-          url: "https://piwu-test.example",
-          custom_domain: "contoh.test",
-          domain_status: "pending_dns",
-        },
-        deployments: [
-          {
-            id: "d-1",
-            url: "https://piwu-test.example",
-            status: "failed",
-            error: "Build gagal: file hilang",
-            revision: 3,
-            created_at: new Date().toISOString(),
-          },
-        ],
-        jobs: [],
-      },
-    }),
-  );
   // Two audits, so the panel has a score and a movement to report.
   let audits: Record<string, unknown>[] = [
     {
@@ -156,7 +134,6 @@ test.beforeEach(async ({ page }) => {
           ai: true,
           sandbox: true,
           audit: true,
-          publish: false,
           payments: false,
         },
         verification: "configuration-only",
@@ -238,13 +215,14 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   );
   await expect(credit.getByRole("link", { name: /Rincian/ })).toBeVisible();
 
-  // 2. The readiness list: this deployment has no publish and no payments, and
-  // it must say which exact switch is off instead of leaving a dead button.
+  // 2. The readiness list: payments are off, and it must say which exact
+  // switch is missing instead of leaving a dead button.
   const readiness = page.locator(".dashboard-readiness");
   await expect(readiness).toContainText("fitur belum aktif di server ini");
-  await expect(readiness).toContainText("Publish ke web");
-  await expect(readiness).toContainText("NETLIFY_TOKEN");
   await expect(readiness).toContainText("Top up kredit");
+  // The builder does not publish websites, so no publish row may appear.
+  await expect(readiness).not.toContainText("Publish ke web");
+  await expect(readiness).not.toContainText("NETLIFY_TOKEN");
   await expect(readiness).toContainText("Pencarian web");
   // The parts that are already on are named when the list is opened.
   await readiness.getByRole("button", { name: "Lihat daftar lengkap" }).click();
@@ -258,14 +236,13 @@ test("dashboard shows what waits, what is left, and what the project holds", asy
   await page.locator(".dashboard-ready-warn").click();
   await expect(readiness).toBeVisible();
 
-  // 3. "Menunggu Anda": four real items from four real endpoints.
+  // 3. "Menunggu Anda": two real items from two real endpoints.
   const waiting = page.locator(".dashboard-waiting");
   await expect(waiting).toContainText("Menunggu Anda");
   await expect(waiting).toContainText("1 komentar belum diselesaikan");
   await expect(waiting).toContainText("1 undangan kolaborator belum dijawab");
-  await expect(waiting).toContainText("Domain kustom belum aktif");
-  await expect(waiting).toContainText("Deploy terakhir gagal");
-  await expect(waiting).toContainText("Build gagal: file hilang");
+  await expect(waiting).not.toContainText("Domain kustom belum aktif");
+  await expect(waiting).not.toContainText("Deploy terakhir gagal");
   // The Studio endpoint refused, so nothing about Studio may appear.
   await expect(waiting).not.toContainText("Studio");
   await expect(waiting).toContainText("Diperiksa dari 1 project terbaru");
@@ -525,9 +502,9 @@ test("a dashboard where every project service fails says it could not check, not
   await expect(page).toHaveURL(/\/project\//);
   await page.getByRole("link", { name: "Kembali ke dashboard" }).click();
   const waiting = page.locator(".dashboard-waiting");
-  // Three of the four endpoints still answer, so those items stay; the failed
-  // one is reported as unchecked instead of silently dropped.
-  await expect(waiting).toContainText("Domain kustom belum aktif");
+  // The remaining endpoints still answer, so their items stay; the failed one
+  // is reported as unchecked instead of silently dropped.
+  await expect(waiting).toContainText("1 undangan kolaborator belum dijawab");
   await expect(waiting).not.toContainText("komentar belum diselesaikan");
   await expect(waiting).toContainText("tidak bisa diperiksa");
 });

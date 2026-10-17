@@ -26,7 +26,7 @@ async function workspace(page: any) {
     page.getByRole("button", { name: "Hentikan respons" }),
   ).toHaveCount(0, { timeout: 20000 });
 }
-test("cloud services show configuration state and never fake a paid/publish success", async ({
+test("cloud services show configuration state and never fake a paid success", async ({
   page,
 }) => {
   await workspace(page);
@@ -38,13 +38,13 @@ test("cloud services show configuration state and never fake a paid/publish succ
   await expect(
     dialog.getByText("Belum dikonfigurasi", { exact: true }).first(),
   ).toBeVisible();
-  await dialog.getByRole("button", { name: "Publish", exact: true }).click();
+  // Publishing is not a service of a builder: no tab, no dead button.
   await expect(
-    dialog.getByRole("button", { name: "Build & publish" }),
-  ).toBeDisabled();
+    dialog.getByRole("button", { name: "Publish", exact: true }),
+  ).toHaveCount(0);
   await expect(
-    dialog.getByText("Belum diterbitkan", { exact: true }),
-  ).toBeVisible();
+    dialog.getByRole("button", { name: "Analytics", exact: true }),
+  ).toHaveCount(0);
   await dialog.getByRole("button", { name: "Anggota", exact: true }).click();
   await dialog.getByRole("button", { name: "Buat undangan" }).click();
   await expect(dialog.getByRole("alert")).toContainText(

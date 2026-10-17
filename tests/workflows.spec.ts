@@ -49,9 +49,9 @@ test("landing → prompt → authenticated API → workspace → AI review → r
     .first()
     .click();
   await expect(preview.locator("body")).toHaveCSS("color", "rgb(25, 59, 50)");
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await page.getByRole("button", { name: "Export ZIP", exact: true }).click();
   await expect(
-    page.getByText("Belum diterbitkan", { exact: true }),
+    page.getByText(/tidak menghosting website atau memasang domain/),
   ).toBeVisible();
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Unduh kode ZIP" }).click();

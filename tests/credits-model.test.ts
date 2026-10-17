@@ -173,8 +173,7 @@ test("durations come from the real operation costs, in the stated order", () => 
     1 * CREDIT_COSTS.ask +
     1 * CREDIT_COSTS.researchRound +
     (4 * CREDIT_COSTS.sandboxJob) / 7 +
-    (2 * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS +
-    (1 * CREDIT_COSTS.publish) / PLAN_PERIOD_DAYS;
+    (2 * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS;
   assert.equal(day(normal), Math.round(expectedNormal * 10) / 10);
 
   const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
@@ -204,7 +203,6 @@ test("the printed price list is generated from the costs it describes", () => {
     CREDIT_COSTS.sandboxCommand,
     CREDIT_COSTS.sandboxJob,
     CREDIT_COSTS.audit,
-    CREDIT_COSTS.publish,
   ])
     assert.match(line, new RegExp(`\\b${value}\\b`));
   assert.match(line, /chat Cepat 1 \/ Seimbang 3 \/ Kuat 8 kredit/);

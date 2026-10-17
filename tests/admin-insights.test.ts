@@ -66,7 +66,7 @@ function fixture({
         id: "r2",
         user_id: ids.member,
         amount: 8,
-        purpose: "publish",
+        purpose: "sandbox",
         status: "refunded",
         created_at: new Date(now - 86_400_000).toISOString(),
       },
@@ -122,7 +122,6 @@ function fixture({
       payment_orders: [{ status: "pending" }, { status: "paid" }],
       templates: [{ status: "published" }, { status: "draft" }],
       platform_broadcasts: [{ status: "published" }],
-      hosting_cleanup_jobs: [{}, {}, {}],
       credit_accounts: [
         { user_id: ids.member, balance: 4 },
         { user_id: ids.root, balance: 128 },
@@ -416,7 +415,6 @@ test("the overview counts the two states the credit and storage features created
     assert.equal(body.metrics.pending, 1);
     assert.equal(body.metrics.templates, 1);
     assert.equal(body.metrics.broadcasts, 1);
-    assert.equal(body.metrics.cleanup, 3);
   } finally {
     server.close();
   }

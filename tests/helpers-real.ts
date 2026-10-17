@@ -86,7 +86,6 @@ export async function realAccountFixture(page: Page, ai = true) {
           cloud: true,
           ai,
           sandbox: false,
-          publish: false,
           payments: false,
         },
         verification: "configuration-only",
@@ -104,7 +103,6 @@ export async function realAccountFixture(page: Page, ai = true) {
         database: "reachable",
         ai: ai ? "configured_unverified" : "not_configured",
         sandbox: "not_configured",
-        publish: "not_configured",
         payments: "not_configured",
         whatsapp: "not_configured",
         secrets: "not_configured",
@@ -180,9 +178,7 @@ export async function realAccountFixture(page: Page, ai = true) {
         body: `data: ${JSON.stringify({ type: "result", result })}\n\n`,
       });
     }
-    // Offline service contract fixtures; no shell, hosting, or payments called.
-    if (path.endsWith("/hosting"))
-      return r.fulfill({ json: { hosting: null, jobs: [] } });
+    // Offline service contract fixtures; no shell or payments called.
     if (path.endsWith("/invites"))
       return r.fulfill({ json: { members: [], invites: [] } });
     if (path.endsWith("/recordings"))

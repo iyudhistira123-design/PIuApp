@@ -185,7 +185,7 @@ const accountPayload = {
     {
       id: "r2",
       amount: 8,
-      purpose: "publish",
+      purpose: "sandbox",
       status: "refunded",
       created_at: "2026-03-02T08:00:00.000Z",
     },
@@ -256,14 +256,12 @@ async function mount(page: Page, overrides: Overrides = {}) {
         if (path.startsWith("/admin/operations"))
           return {
             jobs: [],
-            cleanup: [],
             recordings: [],
             capabilities: {
               cloud: true,
               ai: true,
               search: true,
               sandbox: false,
-              publish: true,
               payments: true,
               marketplace: true,
             },
@@ -419,7 +417,7 @@ test("admin credit detail opens per account and shows ledger, reservations and b
     ledger.getByRole("cell", { name: "Pembayaran terverifikasi" }),
   ).toBeVisible();
   await expect(
-    reservations.getByRole("cell", { name: "Publish", exact: true }),
+    reservations.getByRole("cell", { name: "Sandbox", exact: true }),
   ).toBeVisible();
   await expect(reservations.getByText("Dikembalikan")).toBeVisible();
   await expect(panel.getByText(/\+30 kredit masuk/)).toBeVisible();
@@ -473,7 +471,6 @@ test("admin overview shows the credit and storage states the new features create
         pending: 3,
         templates: 5,
         broadcasts: 2,
-        cleanup: 4,
         lowBalance: 6,
         dormantWorkspaces: 9,
         lowBalanceThreshold: 10,
@@ -492,9 +489,8 @@ test("admin overview shows the credit and storage states the new features create
   await expect(metric("Salinan cloud diam")).toContainText(
     "tidak diperbarui 7 hari",
   );
-  await expect(
-    metric("Pekerjaan pembersihan hosting").getByText("4"),
-  ).toBeVisible();
+  // The builder hosts nothing, so there is no cleanup queue to report.
+  await expect(metric("Pekerjaan pembersihan hosting")).toHaveCount(0);
 
   // A server that does not report them shows a dash, never a zero.
   await mount(page, {
@@ -505,7 +501,6 @@ test("admin overview shows the credit and storage states the new features create
         pending: 3,
         templates: 5,
         broadcasts: 2,
-        cleanup: 4,
         lowBalance: null,
         dormantWorkspaces: null,
       },

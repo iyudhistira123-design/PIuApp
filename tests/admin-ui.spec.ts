@@ -65,7 +65,6 @@ async function fixture(page: Page, role = "operator") {
             enabled_services: {
               ai: true,
               sandbox: true,
-              publish: true,
               payments: true,
               marketplace: true,
             },

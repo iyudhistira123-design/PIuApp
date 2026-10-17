@@ -14,7 +14,6 @@ import {
   rupiah,
   paymentProvider,
 } from "../server/providers/payments.mjs";
-import { aggregateAnalytics } from "../server/routes/analytics.mjs";
 import { packageSpec } from "../server/providers/sandbox.mjs";
 test("AES-GCM rejects tampered ciphertext and cross-project/environment AAD", () => {
   const key = "a".repeat(64),
@@ -177,27 +176,6 @@ test("Registry specs reject shell injection, git and arbitrary URLs", () => {
   ])
     assert.equal(packageSpec.test(s), false, s);
 });
-test("Analytics aggregates actual events, does not invent visitors or pageviews", () => {
-  const result = aggregateAnalytics([
-    {
-      path: "/",
-      referrer: "",
-      device: "mobile",
-      visitor_hash: "one",
-      created_at: "2026-10-14T01:00:00Z",
-    },
-    {
-      path: "/a",
-      referrer: "example.com",
-      device: "desktop",
-      visitor_hash: "one",
-      created_at: "2026-10-14T02:00:00Z",
-    },
-  ]);
-  assert.equal(result.pageviews, 2);
-  assert.equal(result.dailyDevices, 1);
-  assert.equal(aggregateAnalytics([]).pageviews, 0);
-});
 test("Service API fails closed without config and rejects forged auth before privileged operations", async () => {
   let calls = 0;
   const env = {
@@ -220,7 +198,7 @@ test("Service API fails closed without config and rejects forged auth before pri
     assert.equal(res.status, 401);
     assert.equal(calls, 0);
     res = await fetch(
-      url + "/api/projects/" + crypto.randomUUID() + "/publish",
+      url + "/api/projects/" + crypto.randomUUID() + "/sandbox/command",
       {
         method: "POST",
         headers: {
@@ -242,7 +220,7 @@ test("Service API fails closed without config and rejects forged auth before pri
   }
 });
 
-test("Viewer cannot execute a shell or publish by supplying a forged actor in JSON", async () => {
+test("Viewer cannot execute a shell or run an audit by supplying a forged actor in JSON", async () => {
   const viewer = crypto.randomUUID(),
     owner = crypto.randomUUID(),
     id = crypto.randomUUID();
@@ -287,7 +265,7 @@ test("Viewer cannot execute a shell or publish by supplying a forged actor in JS
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", r));
   try {
-    for (const action of ["sandbox/command", "publish", "invites"]) {
+    for (const action of ["sandbox/command", "audit", "invites"]) {
       const response = await fetch(
         "http://127.0.0.1:" +
           (server.address() as any).port +

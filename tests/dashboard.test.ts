@@ -5,8 +5,6 @@ import {
   bridgeWaiting,
   continueLine,
   creditSpend,
-  domainWaiting,
-  failedDeploy,
   formatBytes,
   pendingInvites,
   projectFootprint,
@@ -100,33 +98,22 @@ test("every waiting signal that is real shows up, in the order a person would ac
         { id: "i3", email: "sudah@example.test", accepted_at: days(-2) },
         { id: "i4", email: "batal@example.test", revoked_at: days(-2) },
       ],
-      deployments: {
-        site: {
-          url: "https://piwu.test",
-          custom_domain: "contoh.test",
-          domain_status: "pending_dns",
-        },
-        deployments: [{ status: "failed", error: "Build gagal: file hilang" }],
-      },
       studio: { state: "queued", queuedChanges: 2 },
     }),
     NOW,
   );
   assert.deepEqual(
     items.map((item) => item.kind),
-    ["comments", "invites", "domain", "deploy", "studio"],
+    ["comments", "invites", "studio"],
   );
   assert.equal(items[0].title, "2 komentar belum diselesaikan");
   assert.match(items[1].title, /1 undangan kolaborator belum dijawab/);
   assert.equal(items[1].detail, "tim@example.test");
-  assert.match(items[2].detail || "", /contoh.test/);
-  assert.equal(items[3].detail, "Build gagal: file hilang");
-  assert.match(items[4].title, /2 perubahan menunggu diterapkan di Studio/);
+  assert.match(items[2].title, /2 perubahan menunggu diterapkan di Studio/);
   // Each item links straight to the panel that resolves it.
   assert.equal(items[0].link, "/project/p-1?dialog=services&services=comments");
   assert.equal(items[1].link, "/project/p-1?dialog=services&services=invite");
-  assert.equal(items[2].link, "/project/p-1?dialog=services&services=publish");
-  assert.equal(items[4].link, "/project/p-1");
+  assert.equal(items[2].link, "/project/p-1");
 });
 
 test("nothing is invented: absent or finished signals produce no items", () => {
@@ -136,22 +123,12 @@ test("nothing is invented: absent or finished signals produce no items", () => {
       signals({
         comments: [{ status: "resolved" }],
         invites: [],
-        deployments: {
-          site: { custom_domain: "contoh.test", domain_status: "active" },
-          deployments: [{ status: "success" }, { status: "failed" }],
-        },
         studio: { state: "applied", queuedChanges: 0 },
       }),
       NOW,
     ),
     [],
   );
-  // A failed deploy that is no longer the newest is history, not a task.
-  assert.equal(
-    failedDeploy([{ status: "success" }, { status: "failed" }]),
-    undefined,
-  );
-  assert.equal(domainWaiting({ custom_domain: "" }), "");
   assert.equal(bridgeWaiting(null), "");
   assert.equal(bridgeWaiting({ state: "idle", queuedChanges: 0 }), "");
   // Expired invites are not waiting for anyone.
@@ -266,7 +243,6 @@ test("credit spending is grouped by what it was spent on, biggest first", () => 
       { delta: -3, reason: "sandbox", created_at: days(-1) },
       { delta: -3, reason: "sandbox", created_at: days(-2) },
       { delta: -12, reason: "ai", created_at: days(-3) },
-      { delta: -5, reason: "publish", created_at: days(-4) },
       { delta: -99, reason: "ai", created_at: days(-30) },
       { delta: 500, reason: "Pembayaran terverifikasi", created_at: days(-1) },
       { delta: -1, reason: undefined, created_at: days(-1) },
@@ -280,7 +256,6 @@ test("credit spending is grouped by what it was spent on, biggest first", () => 
     [
       ["Percakapan AI", 12, 1],
       ["Build & audit", 6, 2],
-      ["Publish", 5, 1],
       ["eksperimen", 2, 1],
       ["Lainnya", 1, 1],
     ],
@@ -680,11 +655,11 @@ test("a project too big to read is reported, never silently dropped", () => {
 
 test("the readiness list names what is missing, in the words of what it enables", () => {
   const off = readinessSummary(readinessItems({ cloud: true, ai: true }));
-  assert.equal(off.total, 7);
+  assert.equal(off.total, 6);
   assert.equal(off.ready, 2);
   assert.deepEqual(
     off.missing.map((item) => item.id),
-    ["search", "sandbox", "audit", "publish", "payments"],
+    ["search", "sandbox", "audit", "payments"],
   );
   assert.match(off.missing[0].missing, /provider pencarian berkunci/);
   assert.match(off.missing[2].missing, /Chromium \+ Lighthouse/);
@@ -706,7 +681,6 @@ test("the readiness list names what is missing, in the words of what it enables"
       search: true,
       sandbox: true,
       audit: true,
-      publish: true,
       payments: true,
     }),
   );
@@ -733,7 +707,7 @@ test("the plugin line only speaks about versions it actually knows", () => {
     readinessSummary(readinessItems({}, [fresh])).missing.map(
       (item) => item.id,
     ),
-    ["cloud", "ai", "search", "sandbox", "audit", "publish", "payments"],
+    ["cloud", "ai", "search", "sandbox", "audit", "payments"],
   );
 });
 
