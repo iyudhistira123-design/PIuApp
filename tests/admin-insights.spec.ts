@@ -419,7 +419,7 @@ test("admin credit detail opens per account and shows ledger, reservations and b
   await expect(
     reservations.getByRole("cell", { name: "Sandbox", exact: true }),
   ).toBeVisible();
-  await expect(reservations.getByText("Dikembalikan")).toBeVisible();
+  await expect(reservations.getByText("Dibatalkan penyedia")).toBeVisible();
   await expect(panel.getByText(/\+30 kredit masuk/)).toBeVisible();
   await expect(panel.getByText("member@example.test")).toBeVisible();
   await expect(panel.getByText(/Anggota · hanya baca/)).toBeVisible();

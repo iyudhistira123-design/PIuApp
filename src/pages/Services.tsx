@@ -204,8 +204,8 @@ export default function Services({
             </p>
             <p>
               50 kredit untuk masing-masing akun setelah pembelian paket/top-up
-              minimal Rp49.000 terverifikasi. Bonus dibatalkan bila pembayaran
-              dikembalikan.
+              minimal Rp49.000 terverifikasi. Bonus dibatalkan bila penyedia
+              membatalkan atau menarik pembayaran.
             </p>
             <form
               onSubmit={(e) => {

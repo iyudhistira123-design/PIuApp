@@ -322,7 +322,7 @@ export function planFacts() {
     {
       title: "Referral bonus untuk kedua pihak",
       detail:
-        "50 kredit untuk masing-masing akun setelah pembelian paket/top-up minimal Rp49.000 terverifikasi. Bonus dibatalkan bila pembayaran dikembalikan.",
+        "50 kredit untuk masing-masing akun setelah pembelian paket/top-up minimal Rp49.000 terverifikasi. Bonus dibatalkan bila penyedia membatalkan atau menarik pembayaran.",
     },
   ];
 }

@@ -279,8 +279,8 @@ export function registerBilling(app, ctx) {
     } else if (applied === "refunded" || applied === "already_refunded") {
       await notifyUser(ctx, order.user_id, {
         kind: "payment",
-        title: "Pembayaran dikembalikan",
-        body: `Pesanan ${order.sku} telah dikembalikan. Kredit terkait disesuaikan.`,
+        title: "Pembayaran dibatalkan penyedia",
+        body: `Penyedia membatalkan atau menarik pembayaran pesanan ${order.sku}. Kredit, template, dan bonus terkait disesuaikan mengikuti status provider.`,
         href: "/account",
         dedupe: "refund:" + order.id,
       });

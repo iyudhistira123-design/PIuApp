@@ -83,7 +83,7 @@ const names: Record<string, string> = {
   pending: "Menunggu",
   created: "Dibuat",
   review: "Perlu ditinjau",
-  refunded: "Dikembalikan",
+  refunded: "Dibatalkan penyedia",
   failed: "Gagal",
   ready: "Selesai",
   expired: "Kedaluwarsa",
@@ -135,7 +135,7 @@ const insightLabel = (v: string) =>
       plan: "Rencana",
       build: "Builder",
       settled: "Selesai",
-      refunded: "Dikembalikan",
+      refunded: "Dibatalkan penyedia",
       reserved: "Berjalan",
       active: "Berjalan",
     }) as Record<string, string>
@@ -2970,7 +2970,13 @@ function AiPanel({ data, client }: { data: Row; client: AdminClient }) {
           </dd>
         </dl>
         {table_(
-          ["Tujuan", "Reservasi", "Selesai", "Dikembalikan", "Kredit selesai"],
+          [
+            "Tujuan",
+            "Reservasi",
+            "Selesai",
+            "Dibatalkan penyedia",
+            "Kredit selesai",
+          ],
           state.usage?.purposes || [],
           (r) => (
             <>
