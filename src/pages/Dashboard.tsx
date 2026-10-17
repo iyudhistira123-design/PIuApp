@@ -1,6 +1,10 @@
 import ProjectKindPicker from "../components/projects/ProjectKindPicker";
 import type { ProjectKind } from "../lib/project-kinds";
-import { PlatformNotices, AdminLink } from "../components/admin/Platform";
+import {
+  PlatformNotices,
+  AdminLink,
+  NotificationBell,
+} from "../components/admin/Platform";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -356,6 +360,7 @@ export default function Dashboard() {
             </b>
           </div>
           <div>
+            <NotificationBell />
             <StorageStatus />
             <Link to="/" className="icon-button" aria-label="Beranda">
               <ArrowUpRight size={18} />

@@ -531,3 +531,69 @@ test("the dashboard carries a profile tab instead of only a link", async ({
   await expect(page.getByText("Paket aktif")).toBeVisible();
   await expect(page.getByText("1.240")).toBeVisible();
 });
+
+test("the notification bell reads the server list and marks it read across reloads", async ({
+  page,
+}) => {
+  const id = crypto.randomUUID();
+  let read = false;
+  const calls: string[] = [];
+  await page.route("**/api/notifications", (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    return route.fulfill({
+      json: {
+        applied: true,
+        unread: read ? 0 : 1,
+        items: [
+          {
+            id,
+            kind: "payment",
+            title: "Pembayaran berhasil",
+            body: "300 kredit ditambahkan.",
+            href: "/account",
+            read,
+            created_at: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+  });
+  await page.route("**/api/notifications/read-all", (route) => {
+    calls.push("read-all");
+    read = true;
+    return route.fulfill({ json: { read: 1 } });
+  });
+  await page.goto("/login");
+  await loginRealFixture(page);
+  const bell = page.getByRole("button", {
+    name: "Notifikasi (1 belum dibaca)",
+  });
+  await expect(bell).toBeVisible();
+  await bell.click();
+  const panel = page.getByRole("dialog", { name: "Notifikasi" });
+  await expect(panel).toContainText("Pembayaran berhasil");
+  await expect(panel).toContainText("300 kredit ditambahkan.");
+  await panel.getByRole("button", { name: "Tandai semua dibaca" }).click();
+  // The badge and the "mark all" action disappear together.
+  await expect(
+    page.getByRole("button", { name: "Notifikasi", exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole("button", { name: "Tandai semua dibaca" }),
+  ).toHaveCount(0);
+  expect(calls).toEqual(["read-all"]);
+  // A reload is a different device in miniature: the read state came from the
+  // server, not from local component state.
+  await page.reload();
+  const again = page.getByRole("button", { name: "Notifikasi", exact: true });
+  await expect(again).toBeVisible();
+  await again.click();
+  await expect(page.getByRole("dialog", { name: "Notifikasi" })).toContainText(
+    "Pembayaran berhasil",
+  );
+  await expect(
+    page
+      .getByRole("dialog", { name: "Notifikasi" })
+      .getByRole("button", { name: "Tandai semua dibaca" }),
+  ).toHaveCount(0);
+});

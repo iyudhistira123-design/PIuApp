@@ -112,6 +112,11 @@ export async function realAccountFixture(page: Page, ai = true) {
   await page.route("**/api/announcements**", (r) =>
     r.fulfill({ json: { broadcasts: [] } }),
   );
+  // The bell is part of every signed-in header. Tests that exercise it
+  // register a narrower route afterwards, which Playwright matches first.
+  await page.route("**/api/notifications**", (r) =>
+    r.fulfill({ json: { applied: true, items: [], unread: 0 } }),
+  );
   // Model catalogue as a multi-vendor API key would return it. Grouping is the
   // server's job; the picker must list every id here.
   await page.route("**/api/ai/models**", (r) => {

@@ -22,6 +22,7 @@ import type { Attachment } from "../services/api";
 import { saveRecording } from "../services/recordings";
 import type { ReplayEvent } from "../services/recordings";
 import Presence from "../components/services/Presence";
+import { NotificationBell } from "../components/admin/Platform";
 import {
   lazy,
   Suspense,
@@ -1222,6 +1223,7 @@ function WorkspaceContent({ project }: { project: Project }) {
           <kbd>Ctrl K</kbd>
         </button>
         <div className="ws-top-actions">
+          <NotificationBell dark={theme === "dark"} />
           <button
             className="ws-theme-toggle"
             aria-label={
