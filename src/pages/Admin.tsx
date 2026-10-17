@@ -32,6 +32,18 @@ import {
 import { Logo, Modal } from "../components/ui";
 import { useStore } from "../lib/store";
 import { api } from "../services/api";
+import {
+  CREDIT_EXPIRY_MONTHS,
+  PLAN_LADDER,
+  costLine,
+  expiryLabel,
+  mergePlans,
+  mergeTopups,
+} from "../../shared/credits.mjs";
+import {
+  PROJECT_PHOTOS_BYTES_MAX,
+  PROJECT_PHOTOS_MAX,
+} from "../lib/photo-assets";
 import "./admin.css";
 /**
  * The "credits are running out" line, matching src/lib/dashboard/credits.ts
@@ -1883,7 +1895,17 @@ const SERVICE_TOGGLES: Record<string, string> = {
   sandbox: "Sandbox & paket",
   payments: "Checkout pembayaran",
   marketplace: "Marketplace",
+  studio: "Roblox Studio bridge",
 };
+/** Packages the panel may re-price; credits per package are editable too. */
+const PACKAGE_ROWS = [
+  ["pro", "Pro", "per bulan"],
+  ["team", "Team", "per bulan"],
+  ["credits300", "Top-up kecil", "sekali beli"],
+  ["credits1400", "Top-up besar", "sekali beli"],
+] as const;
+const rupiahCount = (value: number) =>
+  new Intl.NumberFormat("id-ID").format(Number(value) || 0);
 
 function SettingsForm({
   data,
@@ -1904,9 +1926,59 @@ function SettingsForm({
         data.value?.enabled_services?.[key] !== false,
       ]),
     );
+    // Show the effective price for every package, so an empty override is
+    // visible as the default rather than as a blank box. Prices are stored
+    // beside the service switches; 005's RPC whitelist has no top-level key
+    // for them.
+    delete next.plan_overrides;
+    const stored = next.enabled_services.plan_overrides;
+    next.enabled_services.plan_overrides = Object.fromEntries([
+      ...mergePlans(stored)
+        .filter((plan) => plan.sku)
+        .map((plan) => [
+          plan.plan.toLowerCase(),
+          { amount: plan.monthly, credits: plan.credits },
+        ]),
+      ...mergeTopups(stored).map((topup) => [
+        topup.sku,
+        { amount: topup.amount, credits: topup.credits },
+      ]),
+    ]);
     return next;
   });
   const set = (k: string, v: any) => setValue({ ...value, [k]: v });
+  const setPackage = (
+    key: string,
+    field: "amount" | "credits",
+    raw: string,
+  ) => {
+    const number = Number(raw);
+    if (!Number.isFinite(number)) return;
+    const overrides = value.enabled_services.plan_overrides;
+    set("enabled_services", {
+      ...value.enabled_services,
+      plan_overrides: {
+        ...overrides,
+        [key]: { ...overrides[key], [field]: Math.round(number) },
+      },
+    });
+  };
+  const defaults = () =>
+    set("enabled_services", {
+      ...value.enabled_services,
+      plan_overrides: Object.fromEntries([
+        ...mergePlans()
+          .filter((plan) => plan.sku)
+          .map((plan) => [
+            plan.plan.toLowerCase(),
+            { amount: plan.monthly, credits: plan.credits },
+          ]),
+        ...mergeTopups().map((topup) => [
+          topup.sku,
+          { amount: topup.amount, credits: topup.credits },
+        ]),
+      ]),
+    });
   return (
     <form
       className="ad-form ad-settings"
@@ -1981,6 +2053,72 @@ function SettingsForm({
         </label>
       </section>
       <section className="ad-card">
+        <h2>Paket &amp; kredit</h2>
+        <p className="ad-muted">
+          Harga dan jumlah kredit yang dibayar pembeli. Checkout, halaman paket,
+          dan landing membaca angka ini. Jatah harian (20/30/40 kredit), plafon
+          600 kredit Free, dan masa berlaku lot tidak bisa diubah dari sini:
+          semuanya ditegakkan migration 010.
+        </p>
+        <div className="ad-price-list">
+          {PACKAGE_ROWS.map(([key, title, note]) => {
+            const row = value.enabled_services.plan_overrides?.[key] || {
+              amount: 0,
+              credits: 0,
+            };
+            return (
+              <div className="ad-price-row" key={key}>
+                <div>
+                  <b>{title}</b>
+                  <small>
+                    {note} · {rupiahCount(row.credits)} kredit
+                  </small>
+                </div>
+                <label>
+                  Harga (Rp)
+                  <input
+                    type="number"
+                    min={1000}
+                    max={100000000}
+                    step={1000}
+                    inputMode="numeric"
+                    value={row.amount}
+                    disabled={disabled}
+                    onChange={(e) => setPackage(key, "amount", e.target.value)}
+                  />
+                </label>
+                <label>
+                  Kredit
+                  <input
+                    type="number"
+                    min={10}
+                    max={1000000}
+                    step={10}
+                    inputMode="numeric"
+                    value={row.credits}
+                    disabled={disabled}
+                    onChange={(e) => setPackage(key, "credits", e.target.value)}
+                  />
+                </label>
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          className="ad-secondary"
+          disabled={disabled}
+          onClick={defaults}
+        >
+          Gunakan harga bawaan
+        </button>
+        <p className="ad-muted">
+          Team harus memberi kredit lebih banyak dan harga per kredit tidak
+          boleh lebih mahal daripada Pro. Top-up besar mengikuti aturan yang
+          sama terhadap top-up kecil.
+        </p>
+      </section>
+      <section className="ad-card">
         <h2>Layanan platform</h2>
         <p className="ad-muted">
           Sakelar ini mengizinkan layanan, bukan memasang kredensial provider.
@@ -2004,6 +2142,42 @@ function SettingsForm({
             />
           </label>
         ))}
+      </section>
+      <section className="ad-card">
+        <h2>Batas &amp; biaya operasi</h2>
+        <p className="ad-muted">
+          Angka ini ditegakkan server dan database, bukan sakelar panel.
+          Ditampilkan supaya jelas apa yang sengaja tidak bisa diubah dari sini.
+        </p>
+        <ul className="ad-facts">
+          <li>
+            <b>Foto per project</b>
+            <span>
+              {PROJECT_PHOTOS_MAX} foto · maks{" "}
+              {Math.round(PROJECT_PHOTOS_BYTES_MAX / 1024 / 1024)} MB per foto
+            </span>
+          </li>
+          <li>
+            <b>Jatah harian</b>
+            <span>
+              {PLAN_LADDER.map((plan) => `${plan.plan} ${plan.daily}`).join(
+                " · ",
+              )}{" "}
+              kredit · reset 00:00 UTC, tidak menumpuk
+            </span>
+          </li>
+          <li>
+            <b>Masa berlaku</b>
+            <span>
+              Kredit paket {expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}; top-up{" "}
+              {CREDIT_EXPIRY_MONTHS.topup} bulan
+            </span>
+          </li>
+          <li>
+            <b>Biaya operasi</b>
+            <span>{costLine()}</span>
+          </li>
+        </ul>
       </section>
       <div className="ad-form-actions">
         <small>Revisi {data.revision} · perubahan membutuhkan alasan.</small>

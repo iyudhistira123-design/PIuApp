@@ -10,11 +10,12 @@ import useLandingMotion, {
 import { usePlatform, PlatformNotices } from "../components/admin/Platform";
 import {
   CREDIT_EXPIRY_MONTHS,
-  PLAN_LADDER,
   costLine,
   expiryLabel,
   lastsLabel,
+  mergePlans,
   usageProfile,
+  type PlanRow,
 } from "../../shared/credits.mjs";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -66,20 +67,15 @@ const faqs = [
     "Workspace memakai akun terautentikasi, penyimpanan cloud, editor kode, dan preview interaktif. AI, terminal, dan layanan eksternal memerlukan provider aktif. Kode keluar lewat Export ZIP; PiwuApp tidak menghosting hasil build. Layanan yang belum siap tidak digantikan oleh simulasi.",
   ],
 ];
-const ladder = (name: string) =>
-  PLAN_LADDER.find((plan) => plan.plan === name) || PLAN_LADDER[0];
 const thousands = (value: number) =>
   new Intl.NumberFormat("id-ID").format(value);
 
-/** Credits and how long they last, straight from the shared price model. */
-const creditHeadline = (name: string) => {
-  const plan = ladder(name);
-  return plan.monthly
+/** Credits and how long they last, from the ladder with admin overrides. */
+const creditHeadline = (plan: PlanRow) =>
+  plan.monthly
     ? `${thousands(plan.credits)} kredit/bulan`
     : `${thousands(plan.credits)} kredit/hari`;
-};
-const creditNote = (name: string) => {
-  const plan = ladder(name);
+const creditNote = (plan: PlanRow) => {
   if (!plan.monthly)
     return `direset tiap hari pukul 00:00 UTC · plafon ${thousands(plan.monthlyCap || 0)} kredit/bulan`;
   return `${thousands(plan.daily)} kredit/hari + ${lastsLabel(plan.credits, usageProfile("normal"))} pemakaian normal · ${expiryLabel(plan.expiryMonths)}`;
@@ -98,9 +94,17 @@ export default function Landing() {
   const [faq, setFaq] = useState<number | null>(0);
   const [modal, setModal] = useState("");
   const navigate = useNavigate();
+  // Prices and credits follow the admin settings, falling back to the shared
+  // ladder. Daily allowances are not editable: migration 010 enforces them.
+  const plans = mergePlans(
+    siteSettings.enabled_services?.plan_overrides ??
+      siteSettings.plan_overrides,
+  );
+  const ladder = (name: string) =>
+    plans.find((plan) => plan.plan === name) || plans[0];
   // Only 30-day plans exist at checkout, so the cards never show an annual
   // price the store cannot charge.
-  const planCards = planBenefits().map((benefit, index) => ({
+  const planCards = planBenefits(plans).map((benefit, index) => ({
     name: benefit.plan,
     price: thousands(ladder(benefit.plan).monthly),
     desc: benefit.summary,
@@ -616,8 +620,8 @@ export default function Landing() {
                   )}
                 </div>
                 <div className="pricing-credit">
-                  <b>{creditHeadline(p.name)}</b>
-                  <span>{creditNote(p.name)}</span>
+                  <b>{creditHeadline(ladder(p.name))}</b>
+                  <span>{creditNote(ladder(p.name))}</span>
                 </div>
                 <button
                   className={

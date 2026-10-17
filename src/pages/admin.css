@@ -1234,3 +1234,93 @@
   gap: 12px;
   color: #3d7452;
 }
+
+/* Package prices: two editable numbers per row, effective defaults shown. */
+.ad-price-list {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.ad-price-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 160px 140px;
+  gap: 14px;
+  align-items: end;
+  padding: 12px 14px;
+  border: 1px solid #e4e9dc;
+  border-radius: 8px;
+  background: #fbfcf7;
+}
+.ad-price-row b {
+  display: block;
+  font-size: 12px;
+  color: #2f3a25;
+}
+.ad-price-row small {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #626b59;
+}
+.ad-price-row label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: 10px;
+  color: #5f6b52;
+}
+.ad-price-row input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #d8e0d2;
+  border-radius: 6px;
+  background: #fff;
+  color: #35472e;
+  font: inherit;
+  font-size: 12px;
+}
+.ad-price-row input:disabled {
+  background: #f5f7f1;
+  color: #65725f;
+}
+@media (max-width: 720px) {
+  .ad-price-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ad-price-row > div {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Read-only numbers on the settings tab: visible, not editable. */
+.ad-facts {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ad-facts li {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e4e9dc;
+  border-radius: 7px;
+  background: #fbfcf7;
+  font-size: 11px;
+  line-height: 1.65;
+  color: #55614a;
+}
+.ad-facts b {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6d7a61;
+}
+@media (max-width: 620px) {
+  .ad-facts li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

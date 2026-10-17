@@ -26,72 +26,76 @@ test("admin requires authenticated server role; no preview bypass", async ({
     page.getByRole("navigation", { name: "Navigasi admin" }),
   ).toHaveCount(0);
 });
-async function fixture(page: Page, role = "operator") {
+async function fixture(page: Page, role = "operator", tab = "broadcasts") {
   await page.goto("/");
-  await page.evaluate(async (role) => {
-    const React = (await import("/node_modules/.vite/deps/react.js")).default;
-    const { createRoot } = (
-      await import("/node_modules/.vite/deps/react-dom_client.js")
-    ).default;
-    const routerPath = performance
-      .getEntriesByType("resource")
-      .map((e) => e.name)
-      .find(
-        (n) =>
-          new URL(n).pathname ===
-          "/node_modules/.vite/deps/react-router-dom.js",
-      )!;
-    const { MemoryRouter } = await import(routerPath);
-    const { AdminPanel } = await import("/src/pages/Admin.tsx");
-    const state = { items: [] as any[], actions: [] as any[], fail: false };
-    const client = async (path: string, body?: any) => {
-      if (path === "/admin/actions") {
-        state.actions.push(structuredClone(body));
-        if (state.fail) throw new Error("Konflik revisi. Muat ulang data.");
-        state.items = [
-          { id: body.target, ...body.payload, revision: 1, read_count: 0 },
-        ];
-        return { notice: "Broadcast disimpan dalam fixture pengujian." };
-      }
-      if (path.startsWith("/admin/settings"))
-        return {
-          revision: 1,
-          value: {
-            maintenance: false,
-            maintenance_message: "Pemeliharaan",
-            hero_title: "",
-            hero_subtitle: "",
-            support_email: "",
-            enabled_services: {
-              ai: true,
-              sandbox: true,
-              payments: true,
-              marketplace: true,
+  await page.evaluate(
+    async ({ role, tab }) => {
+      const React = (await import("/node_modules/.vite/deps/react.js")).default;
+      const { createRoot } = (
+        await import("/node_modules/.vite/deps/react-dom_client.js")
+      ).default;
+      const routerPath = performance
+        .getEntriesByType("resource")
+        .map((e) => e.name)
+        .find(
+          (n) =>
+            new URL(n).pathname ===
+            "/node_modules/.vite/deps/react-router-dom.js",
+        )!;
+      const { MemoryRouter } = await import(routerPath);
+      const { AdminPanel } = await import("/src/pages/Admin.tsx");
+      const state = { items: [] as any[], actions: [] as any[], fail: false };
+      const client = async (path: string, body?: any) => {
+        if (path === "/admin/actions") {
+          state.actions.push(structuredClone(body));
+          if (state.fail) throw new Error("Konflik revisi. Muat ulang data.");
+          state.items = [
+            { id: body.target, ...body.payload, revision: 1, read_count: 0 },
+          ];
+          return { notice: "Broadcast disimpan dalam fixture pengujian." };
+        }
+        if (path.startsWith("/admin/settings"))
+          return {
+            revision: 1,
+            value: {
+              maintenance: false,
+              maintenance_message: "Pemeliharaan",
+              hero_title: "",
+              hero_subtitle: "",
+              support_email: "",
+              enabled_services: {
+                ai: true,
+                sandbox: true,
+                payments: true,
+                marketplace: true,
+              },
             },
-          },
-        };
-      return { items: structuredClone(state.items), hasMore: false };
-    };
-    document.getElementById("root")!.style.display = "none";
-    const host = document.createElement("div");
-    host.id = "admin-fixture";
-    document.body.append(host);
-    (window as any).__adminFixture = state;
-    createRoot(host).render(
-      React.createElement(
-        MemoryRouter,
-        { initialEntries: ["/admin?tab=broadcasts"] },
-        React.createElement(AdminPanel, {
-          session: { role, email: "fixture@example.test" },
-          preview: false,
-          client,
-        }),
-      ),
-    );
-  }, role);
-  await expect(
-    page.getByRole("heading", { name: "Broadcast", exact: true }),
-  ).toBeVisible();
+          };
+        return { items: structuredClone(state.items), hasMore: false };
+      };
+      document.getElementById("root")!.style.display = "none";
+      const host = document.createElement("div");
+      host.id = "admin-fixture";
+      document.body.append(host);
+      (window as any).__adminFixture = state;
+      createRoot(host).render(
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ["/admin?tab=" + tab] },
+          React.createElement(AdminPanel, {
+            session: { role, email: "fixture@example.test" },
+            preview: false,
+            client,
+          }),
+        ),
+      );
+    },
+    { role, tab },
+  );
+  if (tab === "broadcasts")
+    await expect(
+      page.getByRole("heading", { name: "Broadcast", exact: true }),
+    ).toBeVisible();
 }
 test("broadcast editor: schedule, audience, confirmation, retained draft and explicit errors", async ({
   page,
@@ -208,4 +212,64 @@ test("public announcements render as plain text and site content is connected", 
   await expect(page.getByRole("button", { name: "Tandai dibaca" })).toHaveCount(
     0,
   );
+});
+
+test("settings edit package prices and the Studio switch for the whole platform", async ({
+  page,
+}) => {
+  await fixture(page, "superadmin", "settings");
+  await expect(
+    page.getByRole("heading", { name: "Paket & kredit" }),
+  ).toBeVisible();
+  // Effective defaults are shown, not blank boxes.
+  await expect(
+    page.getByLabel("Harga (Rp)", { exact: true }).first(),
+  ).toHaveValue("199000");
+  await expect(page.getByLabel("Kredit", { exact: true }).first()).toHaveValue(
+    "1500",
+  );
+  await expect(page.getByText("Roblox Studio bridge")).toBeVisible();
+  await page.getByLabel("Harga (Rp)", { exact: true }).first().fill("249000");
+  await page.getByLabel("Kredit", { exact: true }).first().fill("2000");
+  await page
+    .getByRole("button", { name: "Tinjau & simpan pengaturan" })
+    .click();
+  await page
+    .getByLabel("Alasan perubahan")
+    .fill("Menyesuaikan harga paket Pro");
+  await page.getByRole("button", { name: "Konfirmasi perubahan" }).click();
+  const actions = await page.evaluate(
+    () => (window as any).__adminFixture.actions,
+  );
+  expect(actions).toHaveLength(1);
+  expect(actions[0].action).toBe("settings");
+  expect(actions[0].payload.value.enabled_services.plan_overrides.pro).toEqual({
+    amount: 249000,
+    credits: 2000,
+  });
+  expect(actions[0].payload.value.enabled_services.plan_overrides.team).toEqual(
+    {
+      amount: 499000,
+      credits: 4500,
+    },
+  );
+  // Prices must not be sent as a top-level key: migration 005's RPC rejects it.
+  expect(actions[0].payload.value).not.toHaveProperty("plan_overrides");
+  expect(actions[0].payload.value.enabled_services.studio).toBe(true);
+});
+
+test("settings stay read-only without the superadmin role", async ({
+  page,
+}) => {
+  await fixture(page, "operator", "settings");
+  await expect(
+    page.getByLabel("Harga (Rp)", { exact: true }).first(),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel("Kredit", { exact: true }).first(),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Gunakan harga bawaan" }),
+  ).toBeDisabled();
+  await expect(page.getByText("Roblox Studio bridge")).toBeVisible();
 });

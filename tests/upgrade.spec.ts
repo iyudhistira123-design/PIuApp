@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { signedIn } from "./helpers-account";
+import { accountPayload, signedIn } from "./helpers-account";
 
 test("the dashboard opens the upgrade page, which reads prices from the server", async ({
   page,
@@ -197,4 +197,57 @@ test("the landing prices come from the same credit ladder as the checkout", asyn
   );
   const axe = await new AxeBuilder({ page }).analyze();
   expect(axe.violations).toEqual([]);
+});
+
+test("a price saved in the admin panel reaches the landing page", async ({
+  page,
+}) => {
+  await page.route("**/api/public/site", (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        settings: {
+          enabled_services: {
+            plan_overrides: { pro: { amount: 249000, credits: 2000 } },
+          },
+        },
+        broadcasts: [],
+      },
+    }),
+  );
+  await page.goto("/");
+  const pro = page.locator("#pricing .pricing-card").nth(1);
+  await expect(pro.locator(".price-value")).toHaveText("249.000");
+  await expect(pro.locator(".pricing-credit")).toContainText(
+    "2.000 kredit/bulan",
+  );
+  await expect(pro).toContainText("Rp 125/kredit");
+  // The database-owned allowance does not move with the price.
+  await expect(pro).toContainText("30 kredit/hari");
+});
+
+test("the upgrade page renders the prices the server actually sells", async ({
+  page,
+}) => {
+  const base = accountPayload();
+  await signedIn(page, {
+    products: {
+      ...(base.products as Record<string, unknown>),
+      pro: {
+        kind: "plan",
+        plan: "Pro",
+        amount: 249000,
+        credits: 2000,
+        label: "PiwuApp Pro · 30 hari",
+      },
+    },
+  });
+  await page.goto("/upgrade");
+  const pro = page.locator(".plan-card", { hasText: "PiwuApp Pro" });
+  await expect(pro.locator(".plan-price")).toContainText("Rp 249.000");
+  await expect(pro.locator(".plan-rate")).toContainText("125");
+  await expect(pro.locator(".plan-credits")).toContainText("2.000");
+  await expect(pro.locator(".plan-benefits")).toContainText(
+    "2.000 kredit/bulan",
+  );
 });

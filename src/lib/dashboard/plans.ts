@@ -14,6 +14,7 @@ import {
   lastsLabel,
   ratePerCredit,
   usageProfile,
+  type PlanRow,
 } from "../../../shared/credits.mjs";
 
 /**
@@ -162,11 +163,15 @@ export interface PlanBenefits {
  * the app does not enforce (`planFacts()` says the same in prose). A test
  * asserts the credit numbers here match PLAN_LADDER.
  */
-export function planBenefits(): PlanBenefits[] {
-  const free = PLAN_LADDER.find((plan) => !plan.monthly)!;
-  const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
-  const team = PLAN_LADDER.find((plan) => plan.plan === "Team")!;
-  const rate = (plan: (typeof PLAN_LADDER)[number]) =>
+export function planBenefits(plans: PlanRow[] = PLAN_LADDER): PlanBenefits[] {
+  const free = plans.find((plan) => !plan.monthly) || PLAN_LADDER[0];
+  const pro =
+    plans.find((plan) => plan.plan === "Pro") ||
+    PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
+  const team =
+    plans.find((plan) => plan.plan === "Team") ||
+    PLAN_LADDER.find((plan) => plan.plan === "Team")!;
+  const rate = (plan: PlanRow) =>
     `${rupiah(ratePerCredit(plan.monthly, plan.credits))}/kredit`;
   return [
     {

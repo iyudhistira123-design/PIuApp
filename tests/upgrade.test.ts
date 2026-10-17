@@ -18,7 +18,11 @@ import {
   rupiah,
   topupOffers,
 } from "../src/lib/dashboard/plans";
-import { CREDIT_EXPIRY_MONTHS, PLAN_LADDER } from "../shared/credits.mjs";
+import {
+  CREDIT_EXPIRY_MONTHS,
+  PLAN_LADDER,
+  mergePlans,
+} from "../shared/credits.mjs";
 
 // The exact products the server sells today (server/providers/payments.mjs).
 const products = {
@@ -339,4 +343,16 @@ test("each plan's benefits state the real credits and nothing the app gates", ()
     "Role & kontrol akses",
   ])
     assert.ok(!text.includes(claim), `klaim tanpa fitur: ${claim}`);
+});
+
+test("a saved admin price flows into the landing card's benefits", () => {
+  const plans = mergePlans({ pro: { amount: 249000, credits: 2000 } });
+  const pro = planBenefits(plans).find((row) => row.plan === "Pro")!;
+  const text = pro.items.join(" ").replace(/\u00a0/g, " ");
+  assert.match(text, /2\.000 kredit\/bulan/);
+  // 249.000 / 2.000 = 124,5 → 125 per credit.
+  assert.match(text, /Rp 125\/kredit/);
+  // The database-owned allowance is unchanged.
+  assert.match(text, /30 kredit\/hari/);
+  assert.match(text, /hangus 2 bulan setelah terbit/);
 });

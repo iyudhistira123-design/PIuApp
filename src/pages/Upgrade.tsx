@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mergePlans } from "../../shared/credits.mjs";
 import { Link, useNavigate } from "react-router-dom";
 import { Logo } from "../components/ui";
 import { api } from "../services/api";
@@ -86,7 +87,18 @@ export default function Upgrade() {
   const currentPlan = data?.plan?.plan || "Free";
   const plans = planOffers(data?.products, currentPlan);
   const topups = topupOffers(data?.products);
-  const benefits = planBenefits();
+  // The benefit list follows the products the server actually sells, which
+  // include any price/credit change saved in the admin panel.
+  const benefits = planBenefits(
+    mergePlans(
+      Object.fromEntries(
+        plans.map((offer) => [
+          offer.plan.toLowerCase(),
+          { amount: offer.price, credits: offer.credits },
+        ]),
+      ),
+    ),
+  );
   const notice = paymentsNotice(data?.paymentsEnabled, data?.provider);
   const left = periodLeft(data?.plan?.current_period_end);
   const balance = Number(data?.balance);
