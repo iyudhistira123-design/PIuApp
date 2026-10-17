@@ -11,6 +11,11 @@ import {
   assertNoSecrets,
   capabilities,
 } from "../lib/core.mjs";
+import {
+  mergePlans,
+  mergeTopups,
+  ratePerCredit,
+} from "../../shared/credits.mjs";
 import { rateLimit } from "../lib/context.mjs";
 import {
   platformResult,
@@ -26,6 +31,61 @@ import {
   LOW_BALANCE,
 } from "../lib/admin-insights.mjs";
 import { paymentProvider } from "../providers/payments.mjs";
+const priceOverride = z
+  .object({
+    amount: z.number().int().min(1000).max(100000000),
+    credits: z.number().int().min(10).max(1000000),
+  })
+  .strict();
+/**
+ * Prices and credits per package, editable from the panel. Daily allowance,
+ * monthly cap and expiry are not here: migration 010 enforces those.
+ */
+const planOverrides = z
+  .object({
+    pro: priceOverride.optional(),
+    team: priceOverride.optional(),
+    credits300: priceOverride.optional(),
+    credits1400: priceOverride.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const plans = mergePlans(value);
+    const pro = plans.find((row) => row.plan === "Pro");
+    const team = plans.find((row) => row.plan === "Team");
+    if (!pro || !team) return;
+    if (team.credits <= pro.credits)
+      ctx.addIssue({
+        code: "custom",
+        path: ["team", "credits"],
+        message: "Team harus memberi kredit lebih banyak daripada Pro.",
+      });
+    else if (
+      ratePerCredit(team.monthly, team.credits) >
+      ratePerCredit(pro.monthly, pro.credits)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["team", "amount"],
+        message: "Harga per kredit Team tidak boleh lebih mahal daripada Pro.",
+      });
+    const [small, large] = mergeTopups(value);
+    if (large.credits <= small.credits)
+      ctx.addIssue({
+        code: "custom",
+        path: ["credits1400", "credits"],
+        message: "Top-up besar harus memberi kredit lebih banyak.",
+      });
+    else if (
+      ratePerCredit(large.amount, large.credits) >
+      ratePerCredit(small.amount, small.credits)
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["credits1400", "amount"],
+        message: "Harga per kredit top-up besar tidak boleh lebih mahal.",
+      });
+  });
 export const siteSchema = z
   .object({
     maintenance: z.boolean(),
@@ -39,6 +99,12 @@ export const siteSchema = z
         sandbox: z.boolean(),
         payments: z.boolean(),
         marketplace: z.boolean(),
+        // Absent in settings saved before the Studio switch existed: treated
+        // as enabled, like every other switch.
+        studio: z.boolean().optional(),
+        // Package prices live beside the switches so migration 005's
+        // whitelist keeps working without a new migration.
+        plan_overrides: planOverrides.optional(),
       })
       .strict(),
   })

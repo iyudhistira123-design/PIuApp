@@ -9,10 +9,11 @@ import {
   capabilities,
 } from "../lib/core.mjs";
 import {
-  products,
+  productCatalog,
   paymentProvider,
   verifyPaymentHook,
 } from "../providers/payments.mjs";
+import { planOverridesOf, siteSettings } from "../lib/platform.mjs";
 import { rateLimit } from "../lib/context.mjs";
 import { creditStatus } from "../lib/credit-status.mjs";
 export function registerBilling(app, ctx) {
@@ -87,6 +88,10 @@ export function registerBilling(app, ctx) {
       // the account is actually in. A missing migration or an unreadable
       // answer comes back as `applied: false` with a note, never as a guess.
       const credits = await creditStatus(admin, req.user.id);
+      // The catalogue is the default price list with whatever the
+      // administrator saved, so checkout and this answer cannot disagree.
+      const site = await siteSettings(ctx);
+      const products = productCatalog(planOverridesOf(site.value));
       res.json({
         balance,
         credits,
@@ -126,6 +131,8 @@ export function registerBilling(app, ctx) {
       const { sku, templateId } = z
         .object({ sku: z.string().max(100), templateId: z.uuid().optional() })
         .parse(req.body);
+      const site = await siteSettings(ctx);
+      const products = productCatalog(planOverridesOf(site.value));
       let product = Object.hasOwn(products, sku) ? products[sku] : null;
       if (sku === "template" && templateId) {
         const t = check(

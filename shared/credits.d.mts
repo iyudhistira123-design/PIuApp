@@ -39,11 +39,27 @@ export interface PlanRow {
   expiryMonths: number;
 }
 export const PLAN_LADDER: PlanRow[];
+export interface PlanOverride {
+  amount?: number;
+  credits?: number;
+}
+/** Overrides keyed by plan name (lowercase) or top-up SKU. */
+export type PlanOverrides = Record<string, PlanOverride>;
+export function mergePlans(
+  overrides?: PlanOverrides,
+): (PlanRow & { overridden: boolean })[];
 export const TOPUP_LADDER: {
   sku: string;
   amount: number;
   credits: number;
   expiryMonths: number;
+}[];
+export function mergeTopups(overrides?: PlanOverrides): {
+  sku: string;
+  amount: number;
+  credits: number;
+  expiryMonths: number;
+  overridden: boolean;
 }[];
 export function planForSku(sku: string): PlanRow | undefined;
 export function dailyAllowance(planName: string): number;

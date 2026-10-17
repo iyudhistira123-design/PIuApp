@@ -319,12 +319,26 @@ test("Admin SQL: migrations, permissions, audit/idempotency, CAS, broadcasts and
       .rows[0].value;
     await action(root, "settings", null, {
       revision: 1,
-      value: { ...conf, maintenance: true },
+      value: {
+        ...conf,
+        maintenance: true,
+        // Migration 005's RPC only whitelists top-level keys, so package
+        // prices travel inside enabled_services.
+        enabled_services: {
+          ...conf.enabled_services,
+          plan_overrides: { pro: { amount: 249000, credits: 2000 } },
+        },
+      },
     });
     await assert.rejects(
       () => action(root, "settings", null, { revision: 1, value: conf }),
       /ADMIN_CONFLICT/,
     );
+    const saved = (await db.query<any>("select value from site_configuration"))
+      .rows[0].value;
+    assert.deepEqual(saved.enabled_services.plan_overrides, {
+      pro: { amount: 249000, credits: 2000 },
+    });
     assert.equal(
       (await db.query<any>("select piwu_writes_open() as open")).rows[0].open,
       false,

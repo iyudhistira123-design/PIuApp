@@ -116,6 +116,25 @@ export const PLAN_LADDER = [
   },
 ];
 
+/**
+ * The plan ladder with the administrator's price/credit overrides applied.
+ * Only money and credits move: the daily allowance, monthly cap and expiry come
+ * from the database policy and are deliberately not editable.
+ */
+export function mergePlans(overrides = {}) {
+  return PLAN_LADDER.map((plan) => {
+    const override = overrides?.[plan.plan.toLowerCase()];
+    const amount = Number(override?.amount ?? plan.monthly);
+    const credits = Number(override?.credits ?? plan.credits);
+    return {
+      ...plan,
+      monthly: Number.isFinite(amount) ? amount : plan.monthly,
+      credits: Number.isFinite(credits) ? credits : plan.credits,
+      overridden: Boolean(override),
+    };
+  });
+}
+
 /** Top-ups have no plan and no period: they only add credits to the balance. */
 export const TOPUP_LADDER = [
   {
@@ -249,6 +268,21 @@ export function lastsLabel(credits, profile) {
   const total = Number(credits);
   if (!Number.isFinite(total) || total <= 0) return "tidak cukup untuk sehari";
   return "kurang dari sehari";
+}
+
+/** The top-up ladder with the administrator's overrides applied. */
+export function mergeTopups(overrides = {}) {
+  return TOPUP_LADDER.map((topup) => {
+    const override = overrides?.[topup.sku];
+    const amount = Number(override?.amount ?? topup.amount);
+    const credits = Number(override?.credits ?? topup.credits);
+    return {
+      ...topup,
+      amount: Number.isFinite(amount) ? amount : topup.amount,
+      credits: Number.isFinite(credits) ? credits : topup.credits,
+      overridden: Boolean(override),
+    };
+  });
 }
 
 /** Effective price of one credit, rounded to whole rupiah. */

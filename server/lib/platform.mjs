@@ -11,10 +11,23 @@ export const defaultSite = {
     sandbox: true,
     payments: true,
     marketplace: true,
+    studio: true,
+    // Admin-editable package prices live here because migration 005's
+    // piwu_admin_action() whitelists the top-level keys of the value; adding a
+    // new top-level key would need a migration. Empty = shared price ladder.
+    plan_overrides: {},
   },
 };
 export const schemaMissing = (e) =>
   ["42P01", "PGRST205", "PGRST202"].includes(e?.code);
+/**
+ * Package overrides from a stored settings value. They live beside the service
+ * switches (`enabled_services.plan_overrides`) and a future top-level key is
+ * accepted too, so a later migration can move them without breaking readers.
+ */
+export function planOverridesOf(value) {
+  return value?.enabled_services?.plan_overrides ?? value?.plan_overrides ?? {};
+}
 export function platformResult(result) {
   if (result.error) {
     const m = result.error.message || "";
@@ -149,7 +162,9 @@ export async function enforcePlatform(ctx, req) {
         ? "payments"
         : /^\/marketplace|\/template$/.test(path)
           ? "marketplace"
-          : null;
+          : /(^|\/)studio(\/|$)/.test(path)
+            ? "studio"
+            : null;
   if (
     (service && value.enabled_services?.[service] === false) ||
     (path === "/checkout" &&

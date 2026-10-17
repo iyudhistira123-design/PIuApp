@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { HttpError, equal, appOrigin } from "../lib/core.mjs";
+import {
+  PLAN_PERIOD_DAYS,
+  mergePlans,
+  mergeTopups,
+} from "../../shared/credits.mjs";
 // The credit ladder: how many credits a package grants follows its price, so
 // a bigger package is never more expensive per credit. The plan prices are
 // unchanged; only the credits they grant were raised to match them.
@@ -10,34 +15,34 @@ import { HttpError, equal, appOrigin } from "../lib/core.mjs";
 // Plan credits roll over but expire 2 months after they are granted; top-ups
 // are valid 12 months. tests/credits-model.test.ts reads this table;
 // shared/credits.mjs explains the durations these numbers produce.
-export const products = {
-  pro: {
-    kind: "plan",
-    plan: "Pro",
-    amount: 199000,
-    credits: 1500,
-    label: "PiwuApp Pro · 30 hari",
-  },
-  team: {
-    kind: "plan",
-    plan: "Team",
-    amount: 499000,
-    credits: 4500,
-    label: "PiwuApp Team · 30 hari",
-  },
-  credits300: {
-    kind: "topup",
-    amount: 49000,
-    credits: 300,
-    label: "Top-up 300 kredit",
-  },
-  credits1400: {
-    kind: "topup",
-    amount: 199000,
-    credits: 1400,
-    label: "Top-up 1.400 kredit",
-  },
-};
+//
+// The administrator may change the price and the credits per package from the
+// admin panel. The catalogue is therefore a function of the saved overrides;
+// `products` is the default catalogue used when no override exists. Nothing
+// else changes: daily allowance, monthly cap and expiry are database policy.
+export function productCatalog(overrides = {}) {
+  const catalog = {};
+  for (const plan of mergePlans(overrides)) {
+    if (!plan.sku) continue;
+    catalog[plan.sku] = {
+      kind: "plan",
+      plan: plan.plan,
+      amount: plan.monthly,
+      credits: plan.credits,
+      label: `PiwuApp ${plan.plan} · ${PLAN_PERIOD_DAYS} hari`,
+    };
+  }
+  for (const topup of mergeTopups(overrides)) {
+    catalog[topup.sku] = {
+      kind: "topup",
+      amount: topup.amount,
+      credits: topup.credits,
+      label: `Top-up ${new Intl.NumberFormat("id-ID").format(topup.credits)} kredit`,
+    };
+  }
+  return catalog;
+}
+export const products = productCatalog();
 export function midtransSignature(body, key) {
   if (
     !body ||
