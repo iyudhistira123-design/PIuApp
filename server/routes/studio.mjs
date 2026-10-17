@@ -102,6 +102,9 @@ export function registerStudio(app, ctx) {
           ? {
               connected: alive(row),
               expiresAt: row.expires_at,
+              // When the snapshot was stored: the AI reads this same snapshot,
+              // so the panel can say how fresh the context is.
+              updatedAt: row.updated_at,
               snapshot: row.snapshot,
               state: row.state,
               receipt: row.receipt,

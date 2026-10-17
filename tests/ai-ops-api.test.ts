@@ -41,14 +41,24 @@ const savedScene = (kind: string) =>
     ...(kind === "text" ? [] : ([null, 2] as const)),
   );
 
-function fixture({ kind = "roblox", reply }: { kind?: string; reply: any }) {
+function fixture({
+  kind = "roblox",
+  reply,
+  studio,
+}: {
+  kind?: string;
+  reply: any;
+  studio?: any;
+}) {
   const calls: string[] = [];
+  const chats: any[] = [];
   const fetcher = async (input: any, init: any = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url);
     const path = url.pathname;
     if (path.endsWith("/chat/completions")) {
       calls.push("chat");
       const body = JSON.parse(init.body);
+      chats.push(body);
       calls.push("model:" + body.model);
       const content = JSON.stringify(reply);
       return new Response(
@@ -84,6 +94,7 @@ function fixture({ kind = "roblox", reply }: { kind?: string; reply: any }) {
     if (path === "/rest/v1/platform_admins") return json([]);
     if (path === "/rest/v1/site_configuration")
       return json([{ revision: 1, value: defaultSite }]);
+    if (path === "/rest/v1/studio_bridges") return json(studio ?? {});
     if (path === "/rest/v1/project_workspaces")
       return json({
         payload: {
@@ -100,7 +111,7 @@ function fixture({ kind = "roblox", reply }: { kind?: string; reply: any }) {
     }
     throw new Error("Unexpected fixture query: " + path + url.search);
   };
-  return { fetcher, calls };
+  return { fetcher, calls, chats };
 }
 
 async function run(options: {
@@ -109,6 +120,7 @@ async function run(options: {
   reply: any;
   attachments?: any[];
   photoPalettes?: any[];
+  studio?: any;
 }) {
   const fx = fixture(options);
   const { app } = createApp({
@@ -154,7 +166,7 @@ async function run(options: {
     .split("\n\n")
     .filter((line) => line.startsWith("data: "))
     .map((line) => JSON.parse(line.slice(6)));
-  return { status: response.status, events };
+  return { status: response.status, events, chats: fx.chats };
 }
 
 const resultOf = (events: any[]) =>
@@ -192,6 +204,64 @@ test("AI ops wiring: a transform batch reaches the browser as an applied scene a
   assert.equal(result.creditsUsed, 3);
   assert.match(result.ops.note, /Tinjau sebelum dipakai/);
   assert.ok(events.some((e) => e.type === "token"));
+});
+
+test("a Roblox turn reads the latest Studio snapshot without importing it first", async () => {
+  const source =
+    'local ReplicatedStorage = game:GetService("ReplicatedStorage")\nprint("halo Studio")';
+  const studio = {
+    snapshot: {
+      version: 1,
+      snapshotId: crypto.randomUUID(),
+      placeId: "987654",
+      nodes: [
+        {
+          id: "sss",
+          parentId: null,
+          name: "ServerScriptService",
+          className: "ServerScriptService",
+          properties: {},
+        },
+        {
+          id: "s1",
+          parentId: "sss",
+          name: "Halo",
+          className: "Script",
+          properties: {},
+          scriptPath: "ServerScriptService/Halo_aaaaaaaa.luau",
+          source,
+          readable: true,
+        },
+      ],
+    },
+    updated_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 600000).toISOString(),
+    state: "idle",
+  };
+  const { status, events, chats } = await run({
+    kind: "roblox",
+    studio,
+    reply: { content: "Saya membaca script Halo dari Studio." },
+  });
+  assert.equal(status, 200);
+  assert.ok(chats.length, "expected a provider call");
+  const user = chats[0].messages.find((m: any) => m.role === "user");
+  const payload = JSON.parse(user.content[0].text);
+  assert.equal(payload.studio.placeId, "987654");
+  assert.equal(payload.studio.stale, false);
+  const entry = payload.studio.scripts.find(
+    (s: any) => s.path === "ServerScriptService/Halo_aaaaaaaa.luau",
+  );
+  assert.equal(entry.source, source);
+  assert.equal(entry.readable, true);
+  assert.match(payload.studio.tree.join("\n"), /ServerScriptService\/Halo/);
+  // The running line says Studio was read before the first token arrives.
+  const step = events.find(
+    (e: any) => e.type === "step" && e.step.phase === "studio",
+  );
+  assert.ok(step, "expected a studio step event");
+  assert.equal(step.step.scripts, 1);
+  assert.equal(step.step.nodes, 2);
 });
 
 test("AI ops wiring: an invalid target is reported and writes no scene at all", async () => {
