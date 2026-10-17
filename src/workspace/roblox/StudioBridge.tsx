@@ -27,6 +27,10 @@ export default function StudioBridge({
   onOpenFile: (path: string) => void;
 }) {
   const [baseline, setBaseline] = useState<StudioSnapshot | null>(null),
+    [snapshotInfo, setSnapshotInfo] = useState<{
+      nodes: number;
+      updatedAt: string;
+    } | null>(null),
     [bundle, setBundle] = useState<StudioBundle | null>(null),
     [credential, setCredential] = useState(""),
     [status, setStatus] = useState("Belum memeriksa koneksi Studio."),
@@ -36,20 +40,26 @@ export default function StudioBridge({
     [name, setName] = useState("Objek baru"),
     [cls, setCls] = useState("Folder"),
     [confirmed, setConfirmed] = useState(false);
+  const noteSnapshot = (d: any) => {
+    const parsed = snapshotSchema.safeParse(d?.snapshot);
+    setSnapshotInfo({
+      nodes: parsed.success ? parsed.data.nodes.length : 0,
+      updatedAt: String(d?.updatedAt || ""),
+    });
+    if (parsed.success) setBaseline(parsed.data);
+  };
   useEffect(() => {
     let dead = false;
-    if (project.files[DESIRED])
-      void projectApi(project.id, "studio")
-        .then((d) => {
-          if (!dead && d.snapshot)
-            setBaseline(snapshotSchema.parse(d.snapshot));
-        })
-        .catch(() => {
-          if (!dead)
-            setStatus(
-              "Muat koneksi Studio untuk meninjau ulang snapshot dasar.",
-            );
-        });
+    // Ask even before an import: the panel must say whether the AI currently
+    // has a Studio snapshot to read, instead of leaving that invisible.
+    void projectApi(project.id, "studio")
+      .then((d) => {
+        if (!dead) noteSnapshot(d);
+      })
+      .catch(() => {
+        if (!dead && project.files[DESIRED])
+          setStatus("Muat koneksi Studio untuk meninjau ulang snapshot dasar.");
+      });
     return () => {
       dead = true;
     };
@@ -109,7 +119,7 @@ export default function StudioBridge({
         ? `Bridge aktif · ${d.state}${d.receipt ? " · receipt " + (d.receipt.ok ? "berhasil" : "gagal/periksa Studio") : ""}`
         : "Bridge belum aktif atau kedaluwarsa.",
     );
-    if (d.snapshot) setBaseline(snapshotSchema.parse(d.snapshot));
+    if (d.snapshot) noteSnapshot(d);
     return d;
   };
   const build = () => {
@@ -213,10 +223,26 @@ export default function StudioBridge({
     <div className="rb-bridge">
       <h2>Explorer Studio, terhubung.</h2>
       <p>
-        Plugin mengirim snapshot instance dan source Luau yang dapat dibaca. AI
-        memakai file yang diimpor sebagai konteks; tidak membaca Studio
-        diam-diam. Setiap bundle wajib ditinjau di web dan diterapkan secara
-        eksplisit di Studio.
+        Setiap tugas AI di project Roblox ini otomatis membaca snapshot terbaru
+        dari Studio — pohon instance dan source Luau yang dapat dibaca — tanpa
+        perlu menekan Impor lebih dulu. Snapshot hanya terkirim saat Anda
+        menekan <strong>Kirim snapshot</strong> di plugin, dan AI tidak pernah
+        mengubah Studio langsung: perubahan tetap lewat bundle yang Anda tinjau
+        lalu terapkan sendiri.
+      </p>
+      <p role="status">
+        {snapshotInfo === null
+          ? "Memeriksa snapshot Studio…"
+          : snapshotInfo.nodes
+            ? `Konteks AI: ${snapshotInfo.nodes} instance dari snapshot Studio terakhir${
+                snapshotInfo.updatedAt
+                  ? ` (${new Date(snapshotInfo.updatedAt).toLocaleString(
+                      "id-ID",
+                      { dateStyle: "medium", timeStyle: "short" },
+                    )})`
+                  : ""
+              }. Source script yang bisa dibaca ikut dikirim pada setiap tugas AI.`
+            : "Belum ada snapshot Studio. AI baru bisa membaca source setelah Anda klik Kirim snapshot di plugin."}
       </p>
       <a
         className="rb-primary"
@@ -249,9 +275,10 @@ export default function StudioBridge({
           <strong>Tes koneksi</strong> lagi.
         </li>
         <li>
-          <strong>Kirim snapshot</strong> di Studio,{" "}
-          <strong>Impor snapshot</strong> di sini, review bundle, lalu Terapkan
-          di plugin (dua klik konfirmasi).
+          <strong>Kirim snapshot</strong> di Studio — AI langsung bisa membaca
+          source-nya. <strong>Impor snapshot</strong> di sini hanya bila Anda
+          ingin mengedit file di web; setelah itu review bundle lalu Terapkan di
+          plugin (dua klik konfirmasi).
         </li>
       </ol>
       <p>

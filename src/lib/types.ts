@@ -101,13 +101,18 @@ export interface ResearchReport {
  * the wait is explainable instead of a spinner with no story.
  */
 export interface ResearchStep {
-  phase: "search" | "read" | "open" | "tool" | "summary";
+  phase: "search" | "read" | "open" | "tool" | "summary" | "studio";
   round?: number;
   queries?: string[];
   pages?: number;
   urls?: string[];
   /** Names of the server tools that ran in this step. */
   tools?: string[];
+  /** Studio snapshot read before the first model pass (Roblox projects). */
+  scripts?: number;
+  nodes?: number;
+  /** The bridge token expired: the snapshot may no longer match Studio. */
+  stale?: boolean;
 }
 export interface Message {
   id: string;

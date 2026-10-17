@@ -28,5 +28,11 @@ export function researchStepLabel(step: ResearchStep | null): string {
     return `Menyusun ringkasan lintas halaman dari ${
       step.pages ? `${step.pages} halaman` : "halaman yang terbaca"
     }…`;
+  // Roblox: the server read the latest snapshot sent by the Studio plugin, so
+  // the answer is based on the place being built, not only imported files.
+  if (step.phase === "studio")
+    return `Membaca ${
+      step.scripts ? `${step.scripts} script` : "snapshot"
+    } dari Roblox Studio${step.stale ? " (snapshot lama — kirim ulang dari Studio)" : ""}…`;
   return "";
 }

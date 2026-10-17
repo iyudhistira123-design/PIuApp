@@ -35,6 +35,15 @@ test("the research step label says what is happening, in Indonesian", () => {
     }),
     "Membuka halaman yang diminta AI…",
   );
+  // Roblox: name how many Studio scripts the turn actually read.
+  assert.equal(
+    researchStepLabel({ phase: "studio", scripts: 5, nodes: 120 }),
+    "Membaca 5 script dari Roblox Studio…",
+  );
+  assert.equal(
+    researchStepLabel({ phase: "studio", scripts: 0, stale: true }),
+    "Membaca snapshot dari Roblox Studio (snapshot lama — kirim ulang dari Studio)…",
+  );
   // A phase this build does not know about must not invent a sentence.
   assert.equal(researchStepLabel({ phase: "entah" as any }), "");
 });
