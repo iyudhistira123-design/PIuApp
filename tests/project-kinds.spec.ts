@@ -40,6 +40,13 @@ test("project selector is integrated with composer, responsive and retains mobil
   expect(saved.files["App.tsx"]).toContain("react-native");
   expect(saved.files["package.json"]).toContain('"expo"');
   expect(saved.files["src/App.tsx"]).toBeUndefined();
+  expect(saved.files["lib/piwu.ts"]).toContain("/api/public/app/");
+  await expect(
+    page.getByRole("heading", { name: "Backend data", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("tertanam di bundle APK/IPA", { exact: false }),
+  ).toBeVisible();
   await expect(
     page.locator('iframe[title="Live preview aplikasi Anda"]'),
   ).toHaveCount(0);

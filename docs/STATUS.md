@@ -2,7 +2,18 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): backend data aplikasi pengguna (migration 016)
+## Pembaruan terbaru (17 Oktober 2026): native app memakai backend data (tahap 8)
+
+**387/387 unit/integrasi** dan **121/121 tes browser lengkap** lulus (1 worker, 8,5 menit), `tsc -b` dan `format:check` bersih, build produksi 42 detik, `check:bundle` editor **3.202.180 B** / gzip 822.909 B / 40 aset JavaScript / total 13.949.858 B — di bawah anggaran.
+
+- **Scaffold Expo sekarang punya klien data, bukan sekadar layar contoh.** Setiap project mobile mendapat `lib/piwu.ts`: `piwu.tables()`, `list`, `insert` (1–50 baris), `update`, dan `remove`, dengan tipe kolom `text`/`number`/`boolean`, galat `PiwuError` berisi status + kode server, serta pengecekan konfigurasi saat dipanggil (bukan saat modul diimpor) agar aplikasi tetap bisa menampilkan layar yang menjelaskan `.env` yang belum diisi.
+- **Konfigurasi lewat `env.example`.** Tiga variabel: `EXPO_PUBLIC_PIWU_API_URL`, `EXPO_PUBLIC_PIWU_PROJECT_ID`, `EXPO_PUBLIC_PIWU_KEY`; `.gitignore` scaffold mengecualikan `.env` dan `node_modules/.expo/dist`. Nama berkas sengaja `env.example`, bukan `.env.example`, karena skema project cloud menolak semua path dotenv — kalau tidak, project mobile gagal tersinkron (ditemukan lewat tes browser dan diperbaiki sebelum rilis).
+- **Bahaya kunci dinyatakan, bukan disembunyikan.** README, `PIWU.md`, panel native, dan dokumen jenis project menyebut bahwa `EXPO_PUBLIC_*` tertanam di bundle APK/IPA dan dapat dibaca siapa pun. Scaffold menganjurkan kunci **baca saja**; operasi tulis harus lewat server operator. Tidak ada service-role/LLM key di scaffold, dan tidak ada login pengguna akhir.
+- **Panel native menjelaskan backend.** Preview Expo menampilkan blok **Backend data**, contoh tiga variabel, tombol **Buka lib/piwu.ts**, dan peringatan yang sama; tidak ada klaim simulator/browser sebagai perangkat.
+- **Batas yang belum berubah.** Belum ada uji perangkat asli, APK/IPA, signing, EAS build, atau distribusi toko; 15 advisory transitif scaffold Expo tetap terbuka. Ini juga bukan autentikasi pengguna aplikasi.
+- **Verifikasi**: `tests/native-data.test.ts` (3 tes: berkas scaffold + tidak ada secret server; transpile `lib/piwu.ts` dan jalankan terhadap fetch palsu untuk URL/header/metode/body; batas 50 baris, pemetaan 403 `APP_KEY_READONLY`, dan pesan konfigurasi yang hilang), `tests/project-kinds.spec.ts` (project mobile benar-benar tersinkron, `lib/piwu.ts` tersimpan, panel Backend data tampil), `tests/production-hardening.test.ts` (SDK 57/React Native dan toolchain tetap). `docs/PROJECT_KINDS.md`, `docs/NATIVE_PRODUCTION_ACCEPTANCE.md`, dan README disinkronkan.
+
+## Pembaruan sebelumnya (17 Oktober 2026): backend data aplikasi pengguna (migration 016)
 
 **384/384 unit/integrasi** dan **121/121 tes browser lengkap** lulus (1 worker, 8,5 menit), `tsc -b` dan `format:check` bersih, build produksi 45 detik, `check:bundle` editor **3.202.180 B** / gzip 822.904 B / 40 aset JavaScript / total 13.943.301 B — di bawah anggaran. **Migration 016.**
 

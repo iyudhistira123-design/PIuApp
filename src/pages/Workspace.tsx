@@ -1751,6 +1751,30 @@ function WorkspaceContent({ project }: { project: Project }) {
                 >
                   Buka App.tsx
                 </button>
+                <h3>Backend data</h3>
+                <p>
+                  <code>lib/piwu.ts</code> menghubungkan aplikasi ke tabel
+                  project lewat API data (migration 016). Isi <code>.env</code>{" "}
+                  dari <code>env.example</code>: URL PiwuApp, ID project, dan
+                  kunci dari panel Database → API data.
+                </p>
+                <pre>
+                  {
+                    "EXPO_PUBLIC_PIWU_API_URL=https://app.contoh.test\nEXPO_PUBLIC_PIWU_PROJECT_ID=<uuid project>\nEXPO_PUBLIC_PIWU_KEY=piwu_sk_<kunci baca>"
+                  }
+                </pre>
+                <p>
+                  Kunci <code>EXPO_PUBLIC_*</code> tertanam di bundle APK/IPA
+                  dan dapat dibaca siapa pun. Pakai kunci <b>baca saja</b>;
+                  operasi tulis harus lewat server Anda sendiri yang menyimpan
+                  kunci tulis. Aplikasi ini tidak punya login pengguna akhir.
+                </p>
+                <button
+                  className="ws-button"
+                  onClick={() => openFile("lib/piwu.ts")}
+                >
+                  Buka lib/piwu.ts
+                </button>
               </section>
             ) : view === "Canvas" ? (
               <Suspense

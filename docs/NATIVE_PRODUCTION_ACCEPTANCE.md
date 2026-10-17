@@ -13,7 +13,7 @@ Prasyarat: project hasil ekspor, Node kompatibel SDK 57, perangkat dengan Expo G
 - [ ] Cold launch berhasil tanpa red screen, klik **Coba interaksi** menghasilkan native Alert.
 - [ ] Safe area, ukuran font, keyboard, orientasi yang didukung dan tema mengikuti konfigurasi.
 - [ ] Background/foreground, kehilangan jaringan, restart aplikasi dan error recovery tidak kehilangan data yang seharusnya disimpan.
-- [ ] Uji API aplikasi pengguna dengan akun dan backend yang benar-benar tersedia; scaffold awal tidak mempunyai backend bisnis.
+- [ ] Salin `env.example` menjadi `.env`, isi URL PiwuApp, ID project, dan kunci **baca saja** dari panel Database → API data, lalu uji `lib/piwu.ts` (daftar tabel dan baca baris) di perangkat. Scaffold **tidak punya login pengguna akhir**; operasi tulis harus diuji lewat server operator yang menyimpan kunci tulis, bukan dari kunci di APK/IPA.
 - [ ] Jika memakai native build: signing, installation APK/AAB/IPA, izin perangkat dan build release diuji terpisah. Export Hermes bukan native signing/build.
 - [ ] Simpan log Metro/perangkat yang sudah disanitasi dan video/screenshot hasil, tanpa token/QR berisi kredensial.
 
