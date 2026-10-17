@@ -21,6 +21,7 @@ import {
 import type { Dataset, DatasetMeta, DataColumn } from "../lib/data/schema";
 import { saveDraft, dropDraft, listDrafts } from "../lib/data/drafts";
 import type { AccessRole } from "../lib/cloud/types";
+import AppApiPanel from "./AppApiPanel";
 import "./data.css";
 export default function CloudDataPanel({
   projectId,
@@ -714,6 +715,7 @@ export default function CloudDataPanel({
           </div>
         </>
       )}
+      <AppApiPanel projectId={projectId} role={role} />
     </section>
   );
 }

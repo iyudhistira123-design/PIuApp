@@ -22,7 +22,8 @@ with markers(migration,table_name,function_signature) as (values
  ('013','public.marketplace_payouts','public.piwu_request_payout(uuid,integer,text,text)'),
  ('013',null,'public.piwu_purge_seller_pii(uuid)'),
  ('014','public.marketplace_disputes','public.piwu_dispute_open(uuid,uuid,text,text)'),
- ('015',null,'public.piwu_dispute_outcomes()')
+ ('015',null,'public.piwu_dispute_outcomes()'),
+ ('016','public.project_api_keys','public.piwu_app_request(text,uuid,text,jsonb)')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)
@@ -80,7 +81,8 @@ with required(name) as (values
  ('public.runtime_sandbox_slots'),
  ('public.seller_verifications'),
  ('public.marketplace_payouts'),
- ('public.marketplace_disputes')
+ ('public.marketplace_disputes'),
+ ('public.project_api_keys')
 )
 select r.name as object,
   case when c.oid is null then 'TABEL_BELUM_ADA'
@@ -113,7 +115,11 @@ with required(signature,browser_allowed) as (values
  ('public.piwu_dispute_reply(uuid,uuid,text)',false),
  ('public.piwu_dispute_withdraw(uuid,uuid)',false),
  ('public.piwu_dispute_review(uuid,uuid,uuid,text,text)',false),
- ('public.piwu_seller_balance(uuid)',false)
+ ('public.piwu_seller_balance(uuid)',false),
+ ('public.piwu_app_key_create(uuid,uuid,uuid,text,text,text)',false),
+ ('public.piwu_app_key_list(uuid,uuid)',false),
+ ('public.piwu_app_key_revoke(uuid,uuid,uuid)',false),
+ ('public.piwu_app_request(text,uuid,text,jsonb)',false)
 ), checks as (
  select *,to_regprocedure(signature) as fn from required
 )

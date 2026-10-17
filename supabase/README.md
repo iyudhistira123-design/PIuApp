@@ -7,11 +7,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 ## A. Project Supabase baru, belum pernah dipasang PiwuApp
 
 1. Pastikan project benar-benar baru/dikhususkan untuk PiwuApp. Auth dan Storage bawaan Supabase harus tersedia.
-2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–015** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
-3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–015 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
+2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–016** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
+3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–016 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
 4. Lanjutkan bootstrap admin di bagian C.
 
-**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–015 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
+**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–016 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
 
 ## B. Database lama / pernah menjalankan sebagian migration
 
@@ -37,8 +37,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 | 013    | [013_marketplace_payouts.sql](013_marketplace_payouts.sql)   | Verifikasi penjual (KYC) dan payout marketplace yang ditinjau superadmin                    |
 | 014    | [014_marketplace_disputes.sql](014_marketplace_disputes.sql) | Sengketa pembeli/penjual, pembekuan saldo, keputusan superadmin                             |
 | 015    | [015_no_refunds.sql](015_no_refunds.sql)                     | Tanpa refund: laporan ditutup/ditolak, tahanan saldo dilepas                                |
+| 016    | [016_app_data_api.sql](016_app_data_api.sql)                 | Kunci API per project untuk aplikasi hasil build, hash SHA-256, dicabut kapan saja          |
 
-Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 013. Jika baru 001–005, jalankan 006 sampai 013. File 001–006 tidak didesain untuk dijalankan berulang.
+**Migration 016 menambah tabel `project_api_keys` dan RPC `piwu_app_editor`/`piwu_app_key_create`/`piwu_app_key_list`/`piwu_app_key_revoke`/`piwu_app_request`.** Ini backend data untuk aplikasi yang dibangun pengguna: setiap project bisa punya sampai lima kunci aktif, masing-masing **baca saja** atau **baca & tulis**. Hanya hash SHA-256 yang disimpan; plaintext ditampilkan sekali saat dibuat. Kunci tidak memberi akses ke file project, storage, kode, atau akun. Semua operasi lewat RPC service-only yang memvalidasi project, kunci, cakupan, revisi, tipe, dan batas dataset yang sama dengan panel Database (20 tabel, 32 kolom, 1.000 baris, 2 MB). RLS aktif tanpa policy browser. Server membuka CORS hanya pada `/api/public/app/*`. Kunci yang dicabut langsung berhenti bekerja; `last_used_at` diperbarui paling sering sekali per 30 detik.
+
+Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 016. Jika baru 001–005, jalankan 006 sampai 016. File 001–006 tidak didesain untuk dijalankan berulang.
 
 **Migration 010 mengubah cara kredit bekerja dan sebaiknya direncanakan, bukan dijalankan diam-diam:** setelah dipasang, saldo yang ada dipindahkan menjadi satu lot dengan masa berlaku 12 bulan (referensi `migrasi-010:<user_id>`), kredit baru masuk sebagai lot bertanggal (harian hangus di akhir hari UTC, paket 2 bulan, top-up 12 bulan), dan `piwu_ensure_credits` tidak lagi memberi jatah sekali — ia mengisi jatah harian 20 (Free), 30 (Pro) atau 40 (Team) kredit. Artinya janji lama "kredit tidak kedaluwarsa" berhenti berlaku tepat saat 010 dijalankan, dan saldo akun yang menganggur lebih dari 12 bulan akan hangus. Setelah dipasang, halaman akun membaca jatah harian dari fungsi read-only `public.piwu_credit_status(uuid)`; sebelum 010 ada, halaman itu menyebut migration ini alih-alih menampilkan kuota yang tidak ditegakkan. Jalankan 010 pada jendela yang Anda pantau, lalu periksa hasilnya dengan `CHECK_INSTALLATION.sql` (marker `010` harus `MARKER_TERDETEKSI`, termasuk `piwu_credit_status`).
 

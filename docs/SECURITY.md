@@ -17,7 +17,7 @@
 
 ## Syarat sebelum produksi
 
-1. Jalankan migration 001–015 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
+1. Jalankan migration 001–016 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
 2. Konfirmasi seluruh kredensial server-only, HTTPS, allowed redirects, email/phone verification, aturan signup, body/concurrency limits, proxy trust yang sempit, HSTS/CSP dan logging teredaksi.
 3. Produksi memakai rate limiter dan admission sandbox PostgreSQL (migration 007) serta fail-closed ketika database tidak tersedia. SDK handle tetap lokal dan memerlukan sticky routing; belum failover transparan. Kuota bersama mencakup sandbox interaktif, bukan build sekali pakai. Antrean kredit/pembayaran menggunakan database; uji crash recovery, konkurensi dan kapasitas pada infrastruktur sebenarnya.
 4. Uji invoice sukses/gagal/duplicate/out-of-order/refund/chargeback. Partial refund, Xendit refund di luar invoice callback, checkout dengan respons provider hilang, fraud, pajak, dispute dan payout belum otomatis. Jangan aktifkan pembayaran live tanpa rekonsiliasi/runbook.
@@ -28,6 +28,7 @@
 9. Sengketa marketplace tidak mengirim uang dan **PiwuApp tidak menyediakan refund**. Pembeli melapor sekali per pesanan (30 hari), penjual membalas sekali, dan hanya superadmin yang menutup atau menolak laporan. Status `open`/`seller_replied` menahan bagian penjual dari penjualan itu; menutup/menolak/menarik laporan melepasnya tanpa mengembalikan uang. RLS membatasi baris sengketa ke pembeli/penjual yang bersangkutan. Callback provider yang menyatakan `refunded` tetap ditangani `piwu_apply_payment` sebagai pembatalan/chargeback di luar kendali aplikasi, bukan fitur refund PiwuApp.
 10. Uji backup/restore dan key rotation; rekaman lokal/cloud dan transaksi memerlukan kebijakan bisnis/penghapusan akun yang eksplisit.
 11. Rencana harga/tier belum menjadi sistem entitlement fitur lengkap. Snapshot UI, label plan dan data pemakaian bukan bukti pembayaran; gunakan ledger/provider settlement.
+12. **Kunci API data aplikasi (migration 016)** hanya menyentuh dataset satu project, maksimal lima kunci aktif, dan hanya hash SHA-256 yang disimpan setelah plaintext ditampilkan sekali. Kunci **bukan identitas pengguna akhir**: tidak ada login aplikasi, izin per baris, kuota per kunci, atau audit per permintaan. Kunci yang ditanam di aplikasi web atau place Roblox dapat dibaca pengguna; gunakan kunci baca saja di klien dan simpan kunci tulis di server operator. CORS `*` hanya dibuka untuk `/api/public/app/*`, dan semua penulisan tetap lewat RPC service-only yang memvalidasi cakupan, tipe, ukuran, dan revisi.
 
 ## Bukti pengujian
 

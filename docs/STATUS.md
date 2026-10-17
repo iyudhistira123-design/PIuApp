@@ -2,7 +2,20 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): transaksi final, tanpa refund (migration 015)
+## Pembaruan terbaru (17 Oktober 2026): backend data aplikasi pengguna (migration 016)
+
+**384/384 unit/integrasi** dan **121/121 tes browser lengkap** lulus (1 worker, 8,5 menit), `tsc -b` dan `format:check` bersih, build produksi 45 detik, `check:bundle` editor **3.202.180 B** / gzip 822.904 B / 40 aset JavaScript / total 13.943.301 B — di bawah anggaran. **Migration 016.**
+
+- **Aplikasi hasil build sekarang punya jalur data sendiri.** Owner/Editor membuat sampai **lima kunci aktif per project** di panel Database → **API data untuk aplikasi Anda**. Setiap kunci hanya bisa **baca saja** atau **baca & tulis**, dan hanya memberi akses ke tabel dataset project itu — bukan kode, storage, akun, atau RPC lain.
+- **Plaintext sekali, hash selamanya.** Server membuat `piwu_sk_` + 24 byte acak base64url, menyimpan SHA-256 di `project_api_keys.key_hash`, dan menampilkan nilai asli hanya pada respons 201. Daftar kunci tidak pernah memuat hash; kunci yang hilang dibuat ulang lalu yang lama dicabut.
+- **Pencabutan langsung berlaku.** `revoked_at` diperiksa pada setiap permintaan; `last_used_at` ditulis paling sering sekali per 30 detik agar GET tidak menulis terus. Tidak ada cache kunci di server.
+- **HTTP sempit dan eksplisit.** `GET /api/public/app/:projectId` (daftar tabel), `GET/POST /api/public/app/:projectId/:tableId`, `PATCH/DELETE /api/public/app/:projectId/:tableId/:rowId`; kunci lewat `x-piwu-key` atau Bearer. CORS `*` + preflight dibuka **hanya** pada prefix itu. Rate limit per IP 120 baca/menit dan 60 tulis/menit; insert 1–50 baris. Galat dipetakan ke `APP_DATA_SETUP`, `APP_KEY_REQUIRED/INVALID/READONLY/LIMIT`, `APP_NOT_FOUND`, `APP_FORBIDDEN`, `APP_INVALID`, `DATA_INVALID`, `DATA_LIMIT`.
+- **Validasi sama dengan panel Database.** Tipe `text`/`number`/`yesno`/`date`, 20 tabel/project, 32 kolom, 1.000 baris, 2 MB, 4.000 karakter; revisi naik pada setiap tulis sehingga panel pengguna melihat konflik biasa. Payload yang salah ditolak seluruhnya.
+- **UI jujur tentang risikonya.** Panel menampilkan kunci sekali dengan tombol salin, peringatan bahwa kunci tidak bisa ditampilkan lagi, saran memakai kunci baca saja di klien (DevTools/Roblox dapat membacanya), daftar kunci dengan waktu dibuat/terakhir dipakai, konfirmasi dua langkah sebelum mencabut, serta contoh `curl` dan `HttpService` untuk Roblox.
+- **Batas yang tidak diklaim.** Tidak ada autentikasi pengguna akhir, izin per baris/kolom, kuota per kunci, webhook, realtime, atau audit per permintaan. Kunci tidak menggantikan RLS anggota workspace.
+- **Verifikasi**: `tests/app-data.test.ts` (PGlite 001–016: peran Owner/Editor/Viewer/outsider, hash tidak bocor, kunci baca tidak bisa menulis, insert/update/delete, validasi tipe/kolom/50 baris, isolasi project, pencabutan, batas lima kunci), `tests/app-data-api.test.ts` (HTTP: pembuatan, secret hanya sekali, CORS/preflight, pemetaan galat, kunci dicabut langsung 401, pesan setup saat 016 belum dipasang), `tests/app-api-ui.spec.ts` (UI: buat kunci baca, tampil sekali, sembunyikan permanen, cabut dua langkah). Installer, `CHECK_INSTALLATION.sql`, `supabase/README.md`, `docs/PROJECT_DATA.md`, `docs/SECURITY.md`, `docs/ADMIN.md`, `docs/NATIVE_PRODUCTION_ACCEPTANCE.md`, dan README diperbarui ke **001–016**.
+
+## Pembaruan sebelumnya (17 Oktober 2026): transaksi final, tanpa refund (migration 015)
 
 **382/382 unit/integrasi** dan **120/120 tes browser lengkap** lulus (1 worker, 9,8 menit), `tsc -b` dan `format:check` bersih, build produksi 68 detik, `check:bundle` editor **3.202.180 B** / gzip 822.900 B / 40 aset JavaScript / total 13.935.714 B — di bawah anggaran. **Migration 015.**
 
