@@ -2,7 +2,7 @@
 
 Pilih Web App / Aplikasi Mobile / Roblox Game melalui selector di dalam composer landing atau formulir Project baru. Pilihan disimpan ketika pengguna perlu login. Template web tetap membuat Web App; project lama tanpa `kind` tetap kompatibel.
 
-- **Web App**: React/TypeScript/Vite; editor, iframe preview, canvas/design web, sandbox dan hosting web yang sudah ada.
+- **Web App**: React/TypeScript/Vite; editor, iframe preview, canvas/design web, dan sandbox. Tidak ada hosting: kode keluar lewat Export ZIP.
 - **Aplikasi Mobile**: scaffold Expo SDK 57 / React Native dengan `App.tsx`, entry `index.ts`, konfigurasi Expo dan TypeScript. Ekspor ZIP → `npm install` → `npx expo start`; jalankan di Expo Go versi kompatibel/development build/perangkat. Browser tidak menampilkan simulator native palsu. EAS signing/build, QR tunnel otomatis, APK/IPA, dan distribusi toko belum disediakan. Runtime E2B/Vite dan hosting web ditolak untuk project native agar source tidak diam-diam dikonversi menjadi web.
 - **Roblox Game**: Luau, Explorer layanan Studio, builder geometri/mesh dasar dan bridge plugin. Baca ROBLOX.md untuk pairing, migration 006, batas instance/property, review dan konflik.
 

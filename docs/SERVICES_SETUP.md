@@ -86,15 +86,11 @@ AI menerima maksimal 3 lampiran, masing-masing 4 MB: PNG/JPG/WebP, PDF teks (20 
 - Perubahan remote memicu antrean sync yang sama dengan fallback polling. Konflik revisi tetap eksplisit; ini **bukan CRDT atau penggabungan karakter simultan**.
 - Komentar cloud memiliki author_id dari JWT, terpisah dari komentar demo dalam snapshot notebook.
 
-## 5. Publish, domain, analytics
+## 5. Publish, domain, analytics — tidak tersedia
 
-- Isi `NETLIFY_TOKEN`, E2B variables, dan `APP_BASE_URL`. Owner saja yang bisa publish/domain/rollback/unpublish. Biaya publish 5 kredit.
-- Queue tersimpan di PostgreSQL, satu job aktif per project; lease 15 menit, maksimal tiga pengambilan ulang untuk worker yang hilang. Proses gagal mengembalikan kredit; recovery reservations berjalan setiap menit, setelah batas 35 menit. Antrean yang menunggu >1 jam dibatalkan.
-- Build Vite menghasilkan `dist` maksimal 25 MB/500 file. Lighthouse performa, SEO, dan aksesibilitas masing-masing harus ≥60. Ini gate dasar, **bukan audit keamanan atau jaminan kualitas**.
-- Setelah upload, status hosting harus dikonfirmasi sebelum deployment/job/settlement kredit ditandai selesai dalam transaksi SQL. Timeout dapat berarti provider sudah menerima upload; periksa dashboard hosting sebelum mengulang. Retry tidak menjamin exactly-once resource pada provider eksternal.
-- Subdomain menggunakan domain hosting Netlify, **bukan klaim kepemilikan `piwuapp.app`**. Domain custom memerlukan DNS milik pengguna. Ikuti CNAME yang ditampilkan; apex menggunakan petunjuk DNS provider. **Periksa SSL** baru menandai aktif ketika sertifikat `issued` mencakup hostname.
-- **Hentikan publikasi** menghapus site hosting, bukan kode workspace. Penghapusan project juga membuat `hosting_cleanup_jobs`; worker mencoba menghapus site hingga 5 kali. Jika provider mati/token dicabut, website dapat tetap online sampai cleanup berhasil. Operator wajib memonitor dan menangani antrean gagal.
-- Analytics tanpa cookie, DNT/GPC dihormati. IP mentah tidak disimpan. `ANALYTICS_HASH_KEY` menghasilkan hash perangkat-harian berotasi; bukan jumlah orang unik. Referrer hanya hostname, path tanpa query. Ringkasan maksimal 10.000 event terbaru dalam 30 hari, dengan label sampling. Retensi 31 hari dibersihkan oleh worker. Statistik tidak tahan bot/spoofing untuk penggunaan finansial.
+- PiwuApp adalah **app builder**, bukan layanan hosting: tidak ada deploy website, domain kustom, SSL, rollback, atau analytics pengunjung. `NETLIFY_TOKEN`, route `/publish`, `/deployments`, `/analytics`, dan worker publish sudah dihapus dari server.
+- Jalan keluar kode tetap ada: **Export ZIP** di toolbar workspace (dan menu project). Project Roblox dipublikasikan lewat **Roblox Studio/plugin**, bukan lewat PiwuApp; build native memakai Expo/EAS di mesin Anda.
+- Tabel lama `project_sites`, `deployments`, `publish_jobs`, dan `analytics_events` dibiarkan **inert** di skema 003 supaya migration tidak berubah; aplikasi tidak lagi membaca atau menulisnya. Template marketplace baru selalu menyimpan `preview_url` kosong.
 
 ## 6. Pembayaran, kredit, referral, marketplace
 
@@ -132,10 +128,10 @@ Acceptance wajib sebelum go-live:
 - Empat akun: Owner/Editor/Viewer/outsider, termasuk pencabutan akses, token palsu/expired, dan dua akun dalam browser yang sama.
 - Supabase Auth/PostgREST/Storage/Realtime sungguhan; login Google dan WhatsApp pada perangkat penerima.
 - AI teks/gambar/PDF, Plan, stop/disconnect, secret output, insufisien kredit, provider timeout.
-- Sandbox install, edit melalui shell, import/restore, expiry, stop; Lighthouse berhasil dan gagal; publish/rollback/unpublish/domain SSL; hapus project saat build.
+- Sandbox install, edit melalui shell, import/restore, expiry, stop; Lighthouse berhasil dan gagal; Export ZIP; hapus project saat build.
 - Provider payment sukses, pending, expired, callback berulang/out-of-order, amount mismatch, chargeback, dan rekonsiliasi gagal jaringan. Jangan gunakan kartu/dompet nyata untuk tes pertama.
 - Beli template sebagai akun kedua; sumber tidak dapat diambil sebelum bayar; revoke share rekaman; tidak ada secret muncul pada bundle/log/preview.
-- Pantau `publish_jobs`, `hosting_cleanup_jobs`, `credit_reservations`, `payment_orders`, `webhook_receipts`; siapkan alert, backup, kebijakan retensi, dan runbook operator.
+- Pantau `credit_reservations`, `payment_orders`, `webhook_receipts`; siapkan alert, backup, kebijakan retensi, dan runbook operator.
 
 Lingkungan coding ini belum memiliki akun/kredensial layanan tersebut dan koneksi keluar dibatasi. Hasil unit/mock/PostgreSQL lokal tidak boleh dianggap verifikasi provider live.
 

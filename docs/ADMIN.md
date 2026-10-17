@@ -15,25 +15,25 @@ Panel `/admin` mengelola platform, bukan panel admin aplikasi yang dibuat penggu
 
 ## Peran
 
-| Tindakan                                                              | Auditor | Operator | Superadmin |
-| --------------------------------------------------------------------- | ------- | -------- | ---------- |
-| Ringkasan, daftar pengguna/transaksi, operasional, audit              | Baca    | Baca     | Baca       |
-| Broadcast, moderasi template, kunci project                           | —       | Ya       | Ya         |
-| Unpublish, batal antrean publish, retry cleanup, cabut tautan rekaman | —       | Ya       | Ya         |
-| Rekonsiliasi status pembayaran ke provider                            | —       | Ya       | Ya         |
-| Tangguhkan akun, sesuaikan kredit, hapus project                      | —       | —        | Ya         |
-| Konfigurasi situs/layanan dan peran admin                             | —       | —        | Ya         |
+| Tindakan                                                 | Auditor | Operator | Superadmin |
+| -------------------------------------------------------- | ------- | -------- | ---------- |
+| Ringkasan, daftar pengguna/transaksi, operasional, audit | Baca    | Baca     | Baca       |
+| Broadcast, moderasi template, kunci project              | —       | Ya       | Ya         |
+| Cabut tautan rekaman                                     | —       | Ya       | Ya         |
+| Rekonsiliasi status pembayaran ke provider               | —       | Ya       | Ya         |
+| Tangguhkan akun, sesuaikan kredit, hapus project         | —       | —        | Ya         |
+| Konfigurasi situs/layanan dan peran admin                | —       | —        | Ya         |
 
 Peran berasal dari `platform_admins`, tidak dari `user_metadata`. JWT diverifikasi ke Supabase Auth di server. Mutasi memeriksa ulang peran di database; pencabutan peran tidak bergantung pada login ulang. Superadmin terakhir tidak boleh dicabut/diturunkan. Cabut peran admin terlebih dahulu sebelum menangguhkan akun tersebut.
 
 ## Cakupan panel
 
 - **Pengguna:** daftar akun Auth, identitas, status verifikasi/penangguhan, saldo, peran. Saldo awal tetap mengikuti ledger layanan. Penyesuaian ±10.000 kredit per tindakan; hasil negatif ditolak.
-- **Project:** metadata, pemilik, kunci/buka kunci, unpublish, hapus permanen dengan konfirmasi UUID. Panel tidak membuka file, secrets, atau seluruh snapshot kode pengguna.
+- **Project:** metadata, pemilik, kunci/buka kunci, hapus permanen dengan konfirmasi UUID. Panel tidak membuka file, secrets, atau seluruh snapshot kode pengguna.
 - **Transaksi:** riwayat pesanan dan rekonsiliasi berdasarkan respons provider asli. Tidak ada tombol “tandai lunas” secara manual. Ini bukan endpoint refund, payout, KYC, atau settlement bank.
 - **Marketplace:** arsipkan/tayangkan template. Harga, revenue ledger, dan entitlement tetap mengikuti sistem layanan. Moderasi manual, bukan pemindaian konten otomatis.
-- **Operasional:** kesiapan konfigurasi, 30 publish jobs/cleanup jobs/recording shares terbaru. Batalkan hanya job `queued`; worker yang sedang menjalankan provider eksternal tidak bisa dihentikan secara atomik. Token share, secret, dan snapshot build tidak ditampilkan.
-- **Pengaturan situs:** judul/deskripsi hero, email dukungan, mode pemeliharaan, serta sakelar AI/sandbox/publish/checkout/marketplace. Judul/deskripsi kosong menggunakan konten bawaan. Pengaturan ini belum menjadi CMS untuk seluruh copy FAQ/pricing, atau editor tarif produk.
+- **Operasional:** kesiapan konfigurasi, kuota/rate sandbox, dan 30 recording share terbaru. Antrean publish/cleanup dan aksinya dihapus 17 Oktober 2026 karena PiwuApp tidak menghosting hasil build. Token share, secret, dan snapshot build tidak ditampilkan.
+- **Pengaturan situs:** judul/deskripsi hero, email dukungan, mode pemeliharaan, serta sakelar AI/sandbox/checkout/marketplace. Judul/deskripsi kosong menggunakan konten bawaan. Pengaturan ini belum menjadi CMS untuk seluruh copy FAQ/pricing, atau editor tarif produk.
 - **Administrator dan audit:** berikan/cabut peran dengan UUID pengguna, alasan, identitas aktor, target dan waktu. Daftar menggunakan pagination 25 data dengan pencarian server, filter status/tanggal/pelaku yang relevan dan urutan waktu + ID stabil. Ekspor CSV hanya halaman yang dimuat, bukan semua data, serta melindungi formula spreadsheet.
 
 ## Diagnostik dan pemeriksaan terbaru
@@ -61,9 +61,8 @@ Laporan pengujian, batas multi-instance, dan temuan dependency native: [ADMIN_PR
 - Broadcast/settings memakai optimistic revision; stale update ditolak, bukan menimpa diam-diam.
 - Penangguhan diperiksa API dan restrictive RLS pada tabel saat migration 005 diterapkan. Workspace SECURITY DEFINER RPC juga dibungkus agar JWT lama tidak melewati pemeriksaan. Tabel baru pada migration berikutnya harus diberi kebijakan setara.
 - Kunci project menghentikan mutasi workspace/dataset dan API project. Membaca/mengekspor data yang diizinkan tetap tersedia. Ini tidak menghapus salinan yang sudah diunduh atau data lokal browser.
-- Pemeliharaan memblokir penulisan workspace/dataset dan mutasi layanan baru. Admin, callback pembayaran, pengumuman dan cleanup tetap dapat berjalan. Beberapa data privat lokal/preferensi tetap dapat diedit offline; sinkronisasi cloud ditolak sampai dibuka kembali.
-- Worker mengecek suspension/project lock sebelum build dan sebelum mengirim ke hosting. Pause sandbox juga menjeda build publish. Request eksternal yang sudah berjalan bisa tetap selesai; tidak ada klaim cancellation/exactly-once provider.
-- Unpublish menolak project dengan job queued/building, mengunci project, menghapus pemetaan hosting dan memasukkan penghapusan remote ke antrean. **Website belum dianggap offline sampai cleanup selesai.** Membuka kunci kembali mengizinkan publish baru. Retry cleanup hanya menjadwalkan ulang, bukan membuktikan site terhapus.
+- Pemeliharaan memblokir penulisan workspace/dataset dan mutasi layanan baru. Admin, callback pembayaran, dan pengumuman tetap dapat berjalan. Beberapa data privat lokal/preferensi tetap dapat diedit offline; sinkronisasi cloud ditolak sampai dibuka kembali.
+- Pekerjaan build/sandbox memeriksa suspension/project lock sebelum berjalan. Request eksternal yang sudah berjalan bisa tetap selesai; tidak ada klaim cancellation/exactly-once provider. Hosting, unpublish, dan cleanup dihapus 17 Oktober 2026.
 - Hapus project menolak build berjalan dan mengembalikan reservasi kredit job queued dalam transaksi sebelum cascade delete. Penghapusan permanen; backup terlebih dahulu.
 - Pada produksi, skema suspension/lock/settings yang hilang memblokir operasi (fail-closed). Development mempertahankan kompatibilitas deployment bertahap. Terapkan 001–010 dan verifikasi hak RPC/RLS sebelum mengandalkan kontrol admin.
 

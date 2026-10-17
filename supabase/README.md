@@ -20,18 +20,18 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 3. Cocokkan dengan riwayat perubahan database. Jalankan **hanya migration yang belum dipasang**, satu file penuh per query, sesuai urutan di bawah.
 4. Jalankan pemeriksaan kembali. Jika SQL Editor masih berada dalam transaksi gagal, jalankan `ROLLBACK;` sebelum mencoba query lain. Jangan mengganti error dengan `DROP TABLE`, reset database atau menonaktifkan RLS.
 
-| Urutan | File kanonis                                                 | Isi utama                                                       |
-| ------ | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| 001    | [001_schema.sql](001_schema.sql)                             | Tabel fondasi project, RLS dan bucket privat                    |
-| 002    | [002_workspace_sync.sql](002_workspace_sync.sql)             | Snapshot workspace, revisi dan RPC sinkronisasi                 |
-| 003    | [003_services.sql](003_services.sql)                         | Kredit, pembayaran, undangan, publish, storage, rekaman         |
-| 004    | [004_project_data.sql](004_project_data.sql)                 | Dataset privat, validasi dan konflik revisi                     |
-| 005    | [005_admin.sql](005_admin.sql)                               | Peran admin, broadcast, audit, suspension, lock dan maintenance |
-| 006    | [006_studio_bridge.sql](006_studio_bridge.sql)               | Bridge Roblox Studio yang hanya diakses server                  |
-| 007    | [007_runtime_coordination.sql](007_runtime_coordination.sql) | Rate limit dan admission sandbox bersama                        |
-| 008    | [008_admin_directory.sql](008_admin_directory.sql)           | Pencarian akun admin melalui RPC service-only                   |
-| 009    | [009_search_cache.sql](009_search_cache.sql)                 | Cache pencarian bersama di atas tabel service-only              |
-| 010    | [010_credit_lots.sql](010_credit_lots.sql)                   | Kredit bentuk lot: jatah harian, rollover paket, kedaluwarsa    |
+| Urutan | File kanonis                                                 | Isi utama                                                                                   |
+| ------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| 001    | [001_schema.sql](001_schema.sql)                             | Tabel fondasi project, RLS dan bucket privat                                                |
+| 002    | [002_workspace_sync.sql](002_workspace_sync.sql)             | Snapshot workspace, revisi dan RPC sinkronisasi                                             |
+| 003    | [003_services.sql](003_services.sql)                         | Kredit, pembayaran, undangan, storage, rekaman (tabel publish lama, tidak dipakai aplikasi) |
+| 004    | [004_project_data.sql](004_project_data.sql)                 | Dataset privat, validasi dan konflik revisi                                                 |
+| 005    | [005_admin.sql](005_admin.sql)                               | Peran admin, broadcast, audit, suspension, lock dan maintenance                             |
+| 006    | [006_studio_bridge.sql](006_studio_bridge.sql)               | Bridge Roblox Studio yang hanya diakses server                                              |
+| 007    | [007_runtime_coordination.sql](007_runtime_coordination.sql) | Rate limit dan admission sandbox bersama                                                    |
+| 008    | [008_admin_directory.sql](008_admin_directory.sql)           | Pencarian akun admin melalui RPC service-only                                               |
+| 009    | [009_search_cache.sql](009_search_cache.sql)                 | Cache pencarian bersama di atas tabel service-only                                          |
+| 010    | [010_credit_lots.sql](010_credit_lots.sql)                   | Kredit bentuk lot: jatah harian, rollover paket, kedaluwarsa                                |
 
 Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007, 008, 009, lalu 010. Jika baru 001–005, jalankan 006 sampai 010. File 001–006 tidak didesain untuk dijalankan berulang.
 
