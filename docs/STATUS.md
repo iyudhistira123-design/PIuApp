@@ -2,7 +2,20 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): AI membaca isi Roblox Studio secara otomatis
+## Pembaruan terbaru (17 Oktober 2026): benefit paket disamakan dengan yang benar-benar tersedia
+
+**350/350 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,3 menit), `tsc -b` dan `format:check` bersih, build produksi 43,62 detik, `check:bundle` editor **3.201.506 B** / gzip 822.642 B / 40 aset / total 13.889.463 B — di bawah anggaran.
+
+Daftar benefit Free, Pro, dan Team kini dibangun dari sumber yang sama dengan harga dan kredit:
+
+- **Satu sumber**: `planBenefits()` di `src/lib/dashboard/plans.ts` membaca `PLAN_LADDER` lalu dipakai kartu `/#pricing` dan kartu paket `/upgrade` (`.plan-benefits`), sehingga kredit, tarif per kredit, bonus harian, dan masa berlaku tidak bisa berbeda dari checkout.
+- **Free**: tanpa biaya bulanan dan tanpa kartu kredit, template web/Roblox/mobile, editor + preview + Export ZIP, project lokal maupun cloud tanpa batas, kolaborasi anggota dengan peran Viewer/Editor, dan AI Plan/Ask/Builder saat provider aktif. Klaim **"3 project lokal"** dihapus: tidak ada batas project yang ditegakkan.
+- **Pro**: semua yang ada di Free, 1.500 kredit/bulan (Rp 133/kredit), bonus 30 kredit/hari, kredit paket bergulir tetapi hangus 2 bulan setelah terbit. Klaim "Project tanpa batas" dipindah ke Free karena memang berlaku untuk semua paket.
+- **Team**: semua yang ada di Pro, 4.500 kredit/bulan (Rp 111/kredit), bonus 40 kredit/hari, kredit paket hangus 2 bulan. Klaim **"Workspace bersama"**, **"Role & kontrol akses"**, dan **"Tagihan terpusat"** dihapus: kolaborasi/peran tersedia di semua paket, sedangkan tagihan terpusat belum ada.
+- **Harga jujur**: toggle **"Tahunan −20%"** dihapus karena katalog hanya menjual paket 30 hari — landing tidak lagi menampilkan Rp 159.200/Rp 399.200 yang tidak bisa dibeli. Kartu Free menulis **"Gratis"** (bukan "Rp 0"), dan catatan harga menyatakan semua paket memakai builder yang sama serta tidak ada fitur yang dikunci per paket.
+- **Penjaga**: `tests/upgrade.test.ts` mencocokkan setiap angka benefit dengan `PLAN_LADDER` dan menolak klaim lama muncul kembali; `tests/upgrade.spec.ts` memeriksa kartu landing dan `/upgrade`; `tests/landing-motion.spec.ts` memastikan tidak ada toggle tahunan dan harga hanya 199.000/499.000; `tests/responsive-ui.spec.ts` tidak lagi menguji toggle yang dihapus. `docs/SERVICES_SETUP.md` yang masih menulis Pro 600/Team 2.000 kredit diperbarui ke tangga 010.
+
+## Pembaruan sebelumnya (17 Oktober 2026): AI membaca isi Roblox Studio secara otomatis
 
 **349/349 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,5 menit), `tsc -b` dan `format:check` bersih, build produksi 47,61 detik, `check:bundle` editor **3.201.506 B** / gzip 822.643 B / 40 aset / total 13.888.762 B — di bawah anggaran.
 
