@@ -28,6 +28,7 @@ Prasyarat: mesin Windows/macOS dengan Studio, tempat uji privat, deployment HTTP
 - [ ] Draft belum diterima tidak mengubah Studio; script baru tetap dinonaktifkan sampai peninjauan yang sesuai.
 - [ ] Edit objek langsung di Studio sebelum apply: konflik ditolak tanpa menimpa perubahan lokal.
 - [ ] Uji Undo, kegagalan di tengah apply, reconnect dan retry; jangan menganggap apply/Undo sepenuhnya atomik.
+- [ ] Nyatakan **Sinkron langsung** menyala, kirim satu bundle dari PiwuApp, dan pastikan plugin menerapkannya dalam ~5 detik, mengirim snapshot baru, lalu mematikan mode saat sengaja dibuat konflik (edit objek lokal sebelum bundle di-claim). Tidak boleh ada percobaan ulang otomatis setelah kegagalan.
 - [ ] Jalankan **Play Test sungguhan**, periksa server/client Output, perilaku, collision dan physics. Geometri Three.js tidak membuktikan semua ini.
 - [ ] Mesh OBJ diimpor manual dan material/ukuran diperiksa. Tidak ada automatic asset/game publish yang diklaim.
 

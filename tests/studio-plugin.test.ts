@@ -1290,6 +1290,114 @@ test("the optional asset upload answers honestly when the server has no Open Clo
   }
 });
 
+const liveBody = (claimBody: string, runLimit: number) => `
+  ${connect()}
+  env.fake.click("send")
+  local requests = env.fake.decode(env.fake.requestsJson())
+  local snapshot = env.fake.decode(requests[#requests].Body)
+  local function idOf(name)
+    for _, node in ipairs(snapshot.nodes) do
+      if node.name == name then return node.id end
+    end
+  end
+  local bundle = {
+    version = 1,
+    id = "${BUNDLE_ID}",
+    baseSnapshotId = snapshot.snapshotId,
+    placeId = snapshot.placeId,
+    changes = {{
+      op = "update",
+      node = {
+        id = idOf("Crate"),
+        parentId = idOf("Base"),
+        name = "Crate Besar",
+        className = "Part",
+        properties = {position = {3.5, 1, -2}, rotation = {0, 45, 0}, size = {4, 4, 4}, color = "#c02020", anchored = true, shape = "Block"},
+      },
+    }},
+  }
+  env.fake.setResponses(env.fake.encode({
+    pending = {body = env.fake.encode({state = "queued", bundle = bundle})},
+    claim = ${claimBody},
+    ack = {body = '{"recorded":true}'},
+    snapshot = {body = '{"received":true}'},
+  }))
+  local liveBefore = env.fake.internals.ui.buttons.liveSync.Text
+  env.fake.click("liveSync")
+  local liveAfter = env.fake.internals.ui.buttons.liveSync.Text
+  local liveRun = env.fake.runSpawned(${runLimit})
+  local tree = env.fake.decode(env.fake.treeJson())
+  local after = {status = env.fake.statusText(), badge = env.fake.internals.waiting(), requests = env.fake.decode(env.fake.requestsJson()), recordings = env.fake.recordingsCount()}
+  return env.fake.json({
+    liveBefore = liveBefore,
+    liveAfter = liveAfter,
+    liveRun = liveRun,
+    tree = tree,
+    after = after,
+    status = env.fake.statusText(),
+    liveNow = env.fake.internals.live(),
+  })
+`;
+
+test("live sync is opt-in: off by default, then applies a sent bundle and snapshots back", async () => {
+  const out = await runScenario({
+    tree: PLACE,
+    responses: { snapshot: { body: '{"received":true}' } },
+    body: liveBody(`{body = '{"claimed":true}'}`, 2),
+  });
+  assert.match(out.liveBefore, /Sinkron langsung PiwuApp → Studio: TIDAK/);
+  assert.match(out.liveAfter, /YA · terapkan dalam ~5 detik/);
+  assert.equal(out.liveRun, "ok");
+  assert.ok(JSON.stringify(out.tree).includes("Crate Besar"));
+  assert.deepEqual(requestsOf(out.after).map(pathOf).slice(-5), [
+    "pending",
+    "claim",
+    "ack",
+    "snapshot",
+    "pending",
+  ]);
+  assert.equal(out.after.badge, false);
+  assert.match(out.after.status, /Sinkron langsung: 1 perubahan diterapkan/);
+  assert.equal(out.after.recordings, 1);
+  assert.equal(out.liveNow, true, "live tetap menyala setelah keberhasilan");
+  assert.equal(
+    requestsOf(out.after).filter((r) => pathOf(r) === "claim").length,
+    1,
+    "bundle yang sama tidak diterapkan dua kali",
+  );
+});
+
+test("a rejected claim turns live sync off and never retries or mutates", async () => {
+  const out = await runScenario({
+    tree: PLACE,
+    responses: { snapshot: { body: '{"received":true}' } },
+    body: liveBody(
+      `{ok = false, status = 409, body = '{"error":"Snapshot telah berubah."}'}`,
+      1,
+    ),
+  });
+  assert.match(out.liveBefore, /TIDAK/);
+  assert.equal(out.liveRun, "ok");
+  assert.equal(out.liveNow, false, "kegagalan mematikan live");
+  assert.match(out.status, /DIMATIKAN/);
+  assert.match(out.status, /Snapshot telah berubah/);
+  assert.ok(
+    JSON.stringify(out.tree).includes('"name":"Crate"'),
+    "place tidak berubah saat claim ditolak",
+  );
+  assert.equal(
+    requestsOf(out.after).filter((r) => pathOf(r) === "claim").length,
+    1,
+    "claim hanya dicoba sekali",
+  );
+  assert.equal(
+    requestsOf(out.after).filter((r) => pathOf(r) === "snapshot").length,
+    1,
+    "tidak ada snapshot balik setelah kegagalan",
+  );
+  assert.equal(out.liveNow, false);
+});
+
 /**
  * The same fixture tests/studio-api.test.ts uses: authenticated routes, a fake
  * database, and a Roblox project that really owns a scene and one asset id.

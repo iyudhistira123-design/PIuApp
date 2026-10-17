@@ -4,7 +4,7 @@
 			<string name="Name">PiwuStudio</string>
 			<bool name="Disabled">false</bool>
 			<ProtectedString name="Source"><![CDATA[--!strict
--- PiwuApp Studio Bridge v2.1.0. Install as a LOCAL plugin; never as a game Script.
+-- PiwuApp Studio Bridge v2.2.0. Install as a LOCAL plugin; never as a game Script.
 -- HTTP goes only to the HTTPS origin you enter, under Studio's plugin permission
 -- prompt (View > Plugin Management). Tokens stay in memory for 30 minutes.
 -- Does not run imported code, require modules, publish games, or use loadstring.
@@ -12,7 +12,7 @@
 -- What it does: sends a snapshot of the place for review in PiwuApp, applies the
 -- reviewed bundle (with Undo support), and builds the project's scene.roblox.json
 -- in Studio so a model made from a photo lands as real Part/Model instances.
-local VERSION = "2.1.0"
+local VERSION = "2.2.0"
 local Http = game:GetService("HttpService")
 local History = game:GetService("ChangeHistoryService")
 local Scripts = game:GetService("ScriptEditorService")
@@ -54,7 +54,7 @@ local function element(className, text, height)
  e.TextWrapped = true; e.Text = text; e.Parent = frame
  return e
 end
-local note = element("TextLabel", "EDIT MODE · Snapshot lalu review. Tidak ada sinkronisasi atau eksekusi script otomatis. Simpan salinan place sebelum menerapkan perubahan.", 76)
+local note = element("TextLabel", "EDIT MODE · Default: tidak ada perubahan otomatis. Opsi Sinkron langsung menerapkan bundle yang sudah Anda kirim dari PiwuApp dalam ~5 detik. Simpan salinan place sebelum menerapkan.", 92)
 local httpNote = element("TextLabel", "", 0)
 httpNote.TextXAlignment = Enum.TextXAlignment.Left; httpNote.Visible = false
 -- Grows with its own text: the old fixed height of 0 made the help invisible.
@@ -75,6 +75,7 @@ local sceneApplyButton = element("TextButton", "Bangun scene hasil tinjauan", 40
 local sceneReplace = element("TextButton", "Ganti folder PiwuScene yang sudah ada: YA", 34)
 local sceneInSelection = element("TextButton", "Pakai objek terpilih sebagai induk: TIDAK", 34)
 local autoPoll = element("TextButton", "Periksa antrean otomatis tiap 20 detik: YA (hanya memberi tahu)", 34)
+local liveSync = element("TextButton", "Sinkron langsung PiwuApp → Studio: TIDAK", 34)
 local clearButton = element("TextButton", "Putuskan & hapus token lokal", 36)
 local status = element("TextLabel", "Belum terhubung. Versi plugin " .. VERSION .. ".", 88)
 status.TextYAlignment = Enum.TextYAlignment.Top
@@ -90,6 +91,7 @@ local confirmUntil = 0
 local scenePlan = nil
 local sceneConfirmUntil = 0
 local replaceScene, inSelection, pollEnabled = true, false, true
+local liveEnabled = false
 -- User-editable services, NOT CoreGui/CorePackages/engine internals.
 local roots = {"Workspace", "ReplicatedFirst", "ReplicatedStorage", "ServerScriptService", "ServerStorage", "StarterGui", "StarterPack", "StarterPlayer", "Lighting", "SoundService", "Teams", "TextChatService", "MaterialService", "LocalizationService"}
 local editable = {Folder=true, Model=true, Part=true, Script=true, LocalScript=true, ModuleScript=true}
@@ -104,6 +106,9 @@ end
 local function array(v) return {v.X,v.Y,v.Z} end
 local function isScript(o) return scriptClasses[o.ClassName] == true end
 local function say(text) status.Text = text end
+local function liveLabel()
+ liveSync.Text = "Sinkron langsung PiwuApp → Studio: " .. (liveEnabled and "YA · terapkan dalam ~5 detik" or "TIDAK")
+end
 -- A Studio plugin asks for its OWN network permission: the first request to a new
 -- address shows an Allow/Deny prompt, and access can be revoked later in
 -- View → Plugin Management. The place's "Allow HTTP Requests" setting governs
@@ -462,11 +467,18 @@ checkButton.MouseButton1Click:Connect(function()
   say("Koneksi OK · project " .. tostring(project.name) .. " · server memakai plugin " .. tostring(d.plugin and d.plugin.version or "?"))
  end)
 end)
+-- One snapshot path for the button and for live mode. `assign` writes stable
+-- PiwuBridgeId attributes; live mode always assigns so new instances can be
+-- addressed by the next bundle.
+local function pushSnapshot(assign)
+ local data=snapshot(Http:GenerateGUID(false),assign ~= false)
+ request("POST","snapshot",data)
+ baseline=data; pending=nil; confirmUntil=0
+ return data
+end
 sendButton.MouseButton1Click:Connect(function()
  action(function()
-  local data=snapshot(Http:GenerateGUID(false),true)
-  request("POST","snapshot",data)
-  baseline=data; pending=nil; confirmUntil=0
+  local data=pushSnapshot(true)
   say("Snapshot terkirim: "..tostring(#data.nodes).." instance. AI di PiwuApp otomatis membaca source-nya; impor hanya perlu bila Anda ingin mengedit file di web. Tidak ada script yang dijalankan.")
  end)
 end)
@@ -507,6 +519,22 @@ local function applyBundle(bundle, current, map)
  History:FinishRecording(recording,Enum.FinishRecordingOperation.Commit)
  local ack=pcall(function() request("POST","ack",{id=bundle.id,ok=ok}) end)
  return {ok=ok,claimed=true,ack=ack,error=ok and "" or "PERUBAHAN PARSIAL/GAGAL: gunakan Undo di Studio dan periksa place sebelum snapshot baru."}
+end
+-- Live mode is opt-in. It applies only a bundle an Owner/Editor already sent
+-- from PiwuApp and the server already validated; local Studio edits still make
+-- the claim fail. After a successful receipt it pushes a fresh snapshot so the
+-- AI context and the next bundle start from the place that just changed.
+local function liveApply(bundle)
+ baseline = baseline or {snapshotId=bundle.baseSnapshotId, placeId=bundle.placeId}
+ local current,map=snapshot(baseline.snapshotId,false)
+ validate(bundle,map)
+ local result=applyBundle(bundle,current,map)
+ pending=nil; confirmUntil=0
+ if not result.claimed then error(result.error,0) end
+ if not result.ok then error(result.error,0) end
+ if not result.ack then error("Diterapkan, tetapi receipt gagal dikirim. Sinkron langsung dimatikan; periksa place dan jangan ulangi bundle.",0) end
+ pushSnapshot(true)
+ return result
 end
 applyButton.MouseButton1Click:Connect(function()
  action(function()
@@ -597,29 +625,52 @@ sceneInSelection.MouseButton1Click:Connect(function()
  inSelection = not inSelection
  sceneInSelection.Text = "Pakai objek terpilih sebagai induk: " .. (inSelection and "YA" or "TIDAK")
 end)
+liveSync.MouseButton1Click:Connect(function()
+ liveEnabled = not liveEnabled
+ liveLabel()
+ if liveEnabled then
+  say("Sinkron langsung AKTIF: bundle yang Anda kirim dari PiwuApp diterapkan otomatis dalam ~5 detik, tanpa konfirmasi kedua di Studio. Hanya bundle yang lolos validasi server; perubahan lokal Studio tetap menjadi konflik. Script baru tetap Disabled. Matikan bila place tidak diawasi.")
+ else
+  say("Sinkron langsung dimatikan. Tombol Terapkan kembali meminta konfirmasi kedua.")
+ end
+end)
 autoPoll.MouseButton1Click:Connect(function()
  pollEnabled = not pollEnabled
  autoPoll.Text = "Periksa antrean otomatis tiap 20 detik: " .. (pollEnabled and "YA (hanya memberi tahu)" or "TIDAK")
  say(pollEnabled and "Pemeriksaan otomatis hanya MEMBERI TAHU; tidak ada perubahan yang diterapkan tanpa klik Anda." or "Pemeriksaan otomatis dimatikan.")
 end)
 clearButton.MouseButton1Click:Connect(function()
- address="";credential="";tokenInput.Text="";baseline=nil;pending=nil;scenePlan=nil;confirmUntil=0;sceneConfirmUntil=0
+ address="";credential="";tokenInput.Text="";baseline=nil;pending=nil;scenePlan=nil;confirmUntil=0;sceneConfirmUntil=0;liveEnabled=false;liveLabel()
  hideHttpHelp();setWaiting(false)
  say("Token lokal dihapus. Cabut akses juga melalui PiwuApp untuk mencabut token server.")
 end)
 toggle.Click:Connect(function() widget.Enabled=not widget.Enabled end)
-plugin.Unloading:Connect(function() credential="";baseline=nil;pending=nil;scenePlan=nil end)
--- Quiet polling: only asks the server whether a bundle is waiting. It never
--- claims or applies anything; applying stays a deliberate two-click action.
+plugin.Unloading:Connect(function() credential="";baseline=nil;pending=nil;scenePlan=nil;liveEnabled=false end)
+-- Quiet polling by default: only asks the server whether a bundle is waiting.
+-- With live mode on it applies that reviewed bundle, disables itself on the
+-- first failure, and never retries automatically.
 task.spawn(function()
  while true do
-  task.wait(20)
-  if pollEnabled and not busy and widget.Enabled and address ~= "" then
+  task.wait(liveEnabled and 5 or 20)
+  if (pollEnabled or liveEnabled) and not busy and widget.Enabled and address ~= "" then
    local ok, d = pcall(function() return request("GET","pending",nil) end)
-   if ok and d.bundle and not pending and not applied[d.bundle.id] then
+   if ok and d.bundle and not applied[d.bundle.id] then
     local count = d.bundle.changes and #d.bundle.changes or 0
     setWaiting(true)
-    say("Ada " .. tostring(count) .. " perubahan menunggu di PiwuApp. Klik 2 · Ambil & tinjau perubahan (tidak ada yang diterapkan tanpa review).")
+    if liveEnabled then
+     busy = true
+     local appliedOk, applyError = pcall(function() liveApply(d.bundle) end)
+     busy = false
+     if appliedOk then
+      setWaiting(false)
+      say("Sinkron langsung: " .. tostring(count) .. " perubahan diterapkan dan snapshot baru dikirim. Script baru tetap Disabled; jalankan Play Test sendiri.")
+     else
+      liveEnabled = false; liveLabel(); setWaiting(false)
+      say("Sinkron langsung DIMATIKAN: " .. string.sub(userMessage(applyError), 1, 240) .. " Tidak ada percobaan ulang otomatis; periksa lalu ambil & terapkan manual.")
+     end
+    else
+     say("Ada " .. tostring(count) .. " perubahan menunggu di PiwuApp. Klik 2 · Ambil & tinjau perubahan (tidak ada yang diterapkan tanpa review).")
+    end
    elseif not ok then
     autoPoll.Text = "Periksa antrean otomatis tiap 20 detik: YA (gagal: " .. string.sub(tostring(d), 1, 60) .. ")"
    end
@@ -646,9 +697,11 @@ if _PIWU_TEST then
   connect = function(url, token) address = url; credential = token end,
   origin = function() return address end,
   waiting = function() return string.find(widget.Title, "perubahan menunggu") ~= nil end,
+  live = function() return liveEnabled end,
+  liveApply = liveApply,
   setReplace = function(value) replaceScene = value end,
   httpCommand = HTTP_COMMAND,
-  ui = {status=status, review=review, httpNote=httpNote, copyHttp=copyHttpButton, origin=origin, tokenInput=tokenInput, buttons={connect=connectButton, check=checkButton, send=sendButton, fetch=fetchButton, apply=applyButton, scene=sceneButton, sceneApply=sceneApplyButton, clear=clearButton, autoPoll=autoPoll, sceneReplace=sceneReplace, sceneInSelection=sceneInSelection}},
+  ui = {status=status, review=review, httpNote=httpNote, copyHttp=copyHttpButton, origin=origin, tokenInput=tokenInput, buttons={connect=connectButton, check=checkButton, send=sendButton, fetch=fetchButton, apply=applyButton, scene=sceneButton, sceneApply=sceneApplyButton, clear=clearButton, autoPoll=autoPoll, liveSync=liveSync, sceneReplace=sceneReplace, sceneInSelection=sceneInSelection}},
  }
 end
 ]]></ProtectedString>

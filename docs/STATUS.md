@@ -2,7 +2,18 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): native app memakai backend data (tahap 8)
+## Pembaruan terbaru (17 Oktober 2026): Roblox live sync opt-in (plugin v2.2.0, tahap 9)
+
+**389/389 unit/integrasi** dan **121/121 tes browser lengkap** lulus (1 worker, 7,4 menit), `tsc -b` dan `format:check` bersih, build produksi 39 detik, `check:bundle` editor **3.202.180 B** / gzip 822.900 B / 40 aset JavaScript / total 13.949.858 B — di bawah anggaran. **Tanpa migration baru.**
+
+- **Sinkron langsung dari PiwuApp ke Studio, opt-in.** Plugin v2.2.0 menambahkan tombol **Sinkron langsung PiwuApp → Studio**. Saat menyala, plugin memeriksa antrean tiap ~5 detik dan menerapkan bundle yang **sudah dikirim Owner/Editor dari PiwuApp** tanpa konfirmasi kedua di Studio. Default **TIDAK**; teks tombol dan panel menjelaskan konsekuensinya.
+- **Hanya bundle yang sudah lolos review dan validasi.** Server tetap memvalidasi snapshot dasar, place, class, parent, source, dan batas operasi; plugin mengulang validasi terhadap place saat itu. Perubahan lokal Studio tetap menjadi konflik, bukan ditimpa.
+- **Kegagalan mematikan mode, bukan retry.** Konflik claim, validasi, recording sibuk, atau receipt gagal → mode dimatikan, alasan ditampilkan, tidak ada percobaan ulang otomatis. Review manual dan Undo tetap jalur pemulihan.
+- **Snapshot balik setelah sukses.** Setelah claim + receipt sukses, plugin mengirim snapshot baru sehingga konteks AI dan bundle berikutnya berangkat dari place terbaru. `PiwuBridgeId` baru tetap ditulis agar objek dapat dialamatkan lagi.
+- **Tetap bukan push dan bukan CRDT.** Plugin hanya bisa menarik; sinkron langsung berhenti saat Studio ditutup, token kedaluwarsa, atau Play/Run aktif. Script baru tetap **Disabled**, tidak ada eksekusi source, dan tidak ada penggabungan file otomatis.
+- **Verifikasi**: `tests/studio-plugin.test.ts` bertambah 2 tes (16 total) pada Luau WASM + fake Studio: default mati, opt-in menerapkan satu bundle (claim → ack → snapshot), bundle yang sama tidak diterapkan dua kali dalam dua putaran polling, dan claim 409 mematikan mode tanpa mutasi/snapshot balik. Versi plugin di `shared/studio.mjs`, `.rbxmx`, panel admin, dashboard, dan tes versi disinkronkan ke **2.2.0**. `docs/ROBLOX.md`, `docs/PROJECT_KINDS.md`, `docs/NATIVE_PRODUCTION_ACCEPTANCE.md`, dan README diperbarui. Uji Studio nyata tetap belum dijalankan.
+
+## Pembaruan sebelumnya (17 Oktober 2026): native app memakai backend data (tahap 8)
 
 **387/387 unit/integrasi** dan **121/121 tes browser lengkap** lulus (1 worker, 8,5 menit), `tsc -b` dan `format:check` bersih, build produksi 42 detik, `check:bundle` editor **3.202.180 B** / gzip 822.909 B / 40 aset JavaScript / total 13.949.858 B — di bawah anggaran.
 

@@ -689,19 +689,19 @@ test("the readiness list names what is missing, in the words of what it enables"
 });
 
 test("the plugin line only speaks about versions it actually knows", () => {
-  const fresh = pluginItem({ plugin: { version: "2.1.0" } }, "2.1.0");
+  const fresh = pluginItem({ plugin: { version: "2.2.0" } }, "2.2.0");
   assert.equal(fresh.ready, true);
   // Never connected: not a version problem, a "belum terpasang" problem.
-  const never = pluginItem({}, "2.1.0");
+  const never = pluginItem({}, "2.2.0");
   assert.equal(never.ready, false);
   assert.match(never.missing, /belum pernah menghubungi/);
-  assert.equal(pluginItem(null, "2.1.0").ready, false);
+  assert.equal(pluginItem(null, "2.2.0").ready, false);
   // Older plugin: name both versions so the fix is obvious.
-  const stale = pluginItem({ plugin: { version: "2.0.0" } }, "2.1.0");
+  const stale = pluginItem({ plugin: { version: "2.0.0" } }, "2.2.0");
   assert.equal(stale.ready, false);
   assert.match(
     stale.missing,
-    /v2\.0\.0 terpasang, aplikasi ini memakai v2\.1\.0/,
+    /v2\.0\.0 terpasang, aplikasi ini memakai v2\.2\.0/,
   );
   assert.deepEqual(
     readinessSummary(readinessItems({}, [fresh])).missing.map(

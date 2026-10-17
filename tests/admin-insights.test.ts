@@ -432,7 +432,7 @@ test("account detail flags a low balance and reports storage and Studio counts o
     assert.equal(body.studio.bridges, 2);
     assert.equal(body.studio.active, 1);
     assert.equal(body.studio.lastState, "idle");
-    assert.equal(body.studio.pluginVersion, "2.1.0");
+    assert.equal(body.studio.pluginVersion, "2.2.0");
     // A token hash exists in the table and must never reach the response.
     assert.ok(!JSON.stringify(body).includes("sha256-fixture-token"));
   } finally {
@@ -453,7 +453,7 @@ test("diagnostics reports storage, backup and the served plugin version without 
     assert.match(body.storage.backup, /peramban/);
     assert.match(body.storage.notice, /tidak pernah diproyeksikan/);
     // The plugin version comes from shared/studio.mjs, not from a literal here.
-    assert.equal(body.studio.plugin.version, "2.1.0");
+    assert.equal(body.studio.plugin.version, "2.2.0");
     assert.equal(body.studio.plugin.bundle, "PiwuStudio.rbxmx");
     assert.equal(body.studio.bridges.total, 2);
     assert.equal(body.studio.bridges.active, 1);
@@ -481,7 +481,7 @@ test("storage and Studio blocks state a missing migration instead of failing the
     assert.equal(body.studio.reason, "schema_missing");
     assert.match(body.studio.notice, /006_studio_bridge\.sql/);
     // The plugin version is known even when the bridge table is not.
-    assert.equal(body.studio.plugin.version, "2.1.0");
+    assert.equal(body.studio.plugin.version, "2.2.0");
   } finally {
     server.close();
   }

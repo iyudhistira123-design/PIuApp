@@ -122,7 +122,7 @@ const diagnosticsPayload = {
     available: true,
     reason: "",
     plugin: {
-      version: "2.1.0",
+      version: "2.2.0",
       file: "PiwuStudio.luau",
       bundle: "PiwuStudio.rbxmx",
     },
@@ -136,7 +136,7 @@ const diagnosticsPayload = {
       truncated: false,
     },
     notice:
-      "Token bridge disimpan hanya sebagai hash dan tidak pernah ditampilkan. Versi plugin yang terpasang tidak dilaporkan ke server, jadi panel tidak bisa memastikan salinan pengguna sudah 2.1.0.",
+      "Token bridge disimpan hanya sebagai hash dan tidak pernah ditampilkan. Versi plugin yang terpasang tidak dilaporkan ke server, jadi panel tidak bisa memastikan salinan pengguna sudah 2.2.0.",
   },
   liveVerified: false,
   notice:
@@ -550,7 +550,7 @@ test("admin diagnostics reports storage, backup and the plugin version without o
   await expect(
     panel.getByRole("heading", { name: /Roblox Studio & plugin/ }),
   ).toBeVisible();
-  await expect(panel).toContainText("2.1.0");
+  await expect(panel).toContainText("2.2.0");
   await expect(panel).toContainText("PiwuStudio.rbxmx");
   await expect(panel).toContainText("2 project · 1 token masih berlaku");
   await expect(panel).toContainText("Diterapkan: 1");

@@ -6,7 +6,7 @@ import { z } from "zod";
  * which is the only warning a user gets that their installed copy is old.
  */
 export const STUDIO_PLUGIN = {
-  version: "2.1.0",
+  version: "2.2.0",
   file: "PiwuStudio.luau",
   /** The one-download install: a Script wrapped in XML for the Plugins folder. */
   bundle: "PiwuStudio.rbxmx",
