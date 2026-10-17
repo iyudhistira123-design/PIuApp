@@ -5,7 +5,7 @@ Panel `/admin` mengelola platform, bukan panel admin aplikasi yang dibuat penggu
 ## Aktivasi aman
 
 1. Backup database dan uji pada Supabase staging.
-2. Terapkan migration **001 → … → 011**, sekali dan berurutan. 007 menyediakan koordinasi runtime produksi; 008 menyediakan pencarian direktori akun; 010 kredit berbasis lot; 011 penghapusan akun dari panel. Migration 005 bersifat transaksional dan membungkus RPC workspace lama; jangan jalankan ulang atau melewati 004.
+2. Terapkan migration **001 → … → 012**, sekali dan berurutan. 007 menyediakan koordinasi runtime produksi; 008 menyediakan pencarian direktori akun; 010 kredit berbasis lot; 011 penghapusan akun dari panel; 012 notifikasi per akun. Migration 005 bersifat transaksional dan membungkus RPC workspace lama; jangan jalankan ulang atau melewati 004.
 3. Atur `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, dan `SUPABASE_SERVICE_ROLE_KEY` di environment yang sesuai. Service role **hanya server**, jangan gunakan prefix `VITE_`.
 4. Daftarkan akun admin melalui autentikasi biasa dan verifikasi email. Supabase Auth tetap menjadi mekanisme login; tidak ada password admin bawaan.
 5. Operator database tepercaya menjalankan [`BOOTSTRAP_FIRST_ADMIN.sql`](../supabase/install/BOOTSTRAP_FIRST_ADMIN.sql) di SQL Editor/database, **bukan browser, endpoint publik, atau chat**. Ganti placeholder email hanya pada salinan di SQL Editor. Script menolak akun anonymous/belum terverifikasi/ditangguhkan serta superadmin yang sudah tersedia. Ikuti [panduan pemasangan SQL](../supabase/README.md) untuk membedakan database baru dan upgrade.
@@ -64,11 +64,11 @@ Laporan pengujian, batas multi-instance, dan temuan dependency native: [ADMIN_PR
 - Pemeliharaan memblokir penulisan workspace/dataset dan mutasi layanan baru. Admin, callback pembayaran, dan pengumuman tetap dapat berjalan. Beberapa data privat lokal/preferensi tetap dapat diedit offline; sinkronisasi cloud ditolak sampai dibuka kembali.
 - Pekerjaan build/sandbox memeriksa suspension/project lock sebelum berjalan. Request eksternal yang sudah berjalan bisa tetap selesai; tidak ada klaim cancellation/exactly-once provider. Hosting, unpublish, dan cleanup dihapus 17 Oktober 2026.
 - Hapus project menolak build berjalan dan mengembalikan reservasi kredit job queued dalam transaksi sebelum cascade delete. Penghapusan permanen; backup terlebih dahulu.
-- Pada produksi, skema suspension/lock/settings yang hilang memblokir operasi (fail-closed). Development mempertahankan kompatibilitas deployment bertahap. Terapkan 001–011 dan verifikasi hak RPC/RLS sebelum mengandalkan kontrol admin.
+- Pada produksi, skema suspension/lock/settings yang hilang memblokir operasi (fail-closed). Development mempertahankan kompatibilitas deployment bertahap. Terapkan 001–012 dan verifikasi hak RPC/RLS sebelum mengandalkan kontrol admin.
 
 ## Pengujian dan checklist staging
 
-Lokal: migration 001–011 dieksekusi PGlite, termasuk role forgery, service-only RPC, last-superadmin, idempotensi/kredit, CAS, audience/jadwal/expiry/read receipts, suspension/RLS, workspace regression, penghapusan akun (konfirmasi UUID, penolakan akun admin/diri sendiri, data pribadi vs baris keuangan/audit) dan hosting cleanup. API memakai fixture Auth/PostgREST terkontrol. Browser menguji pratinjau mobile, navigasi seluruh bagian, axe WCAG A/AA ringkasan, form broadcast + retry, pembatasan role, dan pengumuman plain text.
+Lokal: migration 001–012 dieksekusi PGlite, termasuk role forgery, service-only RPC, last-superadmin, idempotensi/kredit, CAS, audience/jadwal/expiry/read receipts, suspension/RLS, workspace regression, penghapusan akun (konfirmasi UUID, penolakan akun admin/diri sendiri, data pribadi vs baris keuangan/audit) dan hosting cleanup. API memakai fixture Auth/PostgREST terkontrol. Browser menguji pratinjau mobile, navigasi seluruh bagian, axe WCAG A/AA ringkasan, form broadcast + retry, pembatasan role, dan pengumuman plain text.
 
 Sebelum produksi, uji **Supabase asli** dengan empat akun (superadmin/operator/auditor/member), akses REST langsung, role revocation, suspension, payment provider sandbox, worker terpisah/restart, dan kegagalan jaringan. Uji jadwal saat pergantian hari/zona waktu, expiry paket dan broadcast, serta anggota yang login/logout. Pantau audit, atur retention/backup, dan batasi akses infrastruktur.
 

@@ -489,7 +489,23 @@ test("Admin API: verified identity, DB roles, suspension, service controls and n
       400,
     );
     assert.equal((await call("/admin/actions", "root", command)).status, 200);
-    assert.equal(calls.length, 1);
+    assert.equal(
+      calls.filter((c) => c.path === "/rest/v1/rpc/piwu_admin_action").length,
+      1,
+    );
+    const notice = calls.find(
+      (c) => c.path === "/rest/v1/rpc/piwu_notification_add",
+    );
+    assert.equal(
+      calls.filter((c) => c.path === "/rest/v1/rpc/piwu_notification_add")
+        .length,
+      1,
+    );
+    assert.equal(notice.body.p_user, ids.member);
+    assert.equal(notice.body.p_kind, "credits");
+    assert.match(notice.body.p_title, /Saldo kredit/);
+    assert.match(notice.body.p_body, /menambah 50 kredit/);
+    assert.equal(notice.body.p_dedupe, "admin-credit:" + command.requestId);
     assert.equal(calls[0].body.p_actor, ids.root);
     assert.equal((await call("/admin/projects", "operator")).status, 200);
     suspended = true;

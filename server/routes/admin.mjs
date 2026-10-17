@@ -32,6 +32,7 @@ import {
 } from "../lib/admin-insights.mjs";
 import { paymentProvider } from "../providers/payments.mjs";
 import { retireIdentity } from "../lib/account-retire.mjs";
+import { notifyUser } from "../lib/notifications.mjs";
 const priceOverride = z
   .object({
     amount: z.number().int().min(1000).max(100000000),
@@ -552,6 +553,22 @@ export function registerAdmin(app, ctx) {
       );
       if (command.action === "user_delete")
         await retireIdentity(ctx.admin, command.target);
+      if (command.action === "credits" && command.target) {
+        const delta = Number(command.payload.delta) || 0;
+        await notifyUser(ctx, command.target, {
+          kind: "credits",
+          title: "Saldo kredit disesuaikan",
+          body:
+            "Administrator " +
+            (delta > 0 ? "menambah " : "mengurangi ") +
+            Math.abs(delta) +
+            " kredit. Saldo sekarang " +
+            (result.balance ?? "diperbarui") +
+            ".",
+          href: "/account",
+          dedupe: "admin-credit:" + command.requestId,
+        });
+      }
       res.json({
         result,
         notice: "Perubahan dikonfirmasi dan dicatat dalam audit log.",

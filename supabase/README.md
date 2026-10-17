@@ -7,11 +7,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 ## A. Project Supabase baru, belum pernah dipasang PiwuApp
 
 1. Pastikan project benar-benar baru/dikhususkan untuk PiwuApp. Auth dan Storage bawaan Supabase harus tersedia.
-2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–011** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
-3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–010 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
+2. Buka [`install/INSTALL_NEW_DATABASE.sql`](install/INSTALL_NEW_DATABASE.sql), salin **seluruh isi**, lalu Run sekali di SQL Editor. File ini menggabungkan migration **001–012** dalam **satu transaksi**, dengan pemeriksaan konflik objek/bucket. Jika ada error, transaksi dibatalkan; jangan melanjutkan dari potongan tengah atau menghapus data untuk memaksa berhasil.
+3. Jalankan [`install/CHECK_INSTALLATION.sql`](install/CHECK_INSTALLATION.sql). Lihat setiap result set: marker 001–012 seharusnya `MARKER_TERDETEKSI`; tabel/RLS, RPC penting dan bucket seharusnya `OK`.
 4. Lanjutkan bootstrap admin di bagian C.
 
-**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–011 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
+**Setelah installer gabungan berhasil, jangan jalankan lagi file 001–012 satu-per-satu.** Installer menolak database yang telah memiliki objek PiwuApp. Jangan menghapus guard-nya.
 
 ## B. Database lama / pernah menjalankan sebagian migration
 
@@ -34,9 +34,11 @@ SQL ini menyiapkan database; tidak membuat akun Auth, mengirim email, memasang k
 | 010    | [010_credit_lots.sql](010_credit_lots.sql)                   | Kredit bentuk lot: jatah harian, rollover paket, kedaluwarsa                                |
 | 011    | [011_account_deletion.sql](011_account_deletion.sql)         | Penghapusan akun superadmin: data pribadi, arsip template, audit tetap                      |
 
-Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 011. Jika baru 001–005, jalankan 006 sampai 011. File 001–006 tidak didesain untuk dijalankan berulang.
+Contoh: **jika sudah dipastikan 001–006 lengkap**, jalankan 007 sampai 012. Jika baru 001–005, jalankan 006 sampai 012. File 001–006 tidak didesain untuk dijalankan berulang.
 
 **Migration 010 mengubah cara kredit bekerja dan sebaiknya direncanakan, bukan dijalankan diam-diam:** setelah dipasang, saldo yang ada dipindahkan menjadi satu lot dengan masa berlaku 12 bulan (referensi `migrasi-010:<user_id>`), kredit baru masuk sebagai lot bertanggal (harian hangus di akhir hari UTC, paket 2 bulan, top-up 12 bulan), dan `piwu_ensure_credits` tidak lagi memberi jatah sekali — ia mengisi jatah harian 20 (Free), 30 (Pro) atau 40 (Team) kredit. Artinya janji lama "kredit tidak kedaluwarsa" berhenti berlaku tepat saat 010 dijalankan, dan saldo akun yang menganggur lebih dari 12 bulan akan hangus. Setelah dipasang, halaman akun membaca jatah harian dari fungsi read-only `public.piwu_credit_status(uuid)`; sebelum 010 ada, halaman itu menyebut migration ini alih-alih menampilkan kuota yang tidak ditegakkan. Jalankan 010 pada jendela yang Anda pantau, lalu periksa hasilnya dengan `CHECK_INSTALLATION.sql` (marker `010` harus `MARKER_TERDETEKSI`, termasuk `piwu_credit_status`).
+
+**Migration 012 menambah tabel `notifications` dan RPC `piwu_notification_add`/`piwu_notifications`/`piwu_notification_read`/`piwu_notification_read_all`.** Browser hanya boleh `select` barisnya sendiri (untuk Realtime); penulisan lewat service role. Notifikasi muncul di lonceng dashboard/workspace dan disimpan server, jadi perangkat lain melihat daftar yang sama. Tidak ada provider email/push; browser yang tertutup melihatnya saat dibuka kembali. Tabel ditambahkan ke publication `supabase_realtime` bila publication itu ada; tanpa Realtime, polling 60 detik tetap berjalan.
 
 **Migration 011 menambah RPC `piwu_admin_delete_account` untuk tombol “Hapus akun” di panel admin.** Penghapusan tidak menghapus baris `auth.users` — 24 kolom di 18 tabel mereferensikannya tanpa cascade, termasuk invoice dan audit. RPC menangguhkan akun, menghapus project pribadi beserta turunannya, mengosongkan profil publik, mengarsipkan template yang dijual, dan mempertahankan baris keuangan/audit tanpa email. Server lalu mengganti email Auth menjadi alamat token `deleted+<uuid>@piwu.invalid` melalui Admin API dan melakukan soft-delete, sehingga email asli bisa dipakai mendaftar lagi tetapi akun lama tidak bisa masuk. Ini bukan jaminan penghapusan fisik seluruh jejak di luar database aplikasi (backup, log provider); atur retensi backup sesuai kebijakan Anda.
 

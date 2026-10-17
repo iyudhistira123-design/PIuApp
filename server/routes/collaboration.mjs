@@ -10,6 +10,7 @@ import {
   uuid,
 } from "../lib/core.mjs";
 import { rateLimit } from "../lib/context.mjs";
+import { notifyUser } from "../lib/notifications.mjs";
 export function registerCollaboration(app, ctx) {
   app.get(
     "/api/projects/:id/members",
@@ -219,6 +220,35 @@ export function registerCollaboration(app, ctx) {
           p_email: req.user.email_confirmed_at ? req.user.email || "" : "",
         }),
       );
+      const project = await ctx
+        .needAdmin()
+        .from("projects")
+        .select("name,owner_id")
+        .eq("id", id)
+        .maybeSingle();
+      if (project.data && project.data.owner_id !== req.user.id) {
+        const member = await ctx.admin
+          .from("collaborators")
+          .select("role")
+          .eq("project_id", id)
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+        const name =
+          req.user.user_metadata?.name || req.user.email || "Seseorang";
+        await notifyUser(ctx, project.data.owner_id, {
+          kind: "project",
+          title: "Anggota baru bergabung",
+          body:
+            name +
+            ' bergabung ke "' +
+            project.data.name +
+            '" sebagai ' +
+            (member.data?.role || "kolaborator") +
+            ".",
+          href: "/project/" + id,
+          dedupe: "invite:" + id + ":" + req.user.id,
+        });
+      }
       res.json({ projectId: id });
     }),
   );

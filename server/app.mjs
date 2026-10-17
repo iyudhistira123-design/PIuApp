@@ -16,6 +16,7 @@ import { registerBilling } from "./routes/billing.mjs";
 import { registerSandbox } from "./routes/sandbox.mjs";
 import { registerMarketplace } from "./routes/marketplace.mjs";
 import { registerRecordings } from "./routes/recordings.mjs";
+import { registerNotifications } from "./routes/notifications.mjs";
 import { SandboxProvider } from "./providers/sandbox.mjs";
 import { fetchReference } from "./lib/references.mjs";
 import { createResearchJobs } from "./lib/research-jobs.mjs";
@@ -133,6 +134,7 @@ export function createApp({
   registerSandbox(app, ctx, sandbox);
   registerMarketplace(app, ctx);
   registerRecordings(app, ctx);
+  registerNotifications(app, ctx);
   app.post(
     "/api/projects/:id/reference",
     ctx.auth,
