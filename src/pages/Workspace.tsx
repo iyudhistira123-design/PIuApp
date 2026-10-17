@@ -22,6 +22,8 @@ import type { Attachment } from "../services/api";
 import { saveRecording } from "../services/recordings";
 import type { ReplayEvent } from "../services/recordings";
 import Presence, { useProjectPresence } from "../components/services/Presence";
+import { useCollabText } from "../lib/collab/useCollabText";
+import type { CodeEditorApi } from "../workspace/CodeEditor";
 import { NotificationBell } from "../components/admin/Platform";
 import {
   lazy,
@@ -347,6 +349,31 @@ function WorkspaceContent({ project }: { project: Project }) {
         .map((peer) => ({ id: peer.id, name: peer.name, line: peer.line })),
     [presence.peers, reviewPath, activeFile],
   );
+  // Merge characters only when another member is actually on this file and
+  // the editor is editable. The merged text goes through store.writeFile, so
+  // autosave, revisions and conflict detection are unchanged; with no peer the
+  // hook stays off and costs nothing.
+  const editorApi = useRef<CodeEditorApi | null>(null);
+  // Only a peer who says they are on this file can merge with it; other files
+  // in the same project must not receive this tab's ops.
+  const collabPeers = editorPeers.length;
+  const collab = useCollabText({
+    transport: presence.transport,
+    path: activeFile,
+    value: project.files[activeFile] || "",
+    peers: collabPeers,
+    // Review diffs do not end the session: doing so would force a fresh base
+    // and report a false "teks berbeda" when the review panel closes.
+    editable: !readOnly && Boolean(activeFile),
+    joined: presence.state === "live",
+    onMerged: (text, mergedPath) => {
+      if (mergedPath !== activeFile) return;
+      // Reach the buffer first: a keystroke processed after this callback must
+      // already see the merged text, otherwise it would overwrite it.
+      editorApi.current?.apply(text);
+      store.writeFile(id, mergedPath, text);
+    },
+  });
   // Up to three attachments, so a photo of the object can travel with the brief
   // that describes it. The server numbers the photos in this order.
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -1869,6 +1896,7 @@ function WorkspaceContent({ project }: { project: Project }) {
                   >
                     {reviewPath || activeFile ? (
                       <CodeEditor
+                        apiRef={editorApi}
                         key={(reviewPath || activeFile) + ":" + line}
                         path={reviewPath || activeFile}
                         content={
@@ -3119,6 +3147,30 @@ function WorkspaceContent({ project }: { project: Project }) {
             state={presence.state}
             activeFile={activeFile}
           />
+          {collab.status === "live" && collabPeers > 0 && (
+            <span
+              className="presence-status live"
+              title="Karakter digabung dengan CRDT untuk file yang sama. Perubahan tetap disimpan lewat revisi dan deteksi konflik."
+            >
+              CRDT · {collab.writers} tab
+            </span>
+          )}
+          {collab.status === "conflict" && (
+            <span
+              className="presence-status conflict"
+              title="Rekan memulai dari teks yang berbeda, jadi penggabungan otomatis dimatikan agar file tidak rusak. Simpan, lalu buka ulang filenya."
+            >
+              CRDT nonaktif · teks berbeda
+            </span>
+          )}
+          {collab.status === "limit" && (
+            <span
+              className="presence-status degraded"
+              title="CRDT hanya berjalan untuk file sampai 30.000 karakter atau 60.000 simpul. File ini tetap bisa diedit dan disimpan seperti biasa."
+            >
+              CRDT nonaktif · batas file
+            </span>
+          )}
           <button onClick={() => setDialog("services")}>Layanan</button>
           {recording && (
             <span className="recording-indicator">

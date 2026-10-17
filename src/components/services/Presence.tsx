@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../../lib/supabase";
 import { useStore } from "../../lib/store";
 import { requestCloudSync } from "../../lib/cloud/sync";
+import { EVENT as CRDT_EVENT } from "../../lib/collab/protocol";
 import {
   displayName,
   presencePeers,
@@ -18,21 +19,48 @@ export interface CursorPosition {
   column: number;
 }
 
+/** Broadcast transport on the same private channel, for the CRDT session. */
+export interface ProjectChannel {
+  send(event: string, payload: Record<string, unknown>): boolean;
+  subscribe(handler: (payload: unknown) => void): () => void;
+}
+
 /**
  * Joins the project's private Realtime channel and publishes a small, honest
- * presence payload: display name, open file and cursor. It is not a CRDT and
- * does not merge edits; file changes still flow through revision sync.
+ * presence payload: display name, open file and cursor. The same channel also
+ * carries CRDT messages for the open file; presence alone never merges text.
  */
 export function useProjectPresence(
   projectId: string,
   file: string,
   cursor: CursorPosition,
-): { peers: PresencePeer[]; state: PresenceState } {
+): { peers: PresencePeer[]; state: PresenceState; transport: ProjectChannel } {
   const user = useStore((s) => s.user);
   const [peers, setPeers] = useState<PresencePeer[]>([]);
   const [state, setState] = useState<PresenceState>("off");
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const joinedRef = useRef(false);
   const payloadRef = useRef<Record<string, unknown>>({});
+  const listeners = useRef(new Set<(payload: unknown) => void>());
+  const transport = useMemo<ProjectChannel>(
+    () => ({
+      send(event, payload) {
+        const channel = channelRef.current;
+        if (!channel || !joinedRef.current) return false;
+        void channel
+          .send({ type: "broadcast", event, payload })
+          .catch(() => undefined);
+        return true;
+      },
+      subscribe(handler) {
+        listeners.current.add(handler);
+        return () => {
+          listeners.current.delete(handler);
+        };
+      },
+    }),
+    [],
+  );
   const name = displayName(user?.name || user?.email || "", "Anda");
   payloadRef.current = {
     name,
@@ -71,18 +99,26 @@ export function useProjectPresence(
       >;
       setPeers(presencePeers(raw, userId));
     };
-    channel.on("presence", { event: "sync" }, sync).subscribe((status) => {
-      if (!alive) return;
-      if (status === "SUBSCRIBED") {
-        setState("live");
-        void channel.track(payloadRef.current);
-        sync();
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        setState("degraded");
-      } else if (status === "CLOSED") {
-        setState("off");
-      }
-    });
+    channel
+      .on("presence", { event: "sync" }, sync)
+      .on("broadcast", { event: CRDT_EVENT }, (message) => {
+        for (const listener of listeners.current) listener(message.payload);
+      })
+      .subscribe((status) => {
+        if (!alive) return;
+        if (status === "SUBSCRIBED") {
+          joinedRef.current = true;
+          setState("live");
+          void channel.track(payloadRef.current);
+          sync();
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          joinedRef.current = false;
+          setState("degraded");
+        } else if (status === "CLOSED") {
+          joinedRef.current = false;
+          setState("off");
+        }
+      });
     // File sync keeps working even when presence is unavailable.
     const changes = supabase
       .channel("piwu:workspace:" + projectId)
@@ -101,6 +137,7 @@ export function useProjectPresence(
     const refresh = setInterval(sync, 60_000);
     return () => {
       alive = false;
+      joinedRef.current = false;
       channelRef.current = null;
       clearTimeout(timeout);
       clearInterval(refresh);
@@ -121,7 +158,7 @@ export function useProjectPresence(
     return () => clearTimeout(timer);
   }, [file, cursor.lineNumber, cursor.column, name, state]);
 
-  return { peers, state };
+  return { peers, state, transport };
 }
 
 export default function Presence({
@@ -140,7 +177,7 @@ export default function Presence({
       className="presence-stack"
       role="group"
       aria-label={summary || "Kolaborator"}
-      title="Kehadiran dan posisi kursor dilaporkan sendiri oleh klien, bukan identitas terverifikasi. Perubahan file memakai revisi dan deteksi konflik, bukan CRDT."
+      title="Kehadiran dan posisi kursor dilaporkan sendiri oleh klien, bukan identitas terverifikasi. File yang sama digabung dengan CRDT saat rekan aktif; perubahan tetap disimpan lewat revisi dan deteksi konflik."
     >
       {peers.slice(0, 4).map((peer) => {
         const where = presenceWhere(peer, activeFile);

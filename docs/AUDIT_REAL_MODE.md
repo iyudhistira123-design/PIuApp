@@ -73,6 +73,6 @@ Endpoint readiness menjawab, tetapi hasilnya:
 4. Aktifkan dan uji AI/E2B dengan izin biaya: inference, review/restore, command nyata, paket, restart/stop, Lighthouse dan cleanup. Belum ada inference atau sesi E2B berbayar yang dijalankan dalam audit ini.
 5. Uji webhook pembayaran dan WhatsApp di staging (deploy/domain sudah dihapus dari produk). Perpindahan pembayaran ke mode live memerlukan konfigurasi dan acceptance tersendiri; jangan menganggap sukses sandbox sebagai transaksi produksi.
 6. Pasang plugin di Roblox Studio sungguhan, verifikasi konflik/review/receipt/Undo. Jalankan Expo di toolchain/perangkat asli. Preview geometri browser tidak menjalankan Luau, physics atau Play Test.
-7. Lengkapi fitur yang masih belum dibangun sesuai kebutuhan produk: GitHub OAuth/push, kolaborasi CRDT/live cursor, backend aplikasi pengguna/SQL console, native signing/build, mesh/terrain tingkat lanjut, marketplace payout/KYC dan fitur tertunda lainnya di STATUS. Ini bukan semata-mata masalah konfigurasi.
+7. Selesaikan yang masih terblokir/terbatas: signing & build APK/IPA di perangkat asli, mesh/terrain tingkat lanjut, verifikasi kanal/policy CRDT untuk Viewer, serta acceptance live untuk GitHub push, backend data aplikasi, payout/KYC, dan CRDT dua tab. GitHub OAuth/push, presence + CRDT, backend data aplikasi, dan alur payout/KYC sudah dibangun, tetapi belum diuji terhadap layanan live dari lingkungan ini.
 
 Tidak ada migration live, deploy publik, transaksi, pesan massal, atau perubahan akun yang dilakukan oleh audit ini.

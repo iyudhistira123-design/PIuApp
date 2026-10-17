@@ -1654,6 +1654,9 @@
 .presence-status.degraded {
   color: var(--ide-warning, #b08a4a);
 }
+.presence-status.conflict {
+  color: var(--ide-danger, #bd727a);
+}
 .piwu-peer-line {
   background: #47729614;
 }

@@ -83,7 +83,7 @@ AI menerima maksimal 3 lampiran, masing-masing 4 MB: PNG/JPG/WebP, PDF teks (20 
 - Email opsional melalui `RESEND_API_KEY` + `EMAIL_FROM` dari domain terverifikasi. Jika email gagal, UI tetap menampilkan tautan dan mengatakan email belum terkirim.
 - Owner mencabut undangan/membership; API juga mendukung perubahan role. Owner tidak dapat diubah melalui endpoint anggota.
 - Migration 003 menambahkan policies kanal private Realtime dan publication `project_workspaces` bila Supabase Realtime tersedia. Uji RLS kanal pada Supabase asli. Presence hanya indikasi kehadiran, bukan bukti identitas/cursor terverifikasi.
-- Perubahan remote memicu antrean sync yang sama dengan fallback polling. Konflik revisi tetap eksplisit; ini **bukan CRDT atau penggabungan karakter simultan**.
+- Perubahan remote memicu antrean sync yang sama dengan fallback polling. Konflik revisi tetap eksplisit. Sejak tahap 10, dua tab yang membuka **file yang sama** juga menggabungkan karakter lewat CRDT kecil selama sesi aktif (≤30.000 karakter, dasar teks harus sama); baris data aplikasi dan file yang tidak dibuka rekan tetap memakai revisi, bukan penggabungan simultan.
 - Komentar cloud memiliki author_id dari JWT, terpisah dari komentar demo dalam snapshot notebook.
 
 ## 5. Publish, domain, analytics — tidak tersedia
