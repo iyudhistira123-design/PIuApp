@@ -2,7 +2,19 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): PiwuApp hanya app builder — deploy website, domain kustom, dan analytics dihapus
+## Pembaruan terbaru (17 Oktober 2026): AI membaca isi Roblox Studio secara otomatis
+
+**349/349 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,5 menit), `tsc -b` dan `format:check` bersih, build produksi 47,61 detik, `check:bundle` editor **3.201.506 B** / gzip 822.643 B / 40 aset / total 13.888.762 B — di bawah anggaran.
+
+Turn AI pada project Roblox kini membaca snapshot terbaru yang dikirim plugin Studio — **tanpa perlu menekan Impor lebih dulu**:
+
+- **Server yang membaca, bukan browser**: `server/lib/studio-ai.mjs` mengambil `snapshot` dari `studio_bridges` (service-role) setiap turn Roblox, lalu menyusun payload `studio` berisi pohon Explorer dan source Luau. Snapshot yang belum ada, tabel 006 yang belum diterapkan, atau bacaan yang gagal tidak pernah menggagalkan chat — konteksnya saja yang tidak ada.
+- **Batas dan kejujuran**: total 80.000 karakter (20.000 per script), di atas batas kode project yang sudah ada. Script yang isinya sama dengan file project disebut `sameAsProject` tanpa mengulang source; script yang tidak bisa dibaca plugin ditulis `readable:false` tanpa isi karangan; source yang terpotong membawa penanda `[dipotong: X dari Y karakter]`; bridge yang tokennya kedaluwarsa ditandai `stale` dan model diminta menyuruh pengguna mengirim snapshot baru.
+- **Terlihat di UI**: server mengirim step `studio` sebelum token pertama, dan label composer menulis "Membaca N script dari Roblox Studio…" (atau "snapshot lama — kirim ulang dari Studio"). Copy panel Hubungkan Studio tidak lagi menjanjikan "tidak membaca Studio diam-diam": snapshot hanya terkirim saat pengguna menekan Kirim snapshot di plugin, dan AI dijelaskan membacanya pada setiap tugas. Plugin juga menulis hal yang sama setelah snapshot terkirim.
+- **Menulis tetap eksplisit**: AI hanya membaca. Perubahan tetap dikembalikan sebagai file project/`studio.desired.json`, ditinjau sebagai bundle, dan diterapkan dua klik di Studio. `scriptPath` di payload sama dengan path file, jadi source yang diubah AI bisa langsung masuk bundle tanpa menebak nama.
+- **Verifikasi**: `tests/studio-ai.test.ts` (4 tes: pohon Explorer + source, `sameAsProject` tidak mengulang isi, potongan berpenanda, snapshot invalid/absen = tanpa konteks), `tests/ai-ops-api.test.ts` menambah tes turn Roblox yang benar-benar mengirim source snapshot ke provider tanpa impor beserta step `studio`, dan `tests/research-step.test.ts` mengunci labelnya.
+
+## Pembaruan sebelumnya (17 Oktober 2026): PiwuApp hanya app builder — deploy website, domain kustom, dan analytics dihapus
 
 **343/343 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,4 menit), `tsc -b` dan `format:check` bersih, build produksi 44,53 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 40 aset / total 13.887.759 B — di bawah anggaran. **Tanpa migration baru**: tabel lama sengaja dibiarkan.
 
