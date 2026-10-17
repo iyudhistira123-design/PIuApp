@@ -105,6 +105,8 @@ const names: Record<string, string> = {
   template_status: "Moderasi template",
   recording_revoke: "Cabut tautan rekaman",
   payment_reconcile: "Rekonsiliasi pembayaran",
+  kyc_review: "Tinjauan verifikasi penjual",
+  payout_review: "Tinjauan payout",
   broadcast_save: "Simpan broadcast",
   settings: "Pengaturan situs",
 };
@@ -1242,44 +1244,55 @@ export function AdminPanel({
                     )}
                   </>
                 )}
-                {tab === "marketplace" &&
-                  table(
-                    ["Template", "Penjual", "Harga", "Status", "Tindakan"],
-                    items,
-                    (r) => (
-                      <>
-                        <td>
-                          <strong>{r.title}</strong>
-                          <small>{r.category}</small>
-                          <code>{r.id}</code>
-                        </td>
-                        <td>
-                          <code title={r.owner_id}>{short(r.owner_id)}</code>
-                        </td>
-                        <td>{money(r.price)}</td>
-                        <td>
-                          <Badge>{label(r.status)}</Badge>
-                        </td>
-                        <td>
-                          {act(
-                            r.status === "published" ? "Arsipkan" : "Tayangkan",
-                            () =>
-                              ask(
-                                "template_status",
-                                r.id,
-                                {
-                                  status:
-                                    r.status === "published"
-                                      ? "archived"
-                                      : "published",
-                                },
-                                r.title,
-                              ),
-                          )}
-                        </td>
-                      </>
-                    ),
-                  )}
+                {tab === "marketplace" && (
+                  <>
+                    {table(
+                      ["Template", "Penjual", "Harga", "Status", "Tindakan"],
+                      items,
+                      (r) => (
+                        <>
+                          <td>
+                            <strong>{r.title}</strong>
+                            <small>{r.category}</small>
+                            <code>{r.id}</code>
+                          </td>
+                          <td>
+                            <code title={r.owner_id}>{short(r.owner_id)}</code>
+                          </td>
+                          <td>{money(r.price)}</td>
+                          <td>
+                            <Badge>{label(r.status)}</Badge>
+                          </td>
+                          <td>
+                            {act(
+                              r.status === "published"
+                                ? "Arsipkan"
+                                : "Tayangkan",
+                              () =>
+                                ask(
+                                  "template_status",
+                                  r.id,
+                                  {
+                                    status:
+                                      r.status === "published"
+                                        ? "archived"
+                                        : "published",
+                                  },
+                                  r.title,
+                                ),
+                            )}
+                          </td>
+                        </>
+                      ),
+                    )}
+                    <PayoutQueue
+                      key={reload}
+                      client={client}
+                      canReview={superadmin}
+                      ask={ask}
+                    />
+                  </>
+                )}
                 {tab === "broadcasts" && (
                   <>
                     <div className="ad-channel-bar">
@@ -1624,9 +1637,12 @@ function ActionDialog({
   const [reason, setReason] = useState(""),
     [delta, setDelta] = useState(""),
     [confirmation, setConfirmation] = useState(""),
+    [reference, setReference] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const payoutReview = command.action === "payout_review";
+  const kycReview = command.action === "kyc_review";
   const reset = () => setRequestId(crypto.randomUUID());
   return (
     <Modal
@@ -1642,6 +1658,27 @@ function ActionDialog({
           setBusy(true);
           setError("");
           try {
+            if (payoutReview || kycReview) {
+              const path = payoutReview
+                ? "/admin/payouts/" + command.target
+                : "/admin/payouts/kyc";
+              const body = payoutReview
+                ? {
+                    requestId,
+                    status: command.payload?.status,
+                    reference,
+                    note: reason,
+                  }
+                : {
+                    requestId,
+                    userId: command.payload?.userId,
+                    status: command.payload?.status,
+                    note: reason,
+                  };
+              await client(path, body);
+              onDone("Tinjauan tersimpan dan dicatat di audit.");
+              return;
+            }
             const payload = {
               ...command.payload,
               ...(command.action === "credits" ? { delta: Number(delta) } : {}),
@@ -1708,6 +1745,27 @@ function ActionDialog({
             </small>
           </label>
         )}
+        {payoutReview && command.payload?.status === "paid" && (
+          <label>
+            Referensi transfer
+            <input
+              value={reference}
+              disabled={busy}
+              required
+              minLength={4}
+              maxLength={120}
+              placeholder="Nomor transaksi bank/e-wallet"
+              onChange={(e) => {
+                setReference(e.target.value);
+                reset();
+              }}
+            />
+            <small>
+              Wajib 4–120 karakter. Hanya referensi transfer yang disimpan;
+              jangan menulis nomor rekening lengkap di sini.
+            </small>
+          </label>
+        )}
         {command.action === "project_delete" && (
           <label>
             Ketik ID project lengkap untuk menghapus permanen
@@ -1769,7 +1827,10 @@ function ActionDialog({
                 (!Number(delta) || !Number.isInteger(Number(delta)))) ||
               ((command.action === "project_delete" ||
                 command.action === "user_delete") &&
-                confirmation !== command.target)
+                confirmation !== command.target) ||
+              (payoutReview &&
+                command.payload?.status === "paid" &&
+                reference.trim().length < 4)
             }
           >
             {busy ? "Memproses…" : "Konfirmasi perubahan"}
@@ -2295,6 +2356,251 @@ function SettingsForm({
 }
 
 /** Model catalogue for the configured API key, read straight from the provider. */
+/**
+ * Seller KYC and payout queue. Every action goes to the dedicated payout route
+ * so migration 013's RPC (and its audit row) is the only writer.
+ */
+function PayoutQueue({
+  client,
+  canReview,
+  ask,
+}: {
+  client: AdminClient;
+  canReview: boolean;
+  ask: (
+    action: string,
+    target: string | null,
+    payload: Row,
+    detail: string,
+  ) => void;
+}) {
+  const [data, setData] = useState<Row | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    client("/admin/payouts")
+      .then((d) => alive && setData(d))
+      .catch((e) => {
+        if (alive)
+          setError(e instanceof Error ? e.message : "Antrean gagal dimuat.");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [client]);
+  if (error)
+    return (
+      <div className="ad-error" role="alert">
+        {error}
+      </div>
+    );
+  if (!data) return <p className="ad-muted">Memuat antrean payout…</p>;
+  if (data.applied === false)
+    return (
+      <div className="ad-info">
+        {data.notice} Antrean verifikasi dan payout tidak ditampilkan.
+      </div>
+    );
+  const sellers = new Map<string, Row>();
+  for (const seller of data.sellers || []) sellers.set(seller.user_id, seller);
+  const kyc = (data.verifications || []).filter(
+    (r: Row) => r.status === "pending",
+  );
+  const payouts = (data.payouts || []).filter((r: Row) =>
+    ["requested", "approved"].includes(r.status),
+  );
+  const button = (
+    text: string,
+    onClick: () => void,
+    danger = false,
+    hint?: string,
+  ) => (
+    <button
+      className={"ad-action " + (danger ? "ad-danger" : "")}
+      disabled={!canReview}
+      title={hint}
+      onClick={onClick}
+    >
+      {text}
+    </button>
+  );
+  return (
+    <section className="ad-card ad-payout-queue">
+      <div className="ad-card-heading">
+        <div>
+          <h2>Verifikasi penjual &amp; payout</h2>
+          <p>
+            Antrean ini mencatat keputusan manusia. Uang dikirim di luar
+            PiwuApp; isi referensi transfer saat menandai dibayar. Payout
+            menahan saldo sejak diminta, bukan saat disetujui.
+          </p>
+        </div>
+        <Wallet size={20} />
+      </div>
+      <h3>Menunggu verifikasi</h3>
+      {!kyc.length ? (
+        <p className="ad-muted">Tidak ada pengajuan verifikasi baru.</p>
+      ) : (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead>
+              <tr>
+                <th>Penjual</th>
+                <th>Nama legal</th>
+                <th>Negara</th>
+                <th>Diajukan</th>
+                <th>Tindakan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kyc.map((r: Row) => (
+                <tr key={r.user_id}>
+                  <td>
+                    <strong>
+                      {sellers.get(r.user_id)?.name || "Tanpa nama"}
+                    </strong>
+                    <code title={r.user_id}>{short(r.user_id)}</code>
+                    <small>
+                      Saldo tersedia:{" "}
+                      {money(sellers.get(r.user_id)?.available || 0)}
+                    </small>
+                  </td>
+                  <td>
+                    {r.legal_name}
+                    {r.business_name && <small>{r.business_name}</small>}
+                    {r.tax_id && <small>NPWP {r.tax_id}</small>}
+                  </td>
+                  <td>{r.country}</td>
+                  <td>{date(r.submitted_at)}</td>
+                  <td>
+                    {button(
+                      "Setujui",
+                      () =>
+                        ask(
+                          "kyc_review",
+                          r.user_id,
+                          { userId: r.user_id, status: "verified" },
+                          "Verifikasi penjual · " +
+                            (sellers.get(r.user_id)?.name || short(r.user_id)),
+                        ),
+                      false,
+                      "Catatan alasan tetap wajib diisi.",
+                    )}
+                    {button(
+                      "Tolak",
+                      () =>
+                        ask(
+                          "kyc_review",
+                          r.user_id,
+                          { userId: r.user_id, status: "rejected" },
+                          "Verifikasi penjual · " +
+                            (sellers.get(r.user_id)?.name || short(r.user_id)),
+                        ),
+                      true,
+                      "Alasan penolakan minimal 8 karakter.",
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <h3>Permintaan payout</h3>
+      {!payouts.length ? (
+        <p className="ad-muted">Tidak ada permintaan payout terbuka.</p>
+      ) : (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead>
+              <tr>
+                <th>Penjual</th>
+                <th>Jumlah</th>
+                <th>Tujuan</th>
+                <th>Status</th>
+                <th>Tindakan</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payouts.map((r: Row) => (
+                <tr key={r.id}>
+                  <td>
+                    <strong>
+                      {sellers.get(r.seller_id)?.name || "Tanpa nama"}
+                    </strong>
+                    <code title={r.id}>{short(r.id)}</code>
+                    <small>{date(r.created_at)}</small>
+                  </td>
+                  <td>{money(r.amount)}</td>
+                  <td>
+                    {r.method === "bank" ? "Transfer bank" : "E-wallet"}
+                    <small>{r.destination}</small>
+                  </td>
+                  <td>
+                    <Badge>{label(r.status)}</Badge>
+                  </td>
+                  <td>
+                    {r.status === "requested" &&
+                      button(
+                        "Setujui",
+                        () =>
+                          ask(
+                            "payout_review",
+                            r.id,
+                            { status: "approved" },
+                            money(r.amount) +
+                              " · " +
+                              (sellers.get(r.seller_id)?.name ||
+                                short(r.seller_id)),
+                          ),
+                        false,
+                        "Alasan keputusan tetap wajib diisi.",
+                      )}
+                    {button(
+                      "Tandai dibayar",
+                      () =>
+                        ask(
+                          "payout_review",
+                          r.id,
+                          { status: "paid" },
+                          money(r.amount) +
+                            " · " +
+                            (sellers.get(r.seller_id)?.name ||
+                              short(r.seller_id)),
+                        ),
+                      false,
+                      "Wajib mengisi referensi transfer 4–120 karakter.",
+                    )}
+                    {button(
+                      "Tolak",
+                      () =>
+                        ask(
+                          "payout_review",
+                          r.id,
+                          { status: "rejected" },
+                          money(r.amount) +
+                            " · " +
+                            (sellers.get(r.seller_id)?.name ||
+                              short(r.seller_id)),
+                        ),
+                      true,
+                      "Saldo yang ditahan akan dilepas. Alasan minimal 8 karakter.",
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="ad-muted">
+        Menolak payout melepas saldo yang ditahan. Referensi transfer hanya
+        disimpan di baris payout dan audit, bukan di log aplikasi.
+      </p>
+    </section>
+  );
+}
+
 function AiPanel({ data, client }: { data: Row; client: AdminClient }) {
   const [state, setState] = useState<Row>(data);
   const [busy, setBusy] = useState(false);

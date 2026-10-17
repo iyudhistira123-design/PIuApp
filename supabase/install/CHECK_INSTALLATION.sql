@@ -18,7 +18,9 @@ with markers(migration,table_name,function_signature) as (values
  ('010','public.credit_lots','public.piwu_claim_daily(uuid)'),
  ('010',null,'public.piwu_credit_status(uuid)'),
  ('011',null,'public.piwu_admin_delete_account(uuid,uuid,uuid,jsonb,text)'),
- ('012','public.notifications','public.piwu_notifications(uuid,integer)')
+ ('012','public.notifications','public.piwu_notifications(uuid,integer)'),
+ ('013','public.marketplace_payouts','public.piwu_request_payout(uuid,integer,text,text)'),
+ ('013',null,'public.piwu_purge_seller_pii(uuid)')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)
@@ -73,7 +75,9 @@ with required(name) as (values
  ('public.platform_audit'),
  ('public.studio_bridges'),
  ('public.runtime_rate_buckets'),
- ('public.runtime_sandbox_slots')
+ ('public.runtime_sandbox_slots'),
+ ('public.seller_verifications'),
+ ('public.marketplace_payouts')
 )
 select r.name as object,
   case when c.oid is null then 'TABEL_BELUM_ADA'

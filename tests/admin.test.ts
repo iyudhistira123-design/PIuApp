@@ -539,6 +539,17 @@ test("Admin API: verified identity, DB roles, suspension, service controls and n
         .length,
       1,
     );
+    // Migration 013 data is purged too, before the Auth identity is retired.
+    const purge = calls.findIndex(
+      (c) => c.path === "/rest/v1/rpc/piwu_purge_seller_pii",
+    );
+    const retired = calls.findIndex(
+      (c) =>
+        c.path === "/auth/v1/admin/users/" + ids.member &&
+        c.method === "DELETE",
+    );
+    assert.ok(purge > 0 && purge < retired);
+    assert.equal(calls[purge].body.p_user, ids.member);
     const updated = calls.find(
       (c) =>
         c.path === "/auth/v1/admin/users/" + ids.member && c.method === "PUT",

@@ -17,15 +17,16 @@
 
 ## Syarat sebelum produksi
 
-1. Jalankan migration 001–012 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
+1. Jalankan migration 001–013 berurutan pada staging dan uji empat sesi nyata: Owner, Editor, Viewer, outsider. Uji direct PostgREST, RPC, Storage, Realtime, pencabutan akses, dan pembacaan template berbayar.
 2. Konfirmasi seluruh kredensial server-only, HTTPS, allowed redirects, email/phone verification, aturan signup, body/concurrency limits, proxy trust yang sempit, HSTS/CSP dan logging teredaksi.
 3. Produksi memakai rate limiter dan admission sandbox PostgreSQL (migration 007) serta fail-closed ketika database tidak tersedia. SDK handle tetap lokal dan memerlukan sticky routing; belum failover transparan. Kuota bersama mencakup sandbox interaktif, bukan build sekali pakai. Antrean kredit/pembayaran menggunakan database; uji crash recovery, konkurensi dan kapasitas pada infrastruktur sebenarnya.
 4. Uji invoice sukses/gagal/duplicate/out-of-order/refund/chargeback. Partial refund, Xendit refund di luar invoice callback, checkout dengan respons provider hilang, fraud, pajak, dispute dan payout belum otomatis. Jangan aktifkan pembayaran live tanpa rekonsiliasi/runbook.
 5. Monitor reservations/receipts dan tetapkan alert. PiwuApp tidak menghosting website, jadi tidak ada cleanup hosting yang perlu diawasi.
 6. Sandbox preview adalah URL publik sementara. Audit hasil build dan dependensi sebelum membagikan hasil Export ZIP; threshold Lighthouse ≥60 bukan bukti aman. Kode hasil ekspor berjalan di hosting Anda sendiri, di luar jaminan PiwuApp.
 7. Realtime presence advisory dan dapat dipalsukan client yang diizinkan kanal; jangan gunakan sebagai bukti author/role. Konflik file menggunakan revisi, bukan CRDT.
-8. Uji backup/restore dan key rotation; rekaman lokal/cloud dan transaksi memerlukan kebijakan bisnis/penghapusan akun yang eksplisit.
-9. Rencana harga/tier belum menjadi sistem entitlement fitur lengkap. Snapshot UI, label plan dan data pemakaian bukan bukti pembayaran; gunakan ledger/provider settlement.
+8. Payout marketplace bukan transfer otomatis. Data KYC (nama legal, NPWP opsional) dan tujuan transfer disimpan di tabel dengan RLS baca-sendiri; hanya superadmin yang boleh meninjau lewat RPC service-only. Referensi transfer wajib saat status `paid`, tetapi kebenaran transfer dan kepatuhan pajak/KYC tetap tanggung jawab operator di luar aplikasi. Penghapusan akun memanggil `piwu_purge_seller_pii` untuk menghapus baris KYC dan menulis ulang tujuan transfer menjadi `[dihapus]`; nominal/status/referensi dipertahankan sebagai catatan keuangan.
+9. Uji backup/restore dan key rotation; rekaman lokal/cloud dan transaksi memerlukan kebijakan bisnis/penghapusan akun yang eksplisit.
+10. Rencana harga/tier belum menjadi sistem entitlement fitur lengkap. Snapshot UI, label plan dan data pemakaian bukan bukti pembayaran; gunakan ledger/provider settlement.
 
 ## Bukti pengujian
 

@@ -20,6 +20,7 @@ import { rateLimit } from "../lib/context.mjs";
 import {
   platformResult,
   platformAdmin,
+  schemaMissing,
   siteSettings,
 } from "../lib/platform.mjs";
 import {
@@ -561,8 +562,20 @@ export function registerAdmin(app, ctx) {
           },
         ),
       );
-      if (command.action === "user_delete")
+      if (command.action === "user_delete") {
+        // Migration 013 data is not covered by 011 (it did not exist then):
+        // remove KYC and the transfer destination before the identity retires.
+        const purged = await ctx.admin.rpc("piwu_purge_seller_pii", {
+          p_user: command.target,
+        });
+        if (purged.error && !schemaMissing(purged.error))
+          throw new HttpError(
+            502,
+            "Akun sudah ditangguhkan dan data pribadi dihapus, tetapi data penjual belum dibersihkan. Ulangi permintaan yang sama.",
+            "ACCOUNT_PAYOUT_PURGE",
+          );
         await retireIdentity(ctx.admin, command.target);
+      }
       if (command.action === "credits" && command.target) {
         const delta = Number(command.payload.delta) || 0;
         await notifyUser(ctx, command.target, {

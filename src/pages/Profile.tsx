@@ -14,6 +14,7 @@ import {
   validatePassword,
 } from "../lib/profile";
 import { periodLeft, rupiah } from "../lib/dashboard/plans";
+import PayoutSection from "../components/services/PayoutSection";
 import "../components/services/services.css";
 import "../components/services/profile.css";
 
@@ -396,6 +397,7 @@ export default function Profile({
                 </>
               )}
             </section>
+            {signedIn && <PayoutSection />}
 
             <section className="profile-card">
               <h2>Workspace</h2>

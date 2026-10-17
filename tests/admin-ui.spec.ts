@@ -63,6 +63,47 @@ async function fixture(
           ];
           return { notice: "Broadcast disimpan dalam fixture pengujian." };
         }
+        if (path === "/admin/payouts")
+          return {
+            applied: true,
+            sellers: [
+              {
+                user_id: "11111111-1111-4111-8111-111111111111",
+                name: "Penjual Fixture",
+                accrued: 180000,
+                pending: 100000,
+                paid: 0,
+                available: 80000,
+                kyc_status: "pending",
+                legal_name: "Penjual Fixture",
+                country: "ID",
+              },
+            ],
+            verifications: [
+              {
+                user_id: "11111111-1111-4111-8111-111111111111",
+                status: "pending",
+                legal_name: "Penjual Fixture",
+                country: "ID",
+                submitted_at: "2026-10-10T00:00:00.000Z",
+              },
+            ],
+            payouts: [
+              {
+                id: "22222222-2222-4222-8222-222222222222",
+                seller_id: "11111111-1111-4111-8111-111111111111",
+                amount: 100000,
+                method: "bank",
+                destination: "BCA 1234567890",
+                status: "requested",
+                created_at: "2026-10-10T00:00:00.000Z",
+              },
+            ],
+          };
+        if (path.startsWith("/admin/payouts/")) {
+          state.actions.push({ path, ...structuredClone(body) });
+          return { result: { status: body?.status } };
+        }
         if (path.startsWith("/admin/settings"))
           return {
             revision: 1,
@@ -106,6 +147,55 @@ async function fixture(
       page.getByRole("heading", { name: "Broadcast", exact: true }),
     ).toBeVisible();
 }
+test("payout queue: superadmin reviews KYC and marks a transfer paid with a reference", async ({
+  page,
+}) => {
+  await fixture(page, "superadmin", "marketplace");
+  await expect(
+    page.getByRole("heading", { name: "Verifikasi penjual & payout" }),
+  ).toBeVisible();
+  await expect(page.getByText("Penjual Fixture").first()).toBeVisible();
+
+  await page
+    .getByRole("row", { name: /22222222/ })
+    .getByRole("button", { name: "Tandai dibayar" })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Referensi transfer");
+  await expect(
+    dialog.getByRole("button", { name: "Konfirmasi perubahan" }),
+  ).toBeDisabled();
+  await dialog.getByLabel("Referensi transfer").fill("TRX-2026-0001");
+  await dialog
+    .getByLabel("Alasan perubahan")
+    .fill("Transfer bank sudah diterima penjual");
+  await dialog.getByRole("button", { name: "Konfirmasi perubahan" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Tinjauan tersimpan" }),
+  ).toBeVisible();
+  const sent = await page.evaluate(
+    () => (window as any).__adminFixture.actions[0],
+  );
+  expect(sent.path).toBe("/admin/payouts/22222222-2222-4222-8222-222222222222");
+  expect(sent.status).toBe("paid");
+  expect(sent.reference).toBe("TRX-2026-0001");
+  expect(sent.note).toContain("Transfer bank");
+
+  await page
+    .getByRole("row", { name: /11111111/ })
+    .getByRole("button", { name: "Setujui" })
+    .first()
+    .click();
+  await page.getByLabel("Alasan perubahan").fill("Dokumen penjual sesuai");
+  await page.getByRole("button", { name: "Konfirmasi perubahan" }).click();
+  const kycSent = await page.evaluate(
+    () => (window as any).__adminFixture.actions[1],
+  );
+  expect(kycSent.path).toBe("/admin/payouts/kyc");
+  expect(kycSent.status).toBe("verified");
+  expect(kycSent.userId).toBe("11111111-1111-4111-8111-111111111111");
+});
+
 test("broadcast editor: schedule, audience, confirmation, retained draft and explicit errors", async ({
   page,
 }) => {
