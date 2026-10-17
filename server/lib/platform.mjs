@@ -37,12 +37,6 @@ export function platformResult(result) {
         "Panel admin belum disiapkan. Periksa migration 005_admin.sql dan 008_admin_directory.sql.",
         "ADMIN_SETUP",
       );
-    if (result.error.code === "42501")
-      throw new HttpError(
-        403,
-        "Anda tidak memiliki izin untuk tindakan admin ini.",
-        "ADMIN_FORBIDDEN",
-      );
     const messages = {
       ADMIN_CONFLICT:
         "Data berubah atau proses sudah berjalan. Muat ulang sebelum mencoba lagi.",
@@ -50,12 +44,23 @@ export function platformResult(result) {
       ADMIN_LAST_SUPERADMIN:
         "Superadmin terakhir tidak boleh dihapus atau diturunkan perannya.",
       ADMIN_REMOVE_ROLE_FIRST:
-        "Cabut peran admin pengguna ini sebelum menangguhkan akun.",
+        "Cabut peran admin pengguna ini sebelum menangguhkan atau menghapus akun.",
+      ADMIN_SELF: "Akun Anda sendiri tidak dapat dihapus dari panel admin.",
       ADMIN_NEGATIVE_BALANCE: "Pengurangan akan membuat saldo negatif.",
       ADMIN_NOT_FOUND: "Data tidak ditemukan.",
       ADMIN_INVALID: "Format tindakan admin tidak valid.",
     };
     const code = Object.keys(messages).find((k) => m.includes(k));
+    // A superadmin deleting their own account is forbidden for a different
+    // reason than a missing role, so it keeps its own message.
+    if (code === "ADMIN_SELF")
+      throw new HttpError(403, messages[code], "ADMIN_SELF");
+    if (result.error.code === "42501")
+      throw new HttpError(
+        403,
+        "Anda tidak memiliki izin untuk tindakan admin ini.",
+        "ADMIN_FORBIDDEN",
+      );
     throw new HttpError(
       code === "ADMIN_NOT_FOUND" ? 404 : code === "ADMIN_INVALID" ? 400 : 409,
       code

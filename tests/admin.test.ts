@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { adminCommand } from "../server/routes/admin.mjs";
+import {
+  retireIdentity,
+  tombstoneEmail,
+} from "../server/lib/account-retire.mjs";
 test("Admin commands reject spoofed actor, unknown actions, manual paid state and invalid schedules", () => {
   const c = {
     requestId: crypto.randomUUID(),
@@ -12,6 +16,24 @@ test("Admin commands reject spoofed actor, unknown actions, manual paid state an
     reason: "Kompensasi gangguan",
   };
   assert.equal(adminCommand(c).payload.delta, 50);
+  assert.equal(
+    adminCommand({
+      ...c,
+      action: "user_delete",
+      payload: { confirmation: c.target },
+    }).action,
+    "user_delete",
+  );
+  assert.throws(() =>
+    adminCommand({ ...c, action: "user_delete", payload: {} }),
+  );
+  assert.throws(() =>
+    adminCommand({
+      ...c,
+      action: "user_delete",
+      payload: { confirmation: c.target, extra: 1 },
+    }),
+  );
   for (const data of [
     { ...c, actor: crypto.randomUUID() },
     { ...c, action: "constructor" },
@@ -25,7 +47,7 @@ test("Admin SQL: migrations, permissions, audit/idempotency, CAS, broadcasts and
   const db = new PGlite();
   try {
     await db.exec(
-      `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;create function storage.foldername(n text) returns text[] language sql immutable as $$select string_to_array(n,'/')$$;grant usage on schema public,auth,storage to authenticated,anon,service_role;grant execute on function auth.uid() to authenticated,anon;alter default privileges in schema public grant select,insert,update,delete on tables to authenticated;`,
+      `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}',created_at timestamptz default now(),last_sign_in_at timestamptz,email_confirmed_at timestamptz,phone_confirmed_at timestamptz,deleted_at timestamptz);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;create function storage.foldername(n text) returns text[] language sql immutable as $$select string_to_array(n,'/')$$;grant usage on schema public,auth,storage to authenticated,anon,service_role;grant execute on function auth.uid() to authenticated,anon;alter default privileges in schema public grant select,insert,update,delete on tables to authenticated;`,
     );
     for (const n of [
       "001_schema",
@@ -406,6 +428,13 @@ test("Admin API: verified identity, DB roles, suspension, service controls and n
     } else if (url.pathname.startsWith("/rest/v1/rpc/")) {
       calls.push({ path: url.pathname, body: JSON.parse(init.body) });
       data = { revision: 1 };
+    } else if (url.pathname.startsWith("/auth/v1/admin/users/")) {
+      calls.push({
+        path: url.pathname,
+        method: init.method || "GET",
+        body: init.body ? JSON.parse(init.body) : null,
+      });
+      data = { id: url.pathname.split("/").pop() };
     } else if (url.pathname === "/rest/v1/projects") {
       assert.ok(!url.searchParams.get("select")?.includes("payload"));
       data = [];
@@ -476,7 +505,339 @@ test("Admin API: verified identity, DB roles, suspension, service controls and n
         .status,
       503,
     );
+    aiEnabled = true;
+    const remove = {
+      requestId: crypto.randomUUID(),
+      action: "user_delete",
+      target: ids.member,
+      payload: { confirmation: ids.member },
+      reason: "Permintaan penghapusan oleh pemilik akun",
+    };
+    assert.equal(
+      (await call("/admin/actions", "operator", remove)).status,
+      403,
+    );
+    assert.equal((await call("/admin/actions", "root", remove)).status, 200);
+    assert.equal(
+      calls.filter((c) => c.path === "/rest/v1/rpc/piwu_admin_delete_account")
+        .length,
+      1,
+    );
+    const updated = calls.find(
+      (c) =>
+        c.path === "/auth/v1/admin/users/" + ids.member && c.method === "PUT",
+    );
+    assert.equal(updated.body.email, tombstoneEmail(ids.member));
+    assert.equal(updated.body.email_confirm, true);
+    assert.ok(
+      calls.some(
+        (c) =>
+          c.path === "/auth/v1/admin/users/" + ids.member &&
+          c.method === "DELETE",
+      ),
+    );
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }
+});
+
+test("account deletion: superadmin-only, confirmed, deletes personal rows and keeps money/audit", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(
+      `create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}',created_at timestamptz default now(),last_sign_in_at timestamptz,email_confirmed_at timestamptz,phone_confirmed_at timestamptz,deleted_at timestamptz);create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;create function storage.foldername(n text) returns text[] language sql immutable as $$select string_to_array(n,'/')$$;grant usage on schema public,auth,storage to authenticated,anon,service_role;grant execute on function auth.uid() to authenticated,anon;alter default privileges in schema public grant select,insert,update,delete on tables to authenticated;`,
+    );
+    for (const n of [
+      "001_schema",
+      "002_workspace_sync",
+      "003_services",
+      "004_project_data",
+      "005_admin",
+      "006_studio_bridge",
+      "007_runtime_coordination",
+      "008_admin_directory",
+      "009_search_cache",
+      "010_credit_lots",
+      "011_account_deletion",
+    ])
+      await db.exec(
+        readFileSync("supabase/" + n + ".sql", "utf8")
+          .replace("create extension if not exists pgcrypto;", "")
+          .replace(/^begin;\s*$/m, "")
+          .replace(/commit;\s*$/, ""),
+      );
+    const [root, op, target, other, adminTarget] = Array.from(
+      { length: 5 },
+      () => crypto.randomUUID(),
+    );
+    for (const id of [root, op, target, other, adminTarget])
+      await db.query(
+        "insert into auth.users(id,email,email_confirmed_at) values($1,$2,now())",
+        [id, id.slice(0, 8) + "@example.test"],
+      );
+    await db.query(
+      "insert into platform_admins(user_id,role) values($1,'superadmin'),($2,'operator'),($3,'auditor')",
+      [root, op, adminTarget],
+    );
+    await db.query("insert into public.users(id,name) values($1,'Nama Asli')", [
+      target,
+    ]);
+    const own = crypto.randomUUID(),
+      shared = crypto.randomUUID(),
+      template = crypto.randomUUID(),
+      order = crypto.randomUUID();
+    await db.query(
+      "insert into projects(id,name,owner_id) values($1,'Milik target',$2),($3,'Milik lain',$4)",
+      [own, target, shared, other],
+    );
+    await db.query(
+      "insert into project_workspaces(project_id,revision,payload,updated_by) values($1,1,'{}',$2),($3,1,'{}',$2)",
+      [own, target, shared],
+    );
+    await db.query(
+      "insert into prompts(owner_id,title,content) values($1,'p','c')",
+      [target],
+    );
+    await db.query(
+      "insert into comments(project_id,body,author_id) values($1,'komentar',$2)",
+      [shared, target],
+    );
+    await db.query(
+      "insert into project_invites(project_id,created_by,role,token_hash,expires_at) values($1,$2,'Editor','inv',now()+interval '1 day')",
+      [shared, target],
+    );
+    await db.query(
+      "insert into referrals(referrer_id,referred_id) values($1,$2)",
+      [target, other],
+    );
+    await db.query(
+      "insert into templates(id,owner_id,project_snapshot,status,title) values($1,$2,'{}','published','Template')",
+      [template, target],
+    );
+    await db.query(
+      "insert into payment_orders(id,user_id,provider,kind,sku,amount) values($1,$2,'midtrans','template','tpl',49000),($3,$4,'midtrans','topup','x',49000)",
+      [order, other, crypto.randomUUID(), target],
+    );
+    await db.query(
+      "insert into template_entitlements(user_id,template_id,order_id) values($1,$2,$3)",
+      [other, template, order],
+    );
+    await db.query(
+      "insert into credit_ledger(user_id,delta,reason,reference) values($1,10,'uji','r1')",
+      [target],
+    );
+    const remove = async (
+      actor: string,
+      victim: string,
+      confirmation = victim,
+      request = crypto.randomUUID(),
+    ) =>
+      (
+        await db.query(
+          "select piwu_admin_delete_account($1,$2,$3,$4,$5) as result",
+          [
+            actor,
+            request,
+            victim,
+            JSON.stringify({ confirmation }),
+            "Menghapus akun uji",
+          ],
+        )
+      ).rows[0].result;
+    await assert.rejects(() => remove(op, target), /ADMIN_FORBIDDEN/);
+    await assert.rejects(
+      () => remove(root, adminTarget),
+      /ADMIN_REMOVE_ROLE_FIRST/,
+    );
+    await assert.rejects(() => remove(root, root), /ADMIN_SELF/);
+    await assert.rejects(() => remove(root, target, own), /ADMIN_INVALID/);
+    const request = crypto.randomUUID();
+    assert.deepEqual(await remove(root, target, target, request), {
+      projects: 1,
+      templates: 1,
+      retained: [
+        "payment_orders",
+        "credit_ledger",
+        "marketplace_sales",
+        "template_entitlements",
+        "platform_audit",
+      ],
+    });
+    assert.deepEqual(await remove(root, target, target, request), {
+      projects: 1,
+      templates: 1,
+      retained: [
+        "payment_orders",
+        "credit_ledger",
+        "marketplace_sales",
+        "template_entitlements",
+        "platform_audit",
+      ],
+    });
+    assert.equal(
+      (await db.query("select count(*)::int c from platform_audit")).rows[0].c,
+      1,
+    );
+    assert.equal(
+      (await db.query("select id from projects where id=$1", [own])).rows
+        .length,
+      0,
+    );
+    assert.equal(
+      (await db.query("select id from projects where id=$1", [shared])).rows
+        .length,
+      1,
+    );
+    assert.equal(
+      (
+        await db.query(
+          "select updated_by from project_workspaces where project_id=$1",
+          [shared],
+        )
+      ).rows[0].updated_by,
+      other,
+    );
+    for (const [table, where] of [
+      ["prompts", "owner_id"],
+      ["comments", "author_id"],
+      ["project_invites", "created_by"],
+      ["referrals", "referrer_id"],
+    ])
+      assert.equal(
+        (
+          await db.query(
+            `select count(*)::int c from ${table} where ${where}=$1`,
+            [target],
+          )
+        ).rows[0].c,
+        0,
+        table,
+      );
+    assert.equal(
+      (await db.query("select count(*)::int c from payment_orders")).rows[0].c,
+      2,
+    );
+    assert.equal(
+      (await db.query("select count(*)::int c from credit_ledger")).rows[0].c,
+      1,
+    );
+    assert.equal(
+      (await db.query("select count(*)::int c from template_entitlements"))
+        .rows[0].c,
+      1,
+    );
+    assert.equal(
+      (await db.query("select status from templates where id=$1", [template]))
+        .rows[0].status,
+      "archived",
+    );
+    assert.equal(
+      (await db.query("select name from users where id=$1", [target])).rows[0]
+        .name,
+      "Akun dihapus",
+    );
+    assert.deepEqual(
+      (
+        await db.query(
+          "select suspended,reason from platform_user_controls where user_id=$1",
+          [target],
+        )
+      ).rows[0],
+      { suspended: true, reason: "Akun dihapus: Menghapus akun uji" },
+    );
+    assert.equal(
+      (await db.query("select piwu_user_active($1) as a", [target])).rows[0].a,
+      false,
+    );
+    assert.equal(
+      (await db.query("select count(*)::int c from auth.users")).rows[0].c,
+      5,
+    );
+    const beforeSoftDelete = (
+      await db.query("select piwu_admin_users($1,'',1) as d", [root])
+    ).rows[0].d;
+    assert.equal(
+      beforeSoftDelete.items.find((item: any) => item.id === target)
+        .suspended_reason,
+      "Akun dihapus: Menghapus akun uji",
+    );
+    // GoTrue marks the soft-deleted row; the admin directory must hide it while
+    // keeping the row for invoices/audit.
+    await db.query("update auth.users set deleted_at=now() where id=$1", [
+      target,
+    ]);
+    const directory = (
+      await db.query("select piwu_admin_users($1,'',1) as d", [root])
+    ).rows[0].d;
+    assert.equal(
+      directory.items.some((item: any) => item.id === target),
+      false,
+    );
+    assert.equal(
+      directory.items.some((item: any) => item.id === other),
+      true,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("Auth retirement replaces the email and soft-deletes, tolerating a retry", async () => {
+  const id = crypto.randomUUID();
+  const calls: any[] = [];
+  const admin = {
+    auth: {
+      admin: {
+        updateUserById: async (userId: string, attrs: any) => {
+          calls.push(["update", userId, attrs]);
+          return { error: null };
+        },
+        deleteUser: async (userId: string, soft: boolean) => {
+          calls.push(["delete", userId, soft]);
+          return { error: null };
+        },
+      },
+    },
+  };
+  await retireIdentity(admin, id);
+  assert.deepEqual(calls, [
+    [
+      "update",
+      id,
+      {
+        email: tombstoneEmail(id),
+        email_confirm: true,
+        user_metadata: { name: "Akun dihapus" },
+      },
+    ],
+    ["delete", id, true],
+  ]);
+  assert.equal(tombstoneEmail(id), `deleted+${id}@piwu.invalid`);
+  const gone = {
+    auth: {
+      admin: {
+        updateUserById: async () => ({
+          error: { status: 404, message: "User not found" },
+        }),
+        deleteUser: async () => ({
+          error: { status: 404, message: "User not found" },
+        }),
+      },
+    },
+  };
+  await retireIdentity(gone, id);
+  const broken = {
+    auth: {
+      admin: {
+        updateUserById: async () => ({
+          error: { status: 500, message: "provider down" },
+        }),
+        deleteUser: async () => ({ error: null }),
+      },
+    },
+  };
+  await assert.rejects(
+    () => retireIdentity(broken, id),
+    /email Auth belum dapat diganti/,
+  );
 });

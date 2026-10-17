@@ -16,7 +16,8 @@ with markers(migration,table_name,function_signature) as (values
  ('008',null,'public.piwu_admin_users(uuid,text,integer)'),
  ('009','public.runtime_search_cache',null),
  ('010','public.credit_lots','public.piwu_claim_daily(uuid)'),
- ('010',null,'public.piwu_credit_status(uuid)')
+ ('010',null,'public.piwu_credit_status(uuid)'),
+ ('011',null,'public.piwu_admin_delete_account(uuid,uuid,uuid,jsonb,text)')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)
@@ -89,6 +90,7 @@ with required(signature,browser_allowed) as (values
  ('public.piwu_save_dataset(uuid,uuid,text,jsonb,jsonb,bigint)',true),
  ('public.piwu_delete_dataset(uuid,uuid,bigint)',true),
  ('public.piwu_admin_action(uuid,uuid,text,uuid,jsonb,text)',false),
+ ('public.piwu_admin_delete_account(uuid,uuid,uuid,jsonb,text)',false),
  ('public.piwu_admin_users(uuid,text,integer)',false),
  ('public.piwu_take_rate(text,integer,integer)',false),
  ('public.piwu_sandbox_slot(uuid,uuid,uuid,boolean)',false),

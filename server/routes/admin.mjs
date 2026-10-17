@@ -31,6 +31,7 @@ import {
   LOW_BALANCE,
 } from "../lib/admin-insights.mjs";
 import { paymentProvider } from "../providers/payments.mjs";
+import { retireIdentity } from "../lib/account-retire.mjs";
 const priceOverride = z
   .object({
     amount: z.number().int().min(1000).max(100000000),
@@ -129,6 +130,7 @@ const schemas = {
     .object({ role: z.enum(["superadmin", "operator", "auditor", "remove"]) })
     .strict(),
   user_suspend: z.object({ suspended: z.boolean() }).strict(),
+  user_delete: z.object({ confirmation: z.uuid() }).strict(),
   credits: z
     .object({
       delta: z
@@ -486,6 +488,7 @@ export function registerAdmin(app, ctx) {
           "admin_role",
           "credits",
           "user_suspend",
+          "user_delete",
           "settings",
           "project_delete",
         ].includes(command.action) &&
@@ -527,16 +530,28 @@ export function registerAdmin(app, ctx) {
         const status = await provider.status(order);
         command.payload = status;
       }
+      // Account removal needs its own RPC: the personal rows go first, then the
+      // Auth identity is retired through the Admin API. Retrying the same
+      // request id returns the audit result and only repeats the Auth step.
       const result = platformResult(
-        await ctx.admin.rpc("piwu_admin_action", {
-          p_actor: req.user.id,
-          p_request: command.requestId,
-          p_action: command.action,
-          p_target: command.target,
-          p_payload: command.payload,
-          p_reason: command.reason,
-        }),
+        await ctx.admin.rpc(
+          command.action === "user_delete"
+            ? "piwu_admin_delete_account"
+            : "piwu_admin_action",
+          {
+            p_actor: req.user.id,
+            p_request: command.requestId,
+            ...(command.action === "user_delete"
+              ? {}
+              : { p_action: command.action }),
+            p_target: command.target,
+            p_payload: command.payload,
+            p_reason: command.reason,
+          },
+        ),
       );
+      if (command.action === "user_delete")
+        await retireIdentity(ctx.admin, command.target);
       res.json({
         result,
         notice: "Perubahan dikonfirmasi dan dicatat dalam audit log.",
