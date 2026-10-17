@@ -8,11 +8,8 @@ import {
   attentionItems,
   type AttentionItem,
   type CommentRow,
-  type DeploymentRow,
   type InviteRow,
   type ProjectSignals,
-  type PublishJobRow,
-  type SiteRow,
 } from "../../lib/dashboard/attention";
 import type { Project } from "../../lib/types";
 
@@ -20,7 +17,7 @@ import type { Project } from "../../lib/types";
  * "Menunggu Anda": the things inside a project that stop until someone decides.
  *
  * Every item comes from a project endpoint that already existed (comments,
- * members/invites, deployments/domain, the Studio bridge) — this panel only
+ * members/invites, the Studio bridge) — this panel only
  * gathers them in one place. Two rules keep it honest:
  *  - it checks a bounded number of the newest projects and says how many it
  *    checked, instead of pretending the list is complete;
@@ -54,14 +51,9 @@ async function signalsFor(
       return undefined;
     }
   };
-  const [comments, members, deployments, studio] = await Promise.all([
+  const [comments, members, studio] = await Promise.all([
     grab<{ comments?: CommentRow[] }>("comments"),
     grab<{ invites?: InviteRow[] }>("members"),
-    grab<{
-      site?: SiteRow | null;
-      deployments?: DeploymentRow[];
-      jobs?: PublishJobRow[];
-    }>("deployments"),
     grab<{ state?: string; queuedChanges?: number }>("studio"),
   ]);
   return {
@@ -69,13 +61,6 @@ async function signalsFor(
       project: { id: project.id, name: project.name },
       comments: comments?.comments,
       invites: members?.invites,
-      deployments: deployments
-        ? {
-            site: deployments.site ?? null,
-            deployments: deployments.deployments,
-            jobs: deployments.jobs,
-          }
-        : undefined,
       studio: studio || null,
       syncPhase,
     },

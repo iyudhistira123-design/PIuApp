@@ -118,8 +118,7 @@ export function creditsPerDayOf(profileId: string) {
     per(profile.ask) * CREDIT_COSTS.ask +
     per(profile.researchRounds) * CREDIT_COSTS.researchRound +
     (per(profile.sandboxJobsPerWeek) * CREDIT_COSTS.sandboxJob) / 7 +
-    (per(profile.auditsPerMonth) * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS +
-    (per(profile.publishesPerMonth) * CREDIT_COSTS.publish) / PLAN_PERIOD_DAYS
+    (per(profile.auditsPerMonth) * CREDIT_COSTS.audit) / PLAN_PERIOD_DAYS
   );
 }
 

@@ -228,11 +228,10 @@ function WorkspaceRoute() {
 const DIALOG_TITLES: Record<string, string> = {
   settings: "Pengaturan workspace",
   invite: "Bangun bersama tim",
-  publish: "Bawa ide Anda ke dunia",
+  export: "Ekspor kode project",
   services: "Layanan project",
   integrations: "Integrasi",
   comments: "Komentar pada elemen",
-  analytics: "Analytics project",
   recording: "Rekaman & pemutar sesi",
   credits: "Paket & penggunaan",
 };
@@ -1259,11 +1258,11 @@ function WorkspaceContent({ project }: { project: Project }) {
             Invite
           </button>
           <button
-            className="ws-button publish-button"
-            onClick={() => setDialog("publish")}
+            className="ws-button export-button"
+            onClick={() => setDialog("export")}
           >
-            <Globe2 size={13} />
-            Publish
+            <Download size={13} />
+            Export ZIP
           </button>
         </div>
       </header>
@@ -3231,7 +3230,6 @@ function WorkspaceContent({ project }: { project: Project }) {
               ...DIALOG_TITLES,
               delete: "Hapus project?",
               invite: "Bangun bersama tim",
-              publish: "Bawa ide Anda ke dunia",
               integrations: "Integrasi",
               github: "Hubungkan repositori",
               packages: "Paket project",
@@ -3332,16 +3330,15 @@ function WorkspaceContent({ project }: { project: Project }) {
                 <ServicePanel kind="invite" projectId={id} />
               </Suspense>
             )}
-            {dialog === "publish" && kind !== "webapp" && (
-              <p>
-                {kind === "roblox"
-                  ? "Publikasi game dan Play Test dilakukan melalui Roblox Studio. Hubungkan melalui tab 3D Builder → Hubungkan Studio."
-                  : "Build, signing, dan distribusi Android/iOS dilakukan dengan Expo/EAS atau toolchain native. Gunakan ekspor ZIP untuk melanjutkan."}
-              </p>
-            )}
-            {dialog === "publish" && kind === "webapp" && (
-              <Suspense fallback={<p>Memuat…</p>}>
-                <ServicePanel kind="publish" projectId={id} />
+            {dialog === "export" && (
+              <>
+                <p>
+                  {kind === "roblox"
+                    ? "PiwuApp tidak memublikasikan game. Buka project di Roblox Studio lewat tab 3D Builder → Hubungkan Studio, lalu publikasikan dari sana. Ekspor ZIP tetap tersedia untuk menyimpan kode skrip dan aset map."
+                    : kind === "mobile"
+                      ? "Build, signing, dan distribusi Android/iOS dilakukan dengan Expo/EAS atau toolchain native di mesin Anda. PiwuApp tidak menghosting hasil build."
+                      : "PiwuApp tidak menghosting website atau memasang domain. Unduh seluruh kode project sebagai ZIP, lalu jalankan di mesin Anda sendiri."}
+                </p>
                 <button
                   className="button button-outline full-width mt-3"
                   onClick={() => void exportZip()}
@@ -3349,7 +3346,7 @@ function WorkspaceContent({ project }: { project: Project }) {
                   <Download size={14} />
                   Unduh kode ZIP
                 </button>
-              </Suspense>
+              </>
             )}
             {dialog === "github" && (
               <>

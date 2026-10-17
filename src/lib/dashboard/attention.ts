@@ -16,8 +16,7 @@ import type { Project } from "../types";
 /** Files the Roblox bridge writes next to the scene (see server/lib/roblox-scene.mjs). */
 export const SCENE_ASSET_PATH = "studio.assets.json";
 
-export type AttentionKind =
-  "comments" | "invites" | "domain" | "deploy" | "studio" | "sync";
+export type AttentionKind = "comments" | "invites" | "studio" | "sync";
 
 export interface AttentionItem {
   id: string;
@@ -44,20 +43,6 @@ export interface InviteRow {
   accepted_at?: string | null;
   revoked_at?: string | null;
 }
-export interface DeploymentRow {
-  status?: string;
-  error?: string | null;
-  created_at?: string;
-}
-export interface SiteRow {
-  url?: string | null;
-  custom_domain?: string | null;
-  domain_status?: string | null;
-}
-export interface PublishJobRow {
-  status?: string;
-  error?: string | null;
-}
 export interface BridgeRow {
   state?: string;
   queuedChanges?: number;
@@ -69,11 +54,6 @@ export interface ProjectSignals {
   project: { id: string; name: string };
   comments?: CommentRow[];
   invites?: InviteRow[];
-  deployments?: {
-    site?: SiteRow | null;
-    deployments?: DeploymentRow[];
-    jobs?: PublishJobRow[];
-  };
   studio?: BridgeRow | null;
   syncPhase?: string;
 }
@@ -90,17 +70,6 @@ export function pendingInvites(
     const expires = invite.expires_at ? Date.parse(invite.expires_at) : NaN;
     return Number.isNaN(expires) || expires > now;
   });
-}
-
-/** The most recent deployment that failed, if the newest one did. */
-export function failedDeploy(deployments: DeploymentRow[] | undefined) {
-  const newest = (deployments || [])[0];
-  return newest?.status === "failed" ? newest : undefined;
-}
-
-export function domainWaiting(site: SiteRow | null | undefined) {
-  if (!site?.custom_domain) return "";
-  return site.domain_status === "active" ? "" : site.custom_domain;
 }
 
 export function bridgeWaiting(studio: BridgeRow | null | undefined) {
@@ -157,26 +126,6 @@ export function attentionItems(
         .slice(0, 3)
         .join(", "),
       link: projectLink(project.id, "invite"),
-    });
-  const domain = domainWaiting(signals.deployments?.site);
-  if (domain)
-    items.push({
-      ...base,
-      id: `${project.id}:domain`,
-      kind: "domain",
-      title: "Domain kustom belum aktif",
-      detail: `${domain} · DNS/verifikasi belum selesai`,
-      link: projectLink(project.id, "publish"),
-    });
-  const failed = failedDeploy(signals.deployments?.deployments);
-  if (failed)
-    items.push({
-      ...base,
-      id: `${project.id}:deploy`,
-      kind: "deploy",
-      title: "Deploy terakhir gagal",
-      detail: failed.error ? String(failed.error).slice(0, 120) : undefined,
-      link: projectLink(project.id, "publish"),
     });
   const studio = bridgeWaiting(signals.studio);
   if (studio)

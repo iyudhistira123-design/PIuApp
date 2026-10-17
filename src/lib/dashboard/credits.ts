@@ -1,21 +1,20 @@
 /**
  * Credits, read the way a user asks about them: "how much is left, and what did
  * it go on?" The ledger rows carry a `reason` written by the server
- * (`ai`, `sandbox`, `publish` — plus payment and welcome rows that are positive),
+ * (`ai`, `sandbox` — plus payment and welcome rows that are positive),
  * so a breakdown is possible without storing anything new.
  */
 export const LEDGER_DAYS = 7;
 
 /**
- * Below this, a top up is worth mentioning: an audit costs 3 credits, a publish
- * 5, and the starting balance is 30. Ten credits is "a couple of things left".
+ * Below this, a top up is worth mentioning: an audit costs 3 credits and the
+ * starting balance is 30. Ten credits is "a couple of things left".
  */
 export const CREDIT_LOW = 10;
 
 const SPEND_LABELS: Record<string, string> = {
   ai: "Percakapan AI",
   sandbox: "Build & audit",
-  publish: "Publish",
 };
 
 /** Server reasons are short slugs; anything unknown is shown as it arrived. */

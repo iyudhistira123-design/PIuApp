@@ -60,14 +60,6 @@ const CORE: (Omit<ReadyItem, "ready"> & { key: string })[] = [
       "Butuh E2B_API_KEY dan E2B_TEMPLATE yang berisi Chromium + Lighthouse.",
   },
   {
-    id: "publish",
-    key: "publish",
-    label: "Publish ke web",
-    hint: "Project bisa terbit dengan URL sendiri atau domain kustom.",
-    missing:
-      "Butuh E2B_API_KEY, E2B_TEMPLATE, NETLIFY_TOKEN, dan APP_BASE_URL.",
-  },
-  {
     id: "payments",
     key: "payments",
     label: "Top up kredit",

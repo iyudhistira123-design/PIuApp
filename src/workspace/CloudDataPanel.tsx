@@ -265,7 +265,7 @@ export default function CloudDataPanel({
       <div className="ws-notice">
         Data tersimpan di Supabase dan hanya dapat diakses anggota project. Ini
         bukan SQL console, tabel fisik per kolom, atau backend publik aplikasi
-        hasil publish. Draft browser tidak terenkripsi; jangan masukkan secret.
+        hasil ekspor. Draft browser tidak terenkripsi; jangan masukkan secret.
       </div>
       {busy && <p role="status">Memuat atau menyimpan data…</p>}
       {error && (

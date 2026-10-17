@@ -158,12 +158,12 @@
 .invite-button:hover {
   background: var(--ide-accent-bg, #3f71eb);
 }
-.publish-button {
+.export-button {
   background: var(--ide-surface, #e5e8ee);
   color: var(--ide-text, #242832);
   border-color: var(--ide-border, #f3f4f5);
 }
-.publish-button:hover {
+.export-button:hover {
   background: var(--ide-surface, #fff);
   color: var(--ide-text, #151a24);
 }
@@ -2330,27 +2330,6 @@
   margin: 20px 0;
   line-height: 1.9;
 }
-.publish-domain {
-  border: 1px solid var(--ide-accent, #dbe7cf);
-  background: var(--ide-surface, #f0f5e8);
-  border-radius: 7px;
-  padding: 13px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 22px;
-  gap: 12px;
-}
-.publish-domain > span {
-  font-size: 10px;
-  color: var(--ide-success, #7b9264);
-  overflow-wrap: anywhere;
-}
-.publish-domain > small {
-  font-size: 8px;
-  color: var(--ide-success, #a4b690);
-  white-space: nowrap;
-}
 .mt-3 {
   margin-top: 12px;
 }
@@ -2839,7 +2818,7 @@
   .ws-top-actions .invite-button {
     display: none;
   }
-  .ws-top-actions .publish-button {
+  .ws-top-actions .export-button {
     font-size: 0;
     gap: 0;
     width: 28px;
@@ -2849,7 +2828,7 @@
     color: var(--ide-accent, #a8c9f3);
     border-color: var(--ide-border, #34557e);
   }
-  .ws-top-actions .publish-button svg {
+  .ws-top-actions .export-button svg {
     width: 13px;
   }
   .icon-rail {
@@ -3024,12 +3003,6 @@
     font-size: 10px;
   }
   .scan-finding > span {
-    font-size: 7px;
-  }
-  .publish-domain > span {
-    font-size: 9px;
-  }
-  .publish-domain > small {
     font-size: 7px;
   }
   .ws-statusbar .recording-indicator {

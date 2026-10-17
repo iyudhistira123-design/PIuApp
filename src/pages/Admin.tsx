@@ -91,9 +91,6 @@ const names: Record<string, string> = {
   project_delete: "Hapus project",
   template_status: "Moderasi template",
   recording_revoke: "Cabut tautan rekaman",
-  publish_cancel: "Batalkan publish",
-  hosting_retry: "Ulangi cleanup",
-  unpublish: "Turunkan website",
   payment_reconcile: "Rekonsiliasi pembayaran",
   broadcast_save: "Simpan broadcast",
   settings: "Pengaturan situs",
@@ -119,7 +116,6 @@ const insightLabel = (v: string) =>
     ({
       ai: "Chat AI",
       sandbox: "Sandbox",
-      publish: "Publish",
       plan: "Rencana",
       build: "Builder",
       settled: "Selesai",
@@ -673,12 +669,6 @@ export function AdminPanel({
                           Database,
                           "Salinan tersimpan yang tidak diperbarui 7 hari terakhir; bukan kegagalan sync",
                         ],
-                        [
-                          "cleanup",
-                          "Pekerjaan pembersihan hosting",
-                          Server,
-                          "Antrean hapus situs lama, termasuk yang sudah selesai",
-                        ],
                       ].map(([key, text, Icon, note]: any) => (
                         <div className="ad-metric" key={key}>
                           <div>
@@ -830,7 +820,6 @@ export function AdminPanel({
                                   ai: "AI",
                                   search: "Riset & pencarian",
                                   sandbox: "Sandbox",
-                                  publish: "Publish",
                                   payments: "Pembayaran",
                                   whatsapp: "WhatsApp",
                                   secrets: "Enkripsi secrets",
@@ -1156,12 +1145,6 @@ export function AdminPanel({
                               ),
                             )}
                             {act(
-                              "Turunkan website",
-                              () => ask("unpublish", r.id, {}, r.name),
-                              !canWrite,
-                              true,
-                            )}
-                            {act(
                               "Hapus project",
                               () =>
                                 ask(
@@ -1452,7 +1435,6 @@ export function AdminPanel({
                           "ai",
                           "search",
                           "sandbox",
-                          "publish",
                           "payments",
                           "whatsapp",
                         ].map((k) => (
@@ -1465,7 +1447,6 @@ export function AdminPanel({
                                     ai: "AI builder",
                                     search: "Riset & pencarian",
                                     sandbox: "Sandbox",
-                                    publish: "Hosting",
                                     payments: "Pembayaran",
                                     whatsapp: "WhatsApp OTP",
                                   } as Row
@@ -1481,64 +1462,6 @@ export function AdminPanel({
                         ))}
                       </div>
                     </section>
-                    <h2 className="ad-section-title">
-                      Antrean publish <small>30 terbaru</small>
-                    </h2>
-                    {table(
-                      [
-                        "Project / pekerjaan",
-                        "Status",
-                        "Percobaan",
-                        "Tindakan",
-                      ],
-                      data.jobs,
-                      (r) => (
-                        <>
-                          <td>
-                            <code>{r.project_id}</code>
-                            <small>{r.id}</small>
-                            {r.error && <p>{r.error}</p>}
-                          </td>
-                          <td>
-                            <Badge>{label(r.status)}</Badge>
-                          </td>
-                          <td>{r.attempts}</td>
-                          <td>
-                            {act(
-                              "Batalkan antrean",
-                              () => ask("publish_cancel", r.id, {}, r.id),
-                              !canWrite || r.status !== "queued",
-                            )}
-                          </td>
-                        </>
-                      ),
-                    )}
-                    <h2 className="ad-section-title">
-                      Cleanup hosting <small>30 terbaru</small>
-                    </h2>
-                    {table(
-                      ["Site provider", "Percobaan", "Keterangan", "Tindakan"],
-                      data.cleanup,
-                      (r) => (
-                        <>
-                          <td>
-                            <code>{r.provider_site_id}</code>
-                          </td>
-                          <td>{r.attempts}</td>
-                          <td>{r.error || "Menunggu worker"}</td>
-                          <td>
-                            {act("Coba lagi", () =>
-                              ask(
-                                "hosting_retry",
-                                r.id,
-                                {},
-                                r.provider_site_id,
-                              ),
-                            )}
-                          </td>
-                        </>
-                      ),
-                    )}
                     <h2 className="ad-section-title">
                       Tautan rekaman{" "}
                       <small>30 terbaru · token tidak ditampilkan</small>
@@ -1711,13 +1634,6 @@ function ActionDialog({
       >
         <p>{command.detail}</p>
         {command.target && <code>{command.target}</code>}
-        {command.action === "unpublish" && (
-          <div className="ad-info">
-            Project akan dikunci dan penghapusan hosting masuk antrean. Batalkan
-            antrean publish terlebih dahulu; build berjalan harus selesai.
-            Website belum dianggap offline sampai cleanup dikonfirmasi.
-          </div>
-        )}
         {command.action === "credits" && (
           <label>
             Perubahan kredit (−10.000 sampai +10.000)
@@ -1961,6 +1877,14 @@ function BroadcastForm({
     </Modal>
   );
 }
+/** Service switches the platform still offers; kept out of the form's state. */
+const SERVICE_TOGGLES: Record<string, string> = {
+  ai: "AI builder",
+  sandbox: "Sandbox & paket",
+  payments: "Checkout pembayaran",
+  marketplace: "Marketplace",
+};
+
 function SettingsForm({
   data,
   disabled,
@@ -1970,7 +1894,18 @@ function SettingsForm({
   disabled: boolean;
   save: (v: Row) => void;
 }) {
-  const [value, setValue] = useState<Row>(structuredClone(data.value));
+  const [value, setValue] = useState<Row>(() => {
+    const next = structuredClone(data.value);
+    // Stored settings may predate the removal of the publish service; keep only
+    // the switches this panel can actually save.
+    next.enabled_services = Object.fromEntries(
+      Object.keys(SERVICE_TOGGLES).map((key) => [
+        key,
+        data.value?.enabled_services?.[key] !== false,
+      ]),
+    );
+    return next;
+  });
   const set = (k: string, v: any) => setValue({ ...value, [k]: v });
   return (
     <form
@@ -2021,8 +1956,8 @@ function SettingsForm({
         <h2>Mode pemeliharaan</h2>
         <p className="ad-muted">
           Menjeda penulisan workspace dan operasi layanan baru. Baca data, akses
-          admin, webhook pembayaran, dan cleanup hosting tetap berjalan. Operasi
-          eksternal yang sudah berjalan mungkin tetap selesai.
+          admin, dan webhook pembayaran tetap berjalan. Operasi eksternal yang
+          sudah berjalan mungkin tetap selesai.
         </p>
         <label className="ad-toggle">
           <span>Aktifkan pemeliharaan</span>
@@ -2053,13 +1988,7 @@ function SettingsForm({
           fitur itu tidak punya sakelar di sini karena statusnya ditentukan env
           server (<code>SEARCH_ENABLED</code>, <code>SEARCH_PROVIDER</code>).
         </p>
-        {Object.entries({
-          ai: "AI builder",
-          sandbox: "Sandbox & paket",
-          publish: "Publish & domain",
-          payments: "Checkout pembayaran",
-          marketplace: "Marketplace",
-        }).map(([key, title]) => (
+        {Object.entries(SERVICE_TOGGLES).map(([key, title]) => (
           <label className="ad-toggle" key={key}>
             <span>{title}</span>
             <input

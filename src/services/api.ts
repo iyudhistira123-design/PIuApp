@@ -91,7 +91,6 @@ export function projectApi<T = any>(
   if (
     body !== undefined &&
     [
-      "publish",
       "template",
       "audit",
       "sandbox/command",

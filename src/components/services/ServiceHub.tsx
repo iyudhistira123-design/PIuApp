@@ -8,8 +8,6 @@ const tabs = [
   ["assets", "Aset"],
   ["secrets", "Secrets"],
   ["reference", "Referensi URL"],
-  ["publish", "Publish"],
-  ["analytics", "Analytics"],
   ["security", "Lighthouse"],
   ["marketplace", "Jual template"],
   ["credits", "Kredit"],

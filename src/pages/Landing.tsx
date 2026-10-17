@@ -31,6 +31,7 @@ import {
   MousePointer2,
   Sparkles,
   Globe2,
+  Download,
   ShieldCheck,
   Layers,
   MessageSquare,
@@ -444,13 +445,13 @@ export default function Landing() {
               </div>
               <h3>Siap bertemu dunia</h3>
               <p>
-                Tinjau hasilnya di berbagai perangkat. Unduh kode Anda dan
-                lanjutkan ke layanan hosting pilihan.
+                Tinjau hasilnya di berbagai perangkat, lalu unduh kode ZIP dan
+                jalankan di hosting pilihan Anda sendiri.
               </p>
               <div className="step-example">
-                <Globe2 size={15} />
-                <span>ide-anda.piwuapp.app</span>
-                <span className="coming-tag">Segera</span>
+                <Download size={15} />
+                <span>project-anda.zip</span>
+                <span className="coming-tag">Siap</span>
               </div>
             </article>
           </div>
@@ -613,9 +614,9 @@ export default function Landing() {
                 desc: "Untuk yang siap membangun lebih jauh.",
                 features: [
                   "Semua fitur Free",
-                  "Kredit jauh lebih besar per paket",
+                  "Kredit 1.500/bulan",
                   "Project tanpa batas",
-                  "Custom domain & prioritas AI",
+                  "Bonus 30 kredit/hari, reset 00:00 UTC",
                 ],
                 button: "Saya tertarik dengan Pro",
               },
@@ -705,7 +706,7 @@ export default function Landing() {
             <h3>Ide Anda berharga. Begitu juga data Anda.</h3>
             <p>
               Preview terisolasi, kode milik Anda, dan konfigurasi akses
-              berbasis peran untuk deployment cloud.
+              berbasis peran untuk project cloud.
             </p>
           </div>
           <button

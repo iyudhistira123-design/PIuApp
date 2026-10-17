@@ -105,12 +105,12 @@
   border: 1px solid var(--ide-border, #414141);
   color: var(--ide-text, #c7c7c7);
 }
-.ws-top-actions .publish-button {
+.ws-top-actions .export-button {
   background: var(--ide-accent-bg, #0078d4);
   border-color: var(--ide-border, #1686dc);
   color: var(--ide-text, #fff);
 }
-.ws-top-actions .publish-button:hover {
+.ws-top-actions .export-button:hover {
   background: var(--ide-accent-bg, #1685d9);
 }
 .ws-top-actions .ws-icon {
@@ -1064,7 +1064,7 @@
   .workspace .ws-top-actions .focus-button {
     display: none;
   }
-  .workspace .ws-top-actions .publish-button {
+  .workspace .ws-top-actions .export-button {
     width: 28px;
     min-height: 26px;
     font-size: 0;
@@ -1074,7 +1074,7 @@
     color: white;
     border-color: var(--ide-border, #1685d9);
   }
-  .workspace .ws-top-actions .publish-button > svg {
+  .workspace .ws-top-actions .export-button > svg {
     width: 14px;
   }
   .workspace .icon-rail {
@@ -1212,7 +1212,7 @@
   }
 }
 
-.workspace .ws-topbar .publish-button {
+.workspace .ws-topbar .export-button {
   background: var(--ide-accent-bg, #0078d4);
   color: var(--ide-text, #fff);
   border-color: var(--ide-border, #1686dc);
