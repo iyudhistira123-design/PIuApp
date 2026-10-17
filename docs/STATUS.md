@@ -2,7 +2,19 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): penggabungan teks CRDT (tahap 10)
+## Pembaruan terbaru (17 Oktober 2026): dashboard yang disusun ulang
+
+**405/405 unit/integrasi** dan **121/121** tes browser lengkap lulus, `tsc -b` dan `format:check` bersih, build produksi 28,82 detik, `check:bundle` editor **3.203.477 B** / gzip 823.420 B / 40 aset JavaScript / total 13.962.764 B — di bawah anggaran. **Tanpa migration baru dan tanpa perubahan API.**
+
+- **Project lebih dulu, promosi kemudian.** Urutan lama (checklist kesiapan → menunggu → kualitas → banner promo → pencarian → grid) membuat kartu project baru terlihat setelah satu layar penuh. Kini judul, satu plat **"Lanjutkan"** untuk project yang terakhir disentuh, lalu grid project dan penyaringnya; panel ringkasan pindah ke rail kanan yang turun ke bawah grid pada lebar < 1400px.
+- **Dihapus, bukan disembunyikan.** Banner promosi besar ("Ide berikutnya dimulai dari Anda", watermark `p.`) dan catatan "Fitur yang sudah aktif disembunyikan…" dihapus. Banner itu mengulang tombol _Project baru_ yang sudah ada dua kali di halaman; catatan kesiapan mengulang arti tombol panah di header panelnya. Kartu "PiwuApp Pro" di sidebar diringkas jadi satu kalimat beserta tautan paket, dan tetap menjadi tautan `/upgrade` yang diuji.
+- **Tipografi dan kontras.** Skala lama 7–11px untuk hampir semua teks diganti satu skala 11–38px (judul kartu 15px, metadata 11–12px, h1 38px, body panel 12–12,5px), warna sage berkontras rendah diganti hijau tua yang lolos ambang 4,5:1 pada latar panel; satu varian gelap `--db-pine` dipakai untuk plat "Lanjutkan" dan kartu kredit. Fokus keyboard tetap terlihat (outline hijau 2px).
+- **Kartu project membaca lebih cepat.** Judul dua baris dengan elipsis, tanggal + peran dalam satu baris, badge sinkronisasi berbentuk pil, "Terakhir: …" dan isi project di baris terpisah. Tombol menu project, ganti nama, duplikasi, dan hapus (dengan gating peran) tidak berubah. Grid memakai `auto-fill minmax(232px, 1fr)` sehingga 1440px menampilkan 3 kolom dan 1280px juga 3 kolom tanpa kartu "Project baru" terlempar sendiri.
+- **Aktivitas tidak lagi dobel.** Project baru menulis satu versi berlabel "Project dibuat" **dan** `createdAt` dengan label yang sama; feed menampilkan keduanya. Sekarang versi tersebut dilewati bila waktunya dalam 60 detik dari `createdAt` (versi berlabel sama dari restore lama tetap tampil). Feed juga dikelompokkan per hari sehingga "Hari ini" ditulis sekali, bukan per baris. Diuji di `tests/dashboard.test.ts`.
+- **Tetap jujur saat data tidak ada.** Kartu kredit, kesiapan fitur, "Menunggu Anda", dan kualitas tetap mempertahankan perilakunya: fase demo/loading/error/ready, jumlah project yang diperiksa vs yang gagal, gerbang `capabilities.audit`, dan audit 3 kredit. "Menunggu Anda" kini tidak dirender saat belum ada project (dulu menampilkan "Belum ada project untuk diperiksa"), dan penyaring/pencarian disembunyikan di keadaan kosong karena tidak ada yang bisa disaring. Di tab Profil, saldo kredit kini diformat sama dengan kartu kredit (`1.240`).
+- **Seluler.** Sidebar menjadi off-canvas di < 900px dengan scrim yang bisa diketuk, header menyembunyikan label status penyimpanan (ikonnya tetap, `aria-label` tetap), judul turun ke 30px, penyaring bisa digeser horizontal, dan kartu menjadi satu kolom. Diukur lewat tangkapan layar 1440/1280/390 untuk keadaan berisi dan kosong.
+
+## Pembaruan sebelumnya (17 Oktober 2026): penggabungan teks CRDT (tahap 10)
 
 **404/404 unit/integrasi** dan **121/121** tes browser lengkap lulus (6,6 menit, 1 worker), `tsc -b` dan `format:check` bersih, build produksi 31,39 detik, `check:bundle` editor **3.203.477 B** / gzip 823.419 B / 40 aset JavaScript / total 13.961.020 B — di bawah anggaran. **Tanpa migration baru.**
 

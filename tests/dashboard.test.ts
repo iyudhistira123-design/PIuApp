@@ -211,6 +211,41 @@ test("the activity feed is newest first, bounded, and honest about its source", 
   assert.equal(new Set(many.map((item) => item.id)).size, many.length);
 });
 
+test("a project created with its first version is not listed twice", () => {
+  // createProject writes a version labelled "Project dibuat" and a createdAt
+  // milliseconds apart; the feed must show one row, not two.
+  const created = NOW - 5000;
+  const once = buildActivity([
+    project({
+      id: "p-once",
+      name: "Sekali saja",
+      createdAt: created,
+      versions: [
+        { id: "v1", label: "Project dibuat", files: {}, at: created + 3 },
+        { id: "v2", label: "Ubah hero", files: {}, at: created + 2000 },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    once.map((item) => item.label),
+    ["Ubah hero", "Project dibuat"],
+  );
+  // A version with the same label from an older restore is still shown.
+  const restored = buildActivity([
+    project({
+      id: "p-restore",
+      createdAt: created,
+      versions: [
+        { id: "v1", label: "Project dibuat", files: {}, at: created + 120000 },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    restored.map((item) => item.kind),
+    ["version", "created"],
+  );
+});
+
 test("activity times are written in days, then in dates", () => {
   const at = (offsetDays: number, hour = 14, minute = 5) => {
     const date = new Date(DAY_START + offsetDays * 86400000);

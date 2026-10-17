@@ -130,12 +130,6 @@ export default function ReadinessChecklist({
             </li>
           ))}
       </ul>
-      {!open && (
-        <p className="readiness-note">
-          Fitur yang sudah aktif disembunyikan. Tombol di kanan atas menampilkan
-          semuanya.
-        </p>
-      )}
     </section>
   );
 }

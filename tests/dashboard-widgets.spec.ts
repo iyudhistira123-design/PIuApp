@@ -529,7 +529,11 @@ test("the dashboard carries a profile tab instead of only a link", async ({
   await expect(page.getByRole("button", { name: "Simpan nama" })).toBeVisible();
   // Account numbers come from GET /api/account, not from a second endpoint.
   await expect(page.getByText("Paket aktif")).toBeVisible();
-  await expect(page.getByText("1.240")).toBeVisible();
+  // The balance is the profile's own metric now that the sidebar card lives in
+  // the projects tab; still the same GET /api/account number, formatted alike.
+  await expect(
+    page.locator(".profile-metrics").getByText("1.240", { exact: true }),
+  ).toBeVisible();
 });
 
 test("the notification bell reads the server list and marks it read across reloads", async ({

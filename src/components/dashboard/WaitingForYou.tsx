@@ -130,7 +130,8 @@ export default function WaitingForYou({ projects }: { projects: Project[] }) {
     // re-render of the store.
   }, [demo, key, round]);
 
-  if (demo) return null;
+  // Nothing to wait on yet: an empty panel would only be furniture.
+  if (demo || !projects.length) return null;
   const shown = scan.items.slice(0, SHOWN_ITEMS);
   const time = scan.at
     ? new Date(scan.at).toLocaleTimeString("id-ID", {

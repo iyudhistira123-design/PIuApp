@@ -32,6 +32,15 @@ export function buildActivity(
     const versions = project.versions || [];
     versions.forEach((version, index) => {
       if (!version?.at) return;
+      // Creating a project writes both a first version and `createdAt` with the
+      // same label. The creation row below already says this; keeping both
+      // doubled every new project in the feed.
+      if (
+        version.label === "Project dibuat" &&
+        project.createdAt &&
+        Math.abs(version.at - project.createdAt) < 60_000
+      )
+        return;
       items.push({
         ...base,
         // A version id may be missing in old data; the index keeps it unique.

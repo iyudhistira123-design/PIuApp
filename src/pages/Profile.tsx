@@ -370,7 +370,9 @@ export default function Profile({
                     </div>
                     <div>
                       <span>Kredit</span>
-                      <strong>{account.balance}</strong>
+                      <strong>
+                        {Number(account.balance || 0).toLocaleString("id-ID")}
+                      </strong>
                       <small>Ledger 30 entri terakhir di halaman akun</small>
                     </div>
                     <div>
