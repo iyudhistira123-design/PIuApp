@@ -98,6 +98,7 @@ const names: Record<string, string> = {
   admin_role: "Perubahan peran",
   bootstrap_superadmin: "Aktivasi superadmin pertama",
   user_suspend: "Status akun",
+  user_delete: "Hapus akun",
   credits: "Penyesuaian kredit",
   project_lock: "Kunci project",
   project_delete: "Hapus project",
@@ -1075,6 +1076,11 @@ export function AdminPanel({
                                 ? "Terverifikasi"
                                 : "Belum terverifikasi"}
                             </small>
+                            {r.suspended && r.suspended_reason && (
+                              <small title={r.suspended_reason}>
+                                {r.suspended_reason}
+                              </small>
+                            )}
                           </td>
                           <td>{label(r.admin_role)}</td>
                           <td>
@@ -1093,6 +1099,18 @@ export function AdminPanel({
                                     r.id,
                                     { suspended: !r.suspended },
                                     r.email,
+                                  ),
+                                !superadmin || !!r.admin_role,
+                                true,
+                              )}
+                              {act(
+                                "Hapus akun",
+                                () =>
+                                  ask(
+                                    "user_delete",
+                                    r.id,
+                                    { confirmation: "" },
+                                    r.email || r.name || short(r.id),
                                   ),
                                 !superadmin || !!r.admin_role,
                                 true,
@@ -1627,7 +1645,10 @@ function ActionDialog({
             const payload = {
               ...command.payload,
               ...(command.action === "credits" ? { delta: Number(delta) } : {}),
-              ...(command.action === "project_delete" ? { confirmation } : {}),
+              ...(command.action === "project_delete" ||
+              command.action === "user_delete"
+                ? { confirmation }
+                : {}),
             };
             const result = await client("/admin/actions", {
               requestId,
@@ -1665,6 +1686,25 @@ function ActionDialog({
             <small>
               Positif menambah, negatif mengurangi. Saldo akhir tidak boleh
               negatif.
+            </small>
+          </label>
+        )}
+        {command.action === "user_delete" && (
+          <label>
+            Ketik ID pengguna lengkap untuk menghapus akun
+            <input
+              value={confirmation}
+              disabled={busy}
+              required
+              onChange={(e) => {
+                setConfirmation(e.target.value);
+                reset();
+              }}
+            />
+            <small>
+              Project dan data pribadi dihapus, email diganti alamat token, dan
+              akun tidak dapat masuk lagi. Catatan pembayaran dan audit tetap
+              disimpan tanpa email. Tindakan ini tidak dapat dibatalkan.
             </small>
           </label>
         )}
@@ -1727,7 +1767,8 @@ function ActionDialog({
               reason.trim().length < 8 ||
               (command.action === "credits" &&
                 (!Number(delta) || !Number.isInteger(Number(delta)))) ||
-              (command.action === "project_delete" &&
+              ((command.action === "project_delete" ||
+                command.action === "user_delete") &&
                 confirmation !== command.target)
             }
           >

@@ -26,10 +26,15 @@ test("admin requires authenticated server role; no preview bypass", async ({
     page.getByRole("navigation", { name: "Navigasi admin" }),
   ).toHaveCount(0);
 });
-async function fixture(page: Page, role = "operator", tab = "broadcasts") {
+async function fixture(
+  page: Page,
+  role = "operator",
+  tab = "broadcasts",
+  items: any[] = [],
+) {
   await page.goto("/");
   await page.evaluate(
-    async ({ role, tab }) => {
+    async ({ role, tab, items }) => {
       const React = (await import("/node_modules/.vite/deps/react.js")).default;
       const { createRoot } = (
         await import("/node_modules/.vite/deps/react-dom_client.js")
@@ -44,7 +49,11 @@ async function fixture(page: Page, role = "operator", tab = "broadcasts") {
         )!;
       const { MemoryRouter } = await import(routerPath);
       const { AdminPanel } = await import("/src/pages/Admin.tsx");
-      const state = { items: [] as any[], actions: [] as any[], fail: false };
+      const state = {
+        items: structuredClone(items),
+        actions: [] as any[],
+        fail: false,
+      };
       const client = async (path: string, body?: any) => {
         if (path === "/admin/actions") {
           state.actions.push(structuredClone(body));
@@ -90,7 +99,7 @@ async function fixture(page: Page, role = "operator", tab = "broadcasts") {
         ),
       );
     },
-    { role, tab },
+    { role, tab, items },
   );
   if (tab === "broadcasts")
     await expect(
@@ -272,4 +281,78 @@ test("settings stay read-only without the superadmin role", async ({
     page.getByRole("button", { name: "Gunakan harga bawaan" }),
   ).toBeDisabled();
   await expect(page.getByText("Roblox Studio bridge")).toBeVisible();
+});
+
+test("users tab removes an account only after the exact id and a reason", async ({
+  page,
+}) => {
+  const target = crypto.randomUUID(),
+    admin = crypto.randomUUID();
+  const rows = [
+    {
+      id: target,
+      name: "Budi",
+      email: "budi@example.test",
+      balance: 10,
+      suspended: false,
+      verified: true,
+      admin_role: "",
+    },
+    {
+      id: admin,
+      name: "Admin Lain",
+      email: "admin@example.test",
+      balance: 0,
+      suspended: false,
+      verified: true,
+      admin_role: "auditor",
+    },
+  ];
+  await fixture(page, "superadmin", "users", rows);
+  const remove = page.getByRole("button", { name: "Hapus akun" });
+  await expect(remove).toHaveCount(2);
+  // An account with an admin role must lose that role first.
+  await expect(remove.nth(1)).toBeDisabled();
+  await remove.first().click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Catatan pembayaran dan audit tetap disimpan",
+  );
+  const confirm = page.getByRole("button", {
+    name: "Konfirmasi perubahan",
+    exact: true,
+  });
+  await expect(confirm).toBeDisabled();
+  await page
+    .getByLabel("Ketik ID pengguna lengkap untuk menghapus akun")
+    .fill(target);
+  await page
+    .getByLabel("Alasan perubahan")
+    .fill("Permintaan penghapusan oleh pemilik akun");
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  const actions = await page.evaluate(
+    () => (window as any).__adminFixture.actions,
+  );
+  expect(actions).toHaveLength(1);
+  expect(actions[0].action).toBe("user_delete");
+  expect(actions[0].target).toBe(target);
+  expect(actions[0].payload).toEqual({ confirmation: target });
+  expect(actions[0].reason).toBe("Permintaan penghapusan oleh pemilik akun");
+});
+
+test("users tab keeps account removal closed to non-superadmin roles", async ({
+  page,
+}) => {
+  await fixture(page, "operator", "users", [
+    {
+      id: crypto.randomUUID(),
+      name: "Budi",
+      email: "budi@example.test",
+      balance: 10,
+      suspended: false,
+      verified: true,
+      admin_role: "",
+    },
+  ]);
+  await expect(page.getByRole("button", { name: "Hapus akun" })).toBeDisabled();
 });
