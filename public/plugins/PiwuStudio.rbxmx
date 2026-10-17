@@ -467,7 +467,7 @@ sendButton.MouseButton1Click:Connect(function()
   local data=snapshot(Http:GenerateGUID(false),true)
   request("POST","snapshot",data)
   baseline=data; pending=nil; confirmUntil=0
-  say("Snapshot terkirim: "..tostring(#data.nodes).." instance. Impor snapshot di PiwuApp. Tidak ada script yang dijalankan.")
+  say("Snapshot terkirim: "..tostring(#data.nodes).." instance. AI di PiwuApp otomatis membaca source-nya; impor hanya perlu bila Anda ingin mengedit file di web. Tidak ada script yang dijalankan.")
  end)
 end)
 fetchButton.MouseButton1Click:Connect(function()
