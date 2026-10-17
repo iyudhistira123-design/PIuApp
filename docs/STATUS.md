@@ -4,7 +4,7 @@
 
 ## Pembaruan terbaru (17 Oktober 2026): benefit paket disamakan dengan yang benar-benar tersedia
 
-**350/350 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,3 menit), `tsc -b` dan `format:check` bersih, build produksi 43,62 detik, `check:bundle` editor **3.201.506 B** / gzip 822.642 B / 40 aset / total 13.889.463 B — di bawah anggaran.
+**350/350 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,2 menit), `tsc -b` dan `format:check` bersih, build produksi 42,95 detik, `check:bundle` editor **3.201.506 B** / gzip 822.641 B / 40 aset / total 13.889.426 B — di bawah anggaran.
 
 Daftar benefit Free, Pro, dan Team kini dibangun dari sumber yang sama dengan harga dan kredit:
 
