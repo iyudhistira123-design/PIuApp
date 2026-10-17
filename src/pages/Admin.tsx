@@ -1938,6 +1938,28 @@ const SERVICE_TOGGLES: Record<string, string> = {
   marketplace: "Marketplace",
   studio: "Roblox Studio bridge",
 };
+/**
+ * Capabilities an operator may raise above Free. The default stays "free", so
+ * the public promise that no feature is locked keeps holding until someone
+ * deliberately changes a row.
+ */
+const PLAN_FEATURE_ROWS = [
+  [
+    "sandbox",
+    "Sandbox, terminal & npm",
+    "Terminal E2B, pemasangan paket, dan audit Lighthouse.",
+  ],
+  [
+    "studio",
+    "Koneksi Roblox Studio",
+    "Plugin Studio dan unggah aset ke Roblox.",
+  ],
+  [
+    "marketplace_sell",
+    "Menjual template",
+    "Menerbitkan template baru; membeli dan menarik listing tetap terbuka.",
+  ],
+] as const;
 /** Packages the panel may re-price; credits per package are editable too. */
 const PACKAGE_ROWS = [
   ["pro", "Pro", "per bulan"],
@@ -1985,6 +2007,16 @@ function SettingsForm({
         { amount: topup.amount, credits: topup.credits },
       ]),
     ]);
+    // Unknown packages fall back to "free" rather than hiding access.
+    const storedFeatures = data.value?.enabled_services?.plan_features;
+    next.enabled_services.plan_features = Object.fromEntries(
+      PLAN_FEATURE_ROWS.map(([key]) => [
+        key,
+        storedFeatures?.[key] === "pro" || storedFeatures?.[key] === "team"
+          ? storedFeatures[key]
+          : "free",
+      ]),
+    );
     return next;
   });
   const set = (k: string, v: any) => setValue({ ...value, [k]: v });
@@ -2181,6 +2213,38 @@ function SettingsForm({
                 })
               }
             />
+          </label>
+        ))}
+      </section>
+      <section className="ad-card">
+        <h2>Akses fitur per paket</h2>
+        <p className="ad-muted">
+          Bawaan <b>Semua paket</b> mempertahankan janji publik: tidak ada fitur
+          yang dikunci. Menaikkan baris membuat server menolak permintaan dari
+          paket di bawahnya dengan pesan yang menyebut paket yang dibutuhkan —
+          bukan menyembunyikan tombol di UI saja.
+        </p>
+        {PLAN_FEATURE_ROWS.map(([key, title, hint]) => (
+          <label key={key}>
+            {title}
+            <select
+              disabled={disabled}
+              value={value.enabled_services.plan_features?.[key] || "free"}
+              onChange={(e) =>
+                set("enabled_services", {
+                  ...value.enabled_services,
+                  plan_features: {
+                    ...value.enabled_services.plan_features,
+                    [key]: e.target.value,
+                  },
+                })
+              }
+            >
+              <option value="free">Semua paket</option>
+              <option value="pro">Pro &amp; Team</option>
+              <option value="team">Team</option>
+            </select>
+            <small>{hint}</small>
           </label>
         ))}
       </section>

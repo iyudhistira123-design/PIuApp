@@ -309,7 +309,7 @@ export function planFacts() {
     },
     {
       title: "Harga menentukan jumlah kredit",
-      detail: `${rateSentence()} Semakin besar paket, semakin murah harga per kreditnya. Free tetap tanpa tagihan: ${count(FREE_PLAN.credits)} kredit/hari dengan plafon ${count(FREE_PLAN.monthlyCap)} per bulan. Saat ini Pro dan Team hanya berbeda pada harga dan jumlah kreditnya: pembatasan fitur per paket belum diterapkan di aplikasi ini, jadi tidak ada fitur yang dikunci diam-diam.`,
+      detail: `${rateSentence()} Semakin besar paket, semakin murah harga per kreditnya. Free tetap tanpa tagihan: ${count(FREE_PLAN.credits)} kredit/hari dengan plafon ${count(FREE_PLAN.monthlyCap)} per bulan. Saat ini Pro dan Team hanya berbeda pada harga dan jumlah kreditnya. Panel admin punya matriks akses per paket untuk sandbox, Studio bridge, dan penjualan template, tetapi bawaannya "Semua paket" — jadi tidak ada fitur yang dikunci diam-diam.`,
     },
     {
       title: "Perkiraan berapa lama jatah bertahan",

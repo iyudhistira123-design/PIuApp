@@ -240,6 +240,10 @@ test("settings edit package prices and the Studio switch for the whole platform"
   await expect(page.getByText("Roblox Studio bridge")).toBeVisible();
   await page.getByLabel("Harga (Rp)", { exact: true }).first().fill("249000");
   await page.getByLabel("Kredit", { exact: true }).first().fill("2000");
+  // The access matrix defaults to "Semua paket" and travels with the settings.
+  await expect(page.getByLabel("Sandbox, terminal & npm")).toHaveValue("free");
+  await page.getByLabel("Sandbox, terminal & npm").selectOption("pro");
+  await page.getByLabel("Menjual template").selectOption("team");
   await page
     .getByRole("button", { name: "Tinjau & simpan pengaturan" })
     .click();
@@ -265,6 +269,11 @@ test("settings edit package prices and the Studio switch for the whole platform"
   // Prices must not be sent as a top-level key: migration 005's RPC rejects it.
   expect(actions[0].payload.value).not.toHaveProperty("plan_overrides");
   expect(actions[0].payload.value.enabled_services.studio).toBe(true);
+  expect(actions[0].payload.value.enabled_services.plan_features).toEqual({
+    sandbox: "pro",
+    studio: "free",
+    marketplace_sell: "team",
+  });
 });
 
 test("settings stay read-only without the superadmin role", async ({

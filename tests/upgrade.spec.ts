@@ -77,10 +77,11 @@ test("the dashboard opens the upgrade page, which reads prices from the server",
   await expect(table).toContainText("pemakaian normal");
   await expect(table).toContainText("pemakaian intens");
   await expect(table.locator(".plan-table-row").nth(1)).toContainText("±");
-  // Nothing on the page pretends a paid plan unlocks a gated feature.
+  // Gating is real but ships open; the page says so instead of implying more.
   await expect(page.locator(".plan-facts")).toContainText(
-    "belum diterapkan di aplikasi ini",
+    "matriks akses per paket",
   );
+  await expect(page.locator(".plan-facts")).toContainText("Semua paket");
   const axe = await new AxeBuilder({ page }).analyze();
   expect(axe.violations).toEqual([]);
   await page.screenshot({ path: ".artifacts/upgrade-page.png" });

@@ -88,6 +88,14 @@ const planOverrides = z
         message: "Harga per kredit top-up besar tidak boleh lebih mahal.",
       });
   });
+/** Lowest package an operator may require for a capability. */
+const planFeatures = z
+  .object({
+    sandbox: z.enum(["free", "pro", "team"]).optional(),
+    studio: z.enum(["free", "pro", "team"]).optional(),
+    marketplace_sell: z.enum(["free", "pro", "team"]).optional(),
+  })
+  .strict();
 export const siteSchema = z
   .object({
     maintenance: z.boolean(),
@@ -105,8 +113,10 @@ export const siteSchema = z
         // as enabled, like every other switch.
         studio: z.boolean().optional(),
         // Package prices live beside the switches so migration 005's
-        // whitelist keeps working without a new migration.
+        // whitelist keeps working without a new migration. The same is true
+        // for the per-package access matrix.
         plan_overrides: planOverrides.optional(),
+        plan_features: planFeatures.optional(),
       })
       .strict(),
   })

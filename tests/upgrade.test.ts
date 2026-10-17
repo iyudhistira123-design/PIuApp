@@ -170,7 +170,10 @@ test("the page states what is true about plans instead of implying gating", () =
     .map((f) => f.title + " " + f.detail)
     .join(" ")
     .replace(/\u00a0/g, " ");
-  assert.match(joined, /belum diterapkan/i);
+  // Gating now exists as an operator-controlled matrix, but it ships open.
+  assert.match(joined, /matriks akses per paket/i);
+  assert.match(joined, /bawaan(nya)? "Semua paket"/i);
+  assert.match(joined, /tidak ada fitur yang dikunci diam-diam/i);
   // The deadlines are stated with the same numbers the database enforces: the
   // daily allowance never accumulates and each lot has its own expiry.
   assert.match(joined, /direset pada pukul 00:00 UTC/);

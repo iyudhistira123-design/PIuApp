@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultSite, enforcePlatform } from "../server/lib/platform.mjs";
+import {
+  defaultSite,
+  enforcePlatform,
+  enforcePlan,
+  featureForRequest,
+  planAllows,
+  planFeaturesOf,
+} from "../server/lib/platform.mjs";
 import { siteSchema } from "../server/routes/admin.mjs";
 import { productCatalog, products } from "../server/providers/payments.mjs";
 import { mergePlans, mergeTopups } from "../shared/credits.mjs";
@@ -26,6 +33,12 @@ test("without overrides the catalogue is exactly the shared price list", () => {
   assert.equal(products.credits1400.label, "Top-up 1.400 kredit");
   assert.equal(defaultSite.enabled_services.studio, true);
   assert.deepEqual(defaultSite.enabled_services.plan_overrides, {});
+  // No capability is locked out of the box.
+  assert.deepEqual(planFeaturesOf(defaultSite), {
+    sandbox: "free",
+    studio: "free",
+    marketplace_sell: "free",
+  });
 });
 
 test("an override moves only the price and credits it names", () => {
@@ -159,4 +172,175 @@ test("merge helpers keep the database-owned numbers untouched", () => {
   assert.equal(topups[0].credits, 350);
   assert.equal(topups[0].amount, 49000);
   assert.equal(topups[1].credits, 1400);
+});
+
+// --- Per-package access -----------------------------------------------------
+// The matrix is stored inside enabled_services (no migration). A missing or
+// malformed row must mean "free", never accidentally lock a paying user out.
+
+const settingsCtx = (
+  features: Record<string, string> | null,
+  plan?: string,
+) => {
+  const chain = (result: unknown) => {
+    const query: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "gt", "lte", "order", "limit"])
+      query[method] = () => query;
+    query.maybeSingle = async () => result;
+    return query;
+  };
+  const db = {
+    from(table: string) {
+      if (table === "site_configuration")
+        return chain({
+          data: {
+            revision: 1,
+            value: {
+              ...defaultSite,
+              enabled_services: {
+                ...defaultSite.enabled_services,
+                ...(features === null ? {} : { plan_features: features }),
+              },
+            },
+          },
+          error: null,
+        });
+      if (table === "subscriptions")
+        return chain({ data: plan ? { plan } : null, error: null });
+      throw new Error("unexpected table " + table);
+    },
+  };
+  return { admin: db, needAdmin: () => db };
+};
+
+test("the access matrix treats missing or unknown rows as free", () => {
+  assert.deepEqual(planFeaturesOf({}), {
+    sandbox: "free",
+    studio: "free",
+    marketplace_sell: "free",
+  });
+  assert.deepEqual(
+    planFeaturesOf({
+      enabled_services: {
+        plan_features: { sandbox: "team", studio: "enterprise" },
+      },
+    }),
+    { sandbox: "team", studio: "free", marketplace_sell: "free" },
+  );
+  assert.equal(planAllows("free", "pro"), false);
+  assert.equal(planAllows("pro", "pro"), true);
+  assert.equal(planAllows("team", "pro"), true);
+  assert.equal(planAllows("pro", "team"), false);
+});
+
+test("only the intended routes belong to a gated capability", () => {
+  assert.equal(featureForRequest("/api/projects/x/sandbox", "POST"), "sandbox");
+  assert.equal(featureForRequest("/api/packages", "GET"), "sandbox");
+  assert.equal(featureForRequest("/api/projects/x/audit", "POST"), "sandbox");
+  assert.equal(featureForRequest("/api/projects/x/audits", "GET"), null);
+  assert.equal(featureForRequest("/api/studio/status", "GET"), "studio");
+  assert.equal(
+    featureForRequest("/api/projects/x/studio/send", "POST"),
+    "studio",
+  );
+  assert.equal(
+    featureForRequest("/api/marketplace", "POST"),
+    "marketplace_sell",
+  );
+  assert.equal(featureForRequest("/api/marketplace", "GET"), null);
+  assert.equal(featureForRequest("/api/marketplace/mine", "GET"), null);
+  assert.equal(featureForRequest("/api/ai", "POST"), null);
+});
+
+test("a raised minimum rejects Free and accepts the named package", async () => {
+  const request = (path: string, method = "POST") => ({ path, method });
+  const user = { id: "11111111-1111-4111-8111-111111111111" };
+  // Free cannot open the sandbox once it requires Pro.
+  await assert.rejects(
+    () =>
+      enforcePlan(
+        settingsCtx({ sandbox: "pro" }) as any,
+        request("/api/projects/x/sandbox") as any,
+        user,
+      ),
+    /paket Pro/,
+  );
+  // Pro can.
+  await enforcePlan(
+    settingsCtx({ sandbox: "pro" }, "Pro") as any,
+    request("/api/projects/x/sandbox") as any,
+    user,
+  );
+  // Team satisfies a Team requirement, Pro does not.
+  await enforcePlan(
+    settingsCtx({ studio: "team" }, "Team") as any,
+    request("/api/studio/status", "GET") as any,
+    user,
+  );
+  await assert.rejects(
+    () =>
+      enforcePlan(
+        settingsCtx({ studio: "team" }, "Pro") as any,
+        request("/api/studio/status", "GET") as any,
+        user,
+      ),
+    /paket Team/,
+  );
+  // Selling is gated; browsing and withdrawing a listing stay open.
+  await assert.rejects(
+    () =>
+      enforcePlan(
+        settingsCtx({ marketplace_sell: "pro" }) as any,
+        request("/api/marketplace") as any,
+        user,
+      ),
+    /paket Pro/,
+  );
+  await enforcePlan(
+    settingsCtx({ marketplace_sell: "pro" }) as any,
+    request("/api/marketplace", "GET") as any,
+    user,
+  );
+});
+
+test("the default matrix never reads subscriptions", async () => {
+  const ctx = settingsCtx(null);
+  const from = ctx.admin.from.bind(ctx.admin);
+  // Any subscription lookup would throw: the defaults must short-circuit first.
+  ctx.admin.from = (table: string) => {
+    if (table === "subscriptions") throw new Error("should not query plans");
+    return from(table);
+  };
+  await enforcePlan(
+    ctx as any,
+    { path: "/api/studio/status", method: "GET" } as any,
+    { id: "11111111-1111-4111-8111-111111111111" } as any,
+  );
+});
+
+test("the saved schema accepts the matrix and rejects unknown packages", () => {
+  assert.ok(
+    siteSchema.parse({
+      ...defaultSite,
+      enabled_services: {
+        ...defaultSite.enabled_services,
+        plan_features: {
+          sandbox: "pro",
+          studio: "team",
+          marketplace_sell: "free",
+        },
+      },
+    }),
+  );
+  assert.throws(
+    () =>
+      siteSchema.parse({
+        ...defaultSite,
+        enabled_services: {
+          ...defaultSite.enabled_services,
+          plan_features: { sandbox: "enterprise" },
+        },
+      }),
+    /Invalid option|invalid/i,
+  );
 });
