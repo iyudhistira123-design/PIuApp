@@ -914,7 +914,7 @@ revoke all on public.runtime_search_cache from public, anon, authenticated;
 grant select, insert, update, delete on public.runtime_search_cache to service_role;
 
 -- =====================================================================
--- 010_credit_lots.sql | SHA256 3903a223186d2b4b388a02265f10308616484ecf8c2d95d716f482fbb12773d4
+-- 010_credit_lots.sql | SHA256 706031719508185db651773ee1d47d3dd197f2c608d4683765a68534acbf4cb8
 -- =====================================================================
 -- 010: credit lots, the daily allowance and expiry.
 --
@@ -953,7 +953,7 @@ alter table public.credit_reservations add column lots jsonb;
 -- tests/credits-model.test.ts fails if the two drift apart.
 create function public.piwu_credit_policy() returns jsonb language sql immutable set search_path='' as $$
  select jsonb_build_object(
-  'dailyFree',20,'dailyPro',20,'dailyTeam',40,'freeMonthlyCap',600,
+  'dailyFree',20,'dailyPro',30,'dailyTeam',40,'freeMonthlyCap',600,
   'planMonths',2,'topupMonths',12,'resetUtcHour',0);
 $$;
 

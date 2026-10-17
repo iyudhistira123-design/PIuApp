@@ -10,7 +10,7 @@
  * Credits live as lots in the database (supabase/010_credit_lots.sql) and each
  * lot carries its own deadline:
  *   - the daily allowance refills to its limit every day at 00:00 UTC and never
- *     accumulates (Free and Pro 20/day, Team 40/day; Free is capped at 600 per
+ *     accumulates (Free 20/day, Pro 30/day, Team 40/day; Free is capped at 600 per
  *     month);
  *   - plan credits roll over between months but expire 2 months after they are
  *     granted;
@@ -103,7 +103,9 @@ export const PLAN_LADDER = [
     monthly: 199000,
     annual: 159200,
     credits: 1500,
-    daily: 20,
+    // A bit above Free, a bit below Team: the daily allowance grows with the
+    // plan, while the monthly grant (1.500) stays what the plan sells.
+    daily: 30,
     monthlyCap: null,
     expiryMonths: CREDIT_EXPIRY_MONTHS.plan,
   },

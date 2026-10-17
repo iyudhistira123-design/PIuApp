@@ -231,12 +231,13 @@ export function paymentsNotice(
  * advertising a gated feature that does not exist.
  */
 export function planFacts() {
+  const free = PLAN_LADDER.find((plan) => !plan.monthly)!;
   const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
   const team = PLAN_LADDER.find((plan) => plan.plan === "Team")!;
   return [
     {
       title: "Jatah harian kembali penuh setiap hari",
-      detail: `Free dan Pro ${count(pro.daily)} kredit/hari, Team ${count(team.daily)} kredit/hari, direset pada pukul 00:00 UTC. Jatah yang tidak terpakai hangus — tidak menumpuk ke hari berikutnya. Akun Free dibatasi plafon ${count(FREE_PLAN.monthlyCap)} kredit per bulan.`,
+      detail: `Free ${count(free.daily)} kredit/hari, Pro ${count(pro.daily)} kredit/hari, Team ${count(team.daily)} kredit/hari, direset pada pukul 00:00 UTC. Jatah yang tidak terpakai hangus — tidak menumpuk ke hari berikutnya. Akun Free dibatasi plafon ${count(FREE_PLAN.monthlyCap)} kredit per bulan.`,
     },
     {
       title: "Setiap kredit punya masa berlaku yang tercatat",

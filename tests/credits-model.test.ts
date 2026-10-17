@@ -106,8 +106,11 @@ test("the published ladder carries the agreed rates and allowances", () => {
   const daily = (name: string) =>
     PLAN_LADDER.find((row) => row.plan === name)!.daily;
   assert.equal(daily("Free"), 20);
-  assert.equal(daily("Pro"), 20);
+  // Pro sits between Free and Team: the allowance grows with the plan even
+  // though the monthly grant is the one the price sells.
+  assert.equal(daily("Pro"), 30);
   assert.equal(daily("Team"), 40);
+  assert.ok(daily("Free") < daily("Pro") && daily("Pro") < daily("Team"));
   assert.equal(FREE_PLAN.monthlyCap, 600);
 });
 

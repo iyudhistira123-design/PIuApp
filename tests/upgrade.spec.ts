@@ -48,7 +48,7 @@ test("the dashboard opens the upgrade page, which reads prices from the server",
   // package, and the durations come from the shared costs, not from copy.
   const proCard = planGrid.locator(".plan-card", { hasText: "PiwuApp Pro" });
   await expect(proCard.locator(".plan-rate")).toContainText("133");
-  await expect(proCard).toContainText("20 kredit/hari");
+  await expect(proCard).toContainText("30 kredit/hari");
   await expect(proCard).toContainText("hangus 2 bulan setelah terbit");
   await expect(proCard).toContainText("jatah harian tidak menumpuk");
   const teamCard = planGrid.locator(".plan-card", { hasText: "PiwuApp Team" });
@@ -85,7 +85,11 @@ test("checkout sends the chosen SKU and follows the provider link", async ({
     {
       paymentsEnabled: true,
       provider: "midtrans",
-      plan: { plan: "Pro", current_period_end: "2026-11-03T00:00:00.000Z" },
+      plan: {
+        plan: "Pro",
+        // Relative to now so the "Sisa 18 hari" assertion does not rot.
+        current_period_end: new Date(Date.now() + 18 * 86400000).toISOString(),
+      },
     },
     (body) => sent.push(body),
   );
@@ -146,6 +150,9 @@ test("the landing prices come from the same credit ladder as the checkout", asyn
   );
   await expect(cards.nth(1).locator(".pricing-credit")).toContainText(
     "pemakaian normal",
+  );
+  await expect(cards.nth(1).locator(".pricing-credit")).toContainText(
+    "30 kredit/hari",
   );
   await expect(cards.nth(2).locator(".pricing-credit")).toContainText(
     "4.500 kredit/bulan",

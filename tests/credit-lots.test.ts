@@ -294,7 +294,7 @@ test("purchases carry their own expiry, and expiry is reported once", async () =
     );
     assert.equal(Number(planMonths), 2);
     assert.equal(Number(topupMonths), 12);
-    // A Pro account gets the paid daily allowance (20) and no monthly cap.
+    // A Pro account gets the paid daily allowance (30) and no monthly cap.
     assert.equal(
       await scalar(db, "select piwu_claim_daily($1)", [user]),
       0,
@@ -449,6 +449,67 @@ test("a Team seat gets the bigger daily allowance, and admin grants never expire
         ),
       ) < 0,
     );
+    await assertLotsMatchBalance(db, user);
+  } finally {
+    await db.close();
+  }
+});
+
+test("a Pro seat gets 30 a day while the monthly grant stays 1.500", async () => {
+  const db = new PGlite();
+  try {
+    await setup(db);
+    await migrate(db);
+    const [user] = await fresh(db);
+    const order = crypto.randomUUID();
+    await db.query(
+      "insert into payment_orders(id,user_id,provider,kind,sku,amount,credits,plan) values($1,$2,'midtrans','plan','pro',199000,1500,'Pro')",
+      [order, user],
+    );
+    await db.query("select piwu_apply_payment($1,199000,'IDR','paid')", [
+      order,
+    ]);
+    // The monthly grant is exactly what the plan sells, untouched by the daily
+    // allowance: 1.500 credited, and today's Free 20 already claimed before the
+    // plan was applied.
+    assert.equal(
+      Number(
+        await scalar(
+          db,
+          "select amount from credit_lots where user_id=$1 and source='plan'",
+          [user],
+        ),
+      ),
+      1500,
+    );
+    assert.equal(
+      Number(
+        await scalar(
+          db,
+          "select amount from credit_lots where user_id=$1 and source='daily'",
+          [user],
+        ),
+      ),
+      20,
+      "jatah hari berganti paket tetap jatah hari itu",
+    );
+    // The next reset is the first day the bigger allowance applies.
+    await db.query(
+      "update credit_lots set reference='daily:kemarin', expires_at=now()-interval '1 minute' where user_id=$1 and source='daily'",
+      [user],
+    );
+    await db.query("select piwu_expire_credits()");
+    assert.equal(await scalar(db, "select piwu_claim_daily($1)", [user]), 30);
+    // Team still gets more, so the ladder stays readable from the database.
+    await db.query("update subscriptions set plan='Team' where user_id=$1", [
+      user,
+    ]);
+    await db.query(
+      "update credit_lots set reference='daily:kemarin', expires_at=now()-interval '1 minute' where user_id=$1 and source='daily'",
+      [user],
+    );
+    await db.query("select piwu_expire_credits()");
+    assert.equal(await scalar(db, "select piwu_claim_daily($1)", [user]), 40);
     await assertLotsMatchBalance(db, user);
   } finally {
     await db.close();

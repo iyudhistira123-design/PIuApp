@@ -36,7 +36,7 @@ alter table public.credit_reservations add column lots jsonb;
 -- tests/credits-model.test.ts fails if the two drift apart.
 create function public.piwu_credit_policy() returns jsonb language sql immutable set search_path='' as $$
  select jsonb_build_object(
-  'dailyFree',20,'dailyPro',20,'dailyTeam',40,'freeMonthlyCap',600,
+  'dailyFree',20,'dailyPro',30,'dailyTeam',40,'freeMonthlyCap',600,
   'planMonths',2,'topupMonths',12,'resetUtcHour',0);
 $$;
 

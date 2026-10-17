@@ -72,7 +72,7 @@ test("the upgrade page splits plans from top-ups using the server's own kind", (
   assert.ok(team.rate < pro.rate, "a bigger package is cheaper per credit");
   // The allowance and the deadline on a card come from the ladder the server
   // sells from, not from copy typed into the page.
-  assert.equal(pro.daily, 20);
+  assert.equal(pro.daily, 30);
   assert.equal(team.daily, 40);
   assert.equal(pro.expiryMonths, CREDIT_EXPIRY_MONTHS.plan);
   assert.equal(pro.monthlyCap, null);
@@ -216,7 +216,7 @@ test("the daily allowance line counts down to the real reset, in UTC", () => {
     dailyLine("Free", noon),
     /^20 kredit\/hari · direset 00:00 UTC \(dalam 12 jam\)$/,
   );
-  assert.match(dailyLine("Pro", noon), /^20 kredit\/hari/);
+  assert.match(dailyLine("Pro", noon), /^30 kredit\/hari/);
   assert.match(dailyLine("Team", noon), /^40 kredit\/hari/);
   assert.equal(dailyLine("Enterprise", noon), "");
   assert.equal(dailyLine("", noon), "");

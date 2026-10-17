@@ -11,7 +11,13 @@ test("the profile page changes identity data and never fakes what it cannot do",
   await page.route(ACCOUNT_URL, (route) =>
     route.fulfill({
       json: accountPayload({
-        plan: { plan: "Pro", current_period_end: "2026-11-03T00:00:00.000Z" },
+        plan: {
+          plan: "Pro",
+          // Relative to now so the "Sisa 18 hari" assertion does not rot.
+          current_period_end: new Date(
+            Date.now() + 18 * 86400000,
+          ).toISOString(),
+        },
       }),
     }),
   );
