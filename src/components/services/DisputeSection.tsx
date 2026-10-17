@@ -12,7 +12,7 @@ const CATEGORY: Record<string, string> = {
 const STATUS: Record<string, string> = {
   open: "Menunggu penjual",
   seller_replied: "Dibalas penjual",
-  refund_approved: "Refund disetujui",
+  resolved: "Ditutup",
   rejected: "Laporan ditolak",
   withdrawn: "Ditarik pelapor",
 };
@@ -25,8 +25,8 @@ const date = (value: string) =>
 
 /**
  * Buyer reports and seller replies for purchases. The decision belongs to a
- * superadmin; an approved refund is executed outside PiwuApp and freezes the
- * seller's share until the provider confirms it.
+ * superadmin. PiwuApp never refunds a transaction: an unresolved report holds
+ * the seller's share, and closing the report releases it without moving money.
  */
 export default function DisputeSection() {
   const [data, setData] = useState<any>(null);
@@ -130,9 +130,11 @@ export default function DisputeSection() {
           <h2>Sengketa marketplace</h2>
           <p>
             Laporan dibuka paling lambat 30 hari setelah pembelian dan hanya
-            sekali per pesanan. Selama sengketa terbuka atau refund disetujui,
-            bagian penjual dari penjualan itu dibekukan dari saldo payout.
-            Refund tetap diproses lewat penyedia pembayaran di luar PiwuApp.
+            sekali per pesanan. <b>Pembelian tidak dapat direfund</b> — laporan
+            ini untuk menyelesaikan masalah (misalnya file rusak atau akses),
+            bukan untuk mengembalikan uang. Selama laporan belum selesai, bagian
+            penjual dari penjualan itu ditahan dari saldo payout; begitu
+            ditutup, ditolak, atau ditarik, saldo itu kembali tersedia.
           </p>
         </div>
         <ShieldQuestion size={20} />
@@ -152,8 +154,7 @@ export default function DisputeSection() {
           {!eligible.length ? (
             <p className="payout-muted">
               Tidak ada pembelian yang bisa dilaporkan. Pesanan yang sudah punya
-              sengketa, lebih dari 30 hari, atau sudah direfund tidak muncul di
-              sini.
+              sengketa atau lebih dari 30 hari tidak muncul di sini.
             </p>
           ) : (
             <form className="payout-form dispute-form" onSubmit={open}>

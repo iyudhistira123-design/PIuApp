@@ -186,7 +186,7 @@ test("dispute API: buyer report, seller reply, withdraw and superadmin decision"
       } else if (name === "piwu_dispute_withdraw") data = "withdrawn";
       else if (name === "piwu_dispute_review")
         data = {
-          status: "refund_approved",
+          status: "resolved",
           order_id: recentOrder,
           buyer_id: buyer,
           seller_id: seller,
@@ -318,8 +318,8 @@ test("dispute API: buyer report, seller reply, withdraw and superadmin decision"
       "operator-token",
       {
         requestId: crypto.randomUUID(),
-        status: "refund_approved",
-        note: "Refund disetujui operator",
+        status: "resolved",
+        note: "Laporan ditutup oleh operator",
       },
     );
     assert.equal(operatorReview.status, 403);
@@ -328,7 +328,7 @@ test("dispute API: buyer report, seller reply, withdraw and superadmin decision"
       "boss-token",
       {
         requestId: crypto.randomUUID(),
-        status: "refund_approved",
+        status: "resolved",
         note: "pendek",
       },
     );
@@ -338,14 +338,14 @@ test("dispute API: buyer report, seller reply, withdraw and superadmin decision"
       "boss-token",
       {
         requestId: crypto.randomUUID(),
-        status: "refund_approved",
-        note: "Bukti kerusakan sesuai; refund diproses di luar aplikasi",
+        status: "resolved",
+        note: "Penjual memperbaiki akses; laporan ditutup tanpa refund",
       },
     );
     assert.equal(reviewed.status, 200);
     const review = (await reviewed.json()) as any;
-    assert.equal(review.result.status, "refund_approved");
-    assert.match(review.result.notice, /di luar PiwuApp|penyedia pembayaran/);
+    assert.equal(review.result.status, "resolved");
+    assert.match(review.result.notice, /Tidak ada refund/);
     assert.equal(
       calls.filter((c) => c.name === "piwu_notification_add").length >= 2,
       true,

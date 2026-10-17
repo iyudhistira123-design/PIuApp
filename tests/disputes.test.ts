@@ -21,6 +21,7 @@ const MIGRATIONS = [
   "012_notifications",
   "013_marketplace_payouts",
   "014_marketplace_disputes",
+  "015_no_refunds",
 ];
 
 const setup = async (db: PGlite) =>
@@ -228,37 +229,13 @@ test("sengketa marketplace: satu laporan, balasan penjual, pembekuan saldo, dan 
     );
     assert.ok(payout);
 
-    // A second sale: opening freezes it, and only a superadmin can approve a
-    // refund. Approval keeps the share frozen until the provider refund lands.
+    // A second sale: opening freezes it, and only a superadmin can close the
+    // report. Closing releases the share; no money moves at any point.
     const second = await purchase(db, seller, buyer, template);
     const secondDispute = await scalar(
       db,
       "select public.piwu_dispute_open($1,$2,'broken','File yang diunduh rusak dan tidak bisa dipakai sama sekali')",
       [buyer, second],
-    );
-    await assert.rejects(
-      () =>
-        db.query(
-          "select public.piwu_dispute_review($1,$2,$3,'refund_approved','Refund disetujui setelah bukti diperiksa')",
-          [operator, crypto.randomUUID(), secondDispute],
-        ),
-      /ADMIN_FORBIDDEN/,
-    );
-    const reviewRequest = crypto.randomUUID();
-    const approved = await scalar(
-      db,
-      "select public.piwu_dispute_review($1,$2,$3,'refund_approved','Refund disetujui setelah bukti diperiksa')",
-      [root, reviewRequest, secondDispute],
-    );
-    assert.equal(approved.status, "refund_approved");
-    assert.equal(approved.buyer_id, buyer);
-    assert.deepEqual(
-      await scalar(
-        db,
-        "select public.piwu_dispute_review($1,$2,$3,'refund_approved','Refund disetujui setelah bukti diperiksa')",
-        [root, reviewRequest, secondDispute],
-      ),
-      approved,
     );
     assert.deepEqual(await balance(db, seller), {
       accrued: 80000,
@@ -266,6 +243,48 @@ test("sengketa marketplace: satu laporan, balasan penjual, pembekuan saldo, dan 
       paid: 0,
       available: 30000,
       frozen: 80000,
+      currency: "IDR",
+    });
+    await assert.rejects(
+      () =>
+        db.query(
+          "select public.piwu_dispute_review($1,$2,$3,'resolved','Laporan ditutup setelah penjual memperbaiki akses')",
+          [operator, crypto.randomUUID(), secondDispute],
+        ),
+      /ADMIN_FORBIDDEN/,
+    );
+    const reviewRequest = crypto.randomUUID();
+    // The platform has no refunds: the old outcome is rejected outright.
+    await assert.rejects(
+      () =>
+        db.query(
+          "select public.piwu_dispute_review($1,$2,$3,'refund_approved','Mencoba memakai status refund lama')",
+          [root, crypto.randomUUID(), secondDispute],
+        ),
+      /ADMIN_INVALID/,
+    );
+    const approved = await scalar(
+      db,
+      "select public.piwu_dispute_review($1,$2,$3,'resolved','Laporan ditutup setelah penjual memperbaiki akses')",
+      [root, reviewRequest, secondDispute],
+    );
+    assert.equal(approved.status, "resolved");
+    assert.equal(approved.refund, false);
+    assert.equal(approved.buyer_id, buyer);
+    assert.deepEqual(
+      await scalar(
+        db,
+        "select public.piwu_dispute_review($1,$2,$3,'resolved','Laporan ditutup setelah penjual memperbaiki akses')",
+        [root, reviewRequest, secondDispute],
+      ),
+      approved,
+    );
+    assert.deepEqual(await balance(db, seller), {
+      accrued: 160000,
+      pending: 50000,
+      paid: 0,
+      available: 110000,
+      frozen: 0,
       currency: "IDR",
     });
 
@@ -281,11 +300,11 @@ test("sengketa marketplace: satu laporan, balasan penjual, pembekuan saldo, dan 
       [root, crypto.randomUUID(), thirdDispute],
     );
     assert.deepEqual(await balance(db, seller), {
-      accrued: 160000,
+      accrued: 240000,
       pending: 50000,
       paid: 0,
-      available: 110000,
-      frozen: 80000,
+      available: 190000,
+      frozen: 0,
       currency: "IDR",
     });
 
@@ -304,6 +323,10 @@ test("sengketa marketplace: satu laporan, balasan penjual, pembekuan saldo, dan 
       /PIWU_EXPIRED/,
     );
 
+    assert.deepEqual(
+      await scalar(db, "select public.piwu_dispute_outcomes()"),
+      ["open", "seller_replied", "resolved", "rejected", "withdrawn"],
+    );
     const actions = await db.query<any>(
       "select action, count(*)::integer as total from platform_audit group by action order by action",
     );

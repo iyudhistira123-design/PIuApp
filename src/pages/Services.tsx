@@ -174,7 +174,9 @@ export default function Services({
               Paket prabayar 30 hari, tanpa penagihan otomatis. Pembelian paket
               tambahan dijadwalkan setelah masa aktif sebelumnya; kredit
               ditambahkan langsung. Metode pembayaran yang tersedia ditampilkan
-              oleh provider pada checkout. Harga dalam IDR.
+              oleh provider pada checkout. Harga dalam IDR.{" "}
+              <b>Semua pembelian bersifat final dan tidak dapat direfund</b>,
+              termasuk paket, top-up, dan template.
             </p>
             <div className="service-grid">
               {Object.entries(data.products).map(([sku, p]: [string, any]) => (
@@ -308,7 +310,9 @@ export default function Services({
             </div>
             <p>
               Template komunitas dengan kode yang dapat Anda lanjutkan. Tinjau
-              kode dan lisensi sebelum digunakan dalam produksi.
+              kode dan lisensi sebelum digunakan dalam produksi. Pembelian
+              template bersifat final; tidak ada refund. Laporan masalah di
+              halaman profil hanya mencatat keluhan dan balasan penjual.
             </p>
             {!data.templates.length && (
               <p>

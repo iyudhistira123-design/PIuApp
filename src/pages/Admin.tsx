@@ -2429,7 +2429,7 @@ function DisputeQueue({
   const statuses: Row = {
     open: "Menunggu penjual",
     seller_replied: "Dibalas penjual",
-    refund_approved: "Refund disetujui",
+    resolved: "Ditutup",
     rejected: "Ditolak",
     withdrawn: "Ditarik",
   };
@@ -2463,13 +2463,13 @@ function DisputeQueue({
                 ask(
                   "dispute_review",
                   r.id,
-                  { status: "refund_approved" },
-                  (r.title || "Sengketa") + " · refund",
+                  { status: "resolved" },
+                  (r.title || "Sengketa") + " · tutup laporan",
                 )
               }
-              title="Refund tetap diproses lewat penyedia pembayaran di luar PiwuApp."
+              title="Menutup laporan tidak mengembalikan uang; transaksi final."
             >
-              Setujui refund
+              Tutup laporan
             </button>
             <button
               className="ad-action ad-danger"
@@ -2514,10 +2514,11 @@ function DisputeQueue({
         <div>
           <h2>Sengketa marketplace</h2>
           <p>
-            Laporan pembeli dan balasan penjual. Menyetujui refund membekukan
-            bagian penjual sampai refund benar-benar dikonfirmasi penyedia
-            pembayaran; PiwuApp tidak mengirim uang sendiri. Menolak laporan
-            membuka kembali saldo untuk payout.
+            Laporan pembeli dan balasan penjual.{" "}
+            <b>Transaksi tidak dapat direfund</b>: keputusan di sini hanya
+            menutup atau menolak laporan, tidak memindahkan uang. Bagian penjual
+            ditahan selama laporan belum selesai dan kembali tersedia untuk
+            payout begitu laporan ditutup, ditolak, atau ditarik.
           </p>
         </div>
         <ShieldCheck size={20} />

@@ -21,7 +21,8 @@ with markers(migration,table_name,function_signature) as (values
  ('012','public.notifications','public.piwu_notifications(uuid,integer)'),
  ('013','public.marketplace_payouts','public.piwu_request_payout(uuid,integer,text,text)'),
  ('013',null,'public.piwu_purge_seller_pii(uuid)'),
- ('014','public.marketplace_disputes','public.piwu_dispute_open(uuid,uuid,text,text)')
+ ('014','public.marketplace_disputes','public.piwu_dispute_open(uuid,uuid,text,text)'),
+ ('015',null,'public.piwu_dispute_outcomes()')
 )
 select migration,
   case when bool_and((table_name is null or to_regclass(table_name) is not null)

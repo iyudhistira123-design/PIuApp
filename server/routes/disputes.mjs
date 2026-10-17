@@ -82,9 +82,9 @@ async function namesFor(admin, ids) {
 }
 
 /**
- * Buyer reports, seller replies, and a superadmin decides. The dispute freezes
- * the seller's share of that sale (migration 014), but it never moves money:
- * an approved refund is executed with the payment provider outside PiwuApp.
+ * Buyer reports, seller replies, and a superadmin closes the report. PiwuApp
+ * never refunds a transaction: a dispute holds the seller's share only while it
+ * is unresolved (migration 015) and releases it when the report is closed.
  */
 export function registerDisputes(app, ctx) {
   app.get(
@@ -340,7 +340,7 @@ export function registerDisputes(app, ctx) {
       const body = z
         .object({
           requestId: z.uuid(),
-          status: z.enum(["refund_approved", "rejected"]),
+          status: z.enum(["resolved", "rejected"]),
           note: z.string().trim().min(8).max(500),
         })
         .strict()
@@ -365,14 +365,14 @@ export function registerDisputes(app, ctx) {
             titleRow.data.template_id,
           )
         : null;
-      const approved = body.status === "refund_approved";
-      const message = approved
-        ? "Sengketa diputuskan: refund disetujui. Refund harus diproses lewat penyedia pembayaran; bagian penjual tetap dibekukan sampai itu terkonfirmasi."
-        : "Sengketa diputuskan: laporan tidak dipertahankan. Bagian penjual kembali tersedia untuk payout.";
+      const closed = body.status === "resolved";
+      const message = closed
+        ? "Sengketa ditutup. Tidak ada refund: transaksi bersifat final dan uang tidak berpindah. Bagian penjual kembali tersedia untuk payout."
+        : "Sengketa ditolak: laporan tidak dipertahankan. Tidak ada refund, dan bagian penjual kembali tersedia untuk payout.";
       for (const userId of [result.buyer_id, result.seller_id])
         await notifyUser(ctx, userId, {
           kind: "marketplace",
-          title: approved ? "Refund sengketa disetujui" : "Sengketa diputuskan",
+          title: closed ? "Sengketa ditutup" : "Laporan sengketa ditolak",
           body: message + (title ? " Template: “" + title + "”." : ""),
           href: "/profile#sengketa",
           dedupe: "dispute-review:" + id + ":" + body.status,

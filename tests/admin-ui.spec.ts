@@ -174,7 +174,7 @@ async function fixture(
       page.getByRole("heading", { name: "Broadcast", exact: true }),
     ).toBeVisible();
 }
-test("dispute queue: superadmin approves a refund only after a reason", async ({
+test("dispute queue: superadmin closes a report only after a reason", async ({
   page,
 }) => {
   await fixture(page, "superadmin", "marketplace");
@@ -184,7 +184,7 @@ test("dispute queue: superadmin approves a refund only after a reason", async ({
   await expect(page.getByText("Template Fixture").first()).toBeVisible();
   await page
     .getByRole("row", { name: /44444444/ })
-    .getByRole("button", { name: "Setujui refund" })
+    .getByRole("button", { name: "Tutup laporan" })
     .click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Keputusan sengketa");
@@ -193,7 +193,7 @@ test("dispute queue: superadmin approves a refund only after a reason", async ({
   ).toBeDisabled();
   await dialog
     .getByLabel("Alasan perubahan")
-    .fill("Bukti kerusakan sesuai dan refund disetujui");
+    .fill("Penjual memperbaiki akses; laporan ditutup tanpa refund");
   await dialog.getByRole("button", { name: "Konfirmasi perubahan" }).click();
   await expect(
     page
@@ -206,8 +206,8 @@ test("dispute queue: superadmin approves a refund only after a reason", async ({
   expect(sent.path).toBe(
     "/admin/disputes/33333333-3333-4333-8333-333333333333",
   );
-  expect(sent.status).toBe("refund_approved");
-  expect(sent.note).toContain("Bukti kerusakan");
+  expect(sent.status).toBe("resolved");
+  expect(sent.note).toContain("tanpa refund");
 });
 
 test("payout queue: superadmin reviews KYC and marks a transfer paid with a reference", async ({

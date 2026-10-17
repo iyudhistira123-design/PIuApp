@@ -200,7 +200,7 @@ export function registerPayouts(app, ctx) {
         admin
           .from("marketplace_disputes")
           .select("order_id")
-          .in("status", ["open", "seller_replied", "refund_approved"])
+          .in("status", ["open", "seller_replied"])
           .limit(5000),
       ]);
       if (
@@ -226,8 +226,8 @@ export function registerPayouts(app, ctx) {
           balances.set(id, { accrued: 0, pending: 0, paid: 0, frozen: 0 });
         return balances.get(id);
       };
-      // A dispute freezes the seller's share of that order (migration 014) so
-      // the queue shows the same available amount the seller sees.
+      // An unresolved dispute holds the seller's share of that order (migration
+      // 015) so the queue shows the same available amount the seller sees.
       const frozenOrders = new Set(
         disputes.error && schemaMissing(disputes.error)
           ? []

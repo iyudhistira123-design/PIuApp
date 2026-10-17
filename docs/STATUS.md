@@ -2,7 +2,20 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): sengketa marketplace (tahap 6)
+## Pembaruan terbaru (17 Oktober 2026): transaksi final, tanpa refund (migration 015)
+
+**382/382 unit/integrasi** dan **120/120 tes browser lengkap** lulus (1 worker, 9,8 menit), `tsc -b` dan `format:check` bersih, build produksi 68 detik, `check:bundle` editor **3.202.180 B** / gzip 822.900 B / 40 aset JavaScript / total 13.935.714 B — di bawah anggaran. **Migration 015.**
+
+- **Koreksi kebijakan:** PiwuApp **tidak menyediakan refund** untuk transaksi apa pun — paket, top-up, maupun template. Migration 014 sempat memberi hasil `refund_approved` seolah refund bisa diproses; itu keliru dan dihapus.
+- **Status sengketa sekarang** `open`, `seller_replied`, `resolved`, `rejected`, `withdrawn`. Superadmin memilih **tutup laporan** (`resolved`) atau **tolak** (`rejected`); tidak ada tombol atau endpoint refund. `piwu_dispute_review` menolak `refund_approved` dengan `ADMIN_INVALID`, dan baris lama dikonversi ke `resolved` dengan catatan.
+- **Tahanan saldo hanya selama laporan belum selesai.** `piwu_seller_balance` menahan bagian penjual untuk sengketa `open`/`seller_replied`; menutup, menolak, atau menarik laporan melepasnya. Tidak ada uang yang berpindah di alur ini.
+- **Copy jujur di UI.** Halaman paket (`/upgrade`), daftar paket/top-up di Layanan, daftar marketplace, `/profile#sengketa`, dan antrean admin semuanya menyatakan pembelian final tanpa refund. Tombol admin menjadi **Tutup laporan** / **Tolak laporan**.
+- **Callback provider tetap ditangani.** Bila penyedia mengirim status `refunded`/chargeback di luar kemauan PiwuApp, `piwu_apply_payment` tetap mencabut kredit/entitlement/penjualan seperti sebelumnya. Itu respons terhadap provider, bukan fitur refund aplikasi.
+- **Verifikasi**: `tests/disputes.test.ts` (status `resolved`, penolakan `refund_approved`, pelepasan tahanan, `refund:false`, `piwu_dispute_outcomes()`), `tests/disputes-api.test.ts`, `tests/admin-ui.spec.ts` (tombol tutup laporan), `tests/sql-install.test.ts` (installer 001–015). `supabase/README.md`, `docs/ADMIN.md`, `docs/SECURITY.md`, `docs/SERVICES_SETUP.md`, dan README diperbarui.
+
+## Pembaruan sebelumnya (17 Oktober 2026): sengketa marketplace (tahap 6)
+
+> Catatan: bagian ini mendokumentasikan migration 014 apa adanya. Hasil `refund_approved` yang disebut di bawah sudah **dihapus migration 015** karena PiwuApp tidak menyediakan refund.
 
 **382/382 unit/integrasi** dan **120/120 tes browser lengkap** lulus (1 worker, 7,4 menit), `tsc -b` dan `format:check` bersih, build produksi 41,17 detik, `check:bundle` editor **3.202.180 B** / gzip 822.901 B / 40 aset JavaScript / total 13.935.144 B — di bawah anggaran. **Migration 014.**
 
@@ -363,7 +376,7 @@ Verifikasi patch: seluruh 55 tes unit/integrasi lulus dan 9 tes browser terarah 
 - Pratinjau admin dihapus dari jalur aplikasi; akses dan mutasi tetap memerlukan peran server. Semua checks JWT/RLS/kredit/membership tetap berlaku. Gangguan auth upstream dilaporkan 503, bukan dipalsukan sebagai login berhasil.
 - Pemeriksaan kesiapan baca-saja: bounded 3 detik, cache 30 detik, dedup concurrent, auth health dan tiga tabel inti. Tidak memanggil inference, shell, email, atau transaksi; tidak membocorkan secret/data pengguna. `reachable` bukan bukti seluruh migrasi/RLS/provider berfungsi.
 - Uji browser lama dimigrasikan dari login demo/preset ke fixture jaringan Supabase/RPC/SSE yang hanya ada di `tests/`. Ini menguji jalur produksi aplikasi, **bukan** koneksi provider live. Regresi penyimpanan mempertahankan cakupan migrasi data legacy, konflik, Viewer dan pemisahan akun.
-- Belum seluruh 13 tahap selesai: backend/auth aplikasi hasil generasi, ER/relations, payouts/KYC/refund automation dan beberapa batas yang tercatat di atas tetap belum diimplementasikan; GitHub push sudah ada tetapi baru satu arah. Menghapus demo tidak mengubah batas tersebut.
+- Belum seluruh 13 tahap selesai: backend/auth aplikasi hasil generasi, ER/relations, dan beberapa batas yang tercatat di atas tetap belum diimplementasikan; payout/KYC dan sengketa ditinjau manual, refund tidak disediakan, dan GitHub push baru satu arah. Menghapus demo tidak mengubah batas tersebut.
 
 ### Validasi migrasi real-only
 

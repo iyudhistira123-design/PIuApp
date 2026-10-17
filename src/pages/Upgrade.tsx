@@ -175,6 +175,10 @@ export default function Upgrade() {
         penagihan berulang dan tidak ada penguncian fitur yang disembunyikan.{" "}
         {expiryLine(data?.credits)}
       </p>
+      <p className="upgrade-final">
+        Pembelian paket dan top-up bersifat final; PiwuApp tidak menyediakan
+        refund.
+      </p>
 
       {!signedIn && (
         <section className="service-panel">
