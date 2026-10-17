@@ -55,6 +55,20 @@ test("the dashboard opens the upgrade page, which reads prices from the server",
   await expect(teamCard.locator(".plan-rate")).toContainText("111");
   await expect(teamCard.locator(".plan-credits")).toContainText("4.500");
   await expect(teamCard).toContainText("40 kredit/hari");
+  // The benefit list on each card comes from the same ladder as the price and
+  // never advertises a feature that is locked to a plan.
+  await expect(proCard.locator(".plan-benefits")).toContainText(
+    "Semua yang ada di Free",
+  );
+  await expect(proCard.locator(".plan-benefits")).toContainText(
+    "1.500 kredit/bulan",
+  );
+  await expect(teamCard.locator(".plan-benefits")).toContainText(
+    "4.500 kredit/bulan",
+  );
+  await expect(teamCard.locator(".plan-benefits")).toContainText(
+    "40 kredit/hari",
+  );
   // "How long until it runs out" is answered with three stated profiles.
   const table = page.locator(".plan-table");
   await expect(table.locator(".plan-table-row")).toHaveCount(4);
@@ -160,8 +174,26 @@ test("the landing prices come from the same credit ladder as the checkout", asyn
   await expect(cards.nth(2).locator(".pricing-credit")).toContainText(
     "hangus 2 bulan setelah terbit",
   );
+  // The benefit lists come from the same ladder as the price, and no card
+  // advertises a gated feature the app does not enforce.
+  await expect(cards.nth(0)).toContainText(
+    "Template web, Roblox, dan aplikasi mobile",
+  );
+  await expect(cards.nth(0)).toContainText(
+    "Editor kode, preview, dan Export ZIP",
+  );
+  await expect(cards.nth(0)).not.toContainText("3 project lokal");
+  await expect(cards.nth(1)).toContainText("1.500 kredit/bulan");
+  await expect(cards.nth(1)).toContainText("Semua yang ada di Free");
+  await expect(cards.nth(2)).toContainText("4.500 kredit/bulan");
+  await expect(cards.nth(2)).toContainText("Semua yang ada di Pro");
+  await expect(cards.nth(2)).not.toContainText("Workspace bersama");
+  await expect(cards.nth(2)).not.toContainText("Tagihan terpusat");
   await expect(page.locator(".pricing-note")).toContainText(
     "Jatah harian direset setiap hari pukul 00:00 UTC dan tidak menumpuk",
+  );
+  await expect(page.locator(".pricing-note")).toContainText(
+    "tidak ada fitur yang dikunci per paket",
   );
   const axe = await new AxeBuilder({ page }).analyze();
   expect(axe.violations).toEqual([]);

@@ -144,6 +144,66 @@ export function rupiah(amount: number) {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
+export interface PlanBenefits {
+  plan: string;
+  /** One line under the plan name on the pricing card. */
+  summary: string;
+  /** What the plan includes, as sentences a buyer can check. */
+  items: string[];
+}
+
+/**
+ * What each plan includes, built from the same ladder the checkout charges.
+ *
+ * Everything in the builder — templates, editor, preview, ZIP export, cloud
+ * projects, collaboration and AI when a provider is configured — is available
+ * on every plan. The plans differ in price and in how many credits they grant,
+ * so these lists say exactly that instead of advertising a gated feature that
+ * the app does not enforce (`planFacts()` says the same in prose). A test
+ * asserts the credit numbers here match PLAN_LADDER.
+ */
+export function planBenefits(): PlanBenefits[] {
+  const free = PLAN_LADDER.find((plan) => !plan.monthly)!;
+  const pro = PLAN_LADDER.find((plan) => plan.plan === "Pro")!;
+  const team = PLAN_LADDER.find((plan) => plan.plan === "Team")!;
+  const rate = (plan: (typeof PLAN_LADDER)[number]) =>
+    `${rupiah(ratePerCredit(plan.monthly, plan.credits))}/kredit`;
+  return [
+    {
+      plan: free.plan,
+      summary: "Untuk ide pertama, tanpa tagihan.",
+      items: [
+        "Tanpa biaya bulanan dan tanpa kartu kredit",
+        "Template web, Roblox, dan aplikasi mobile",
+        "Editor kode, preview, dan Export ZIP",
+        "Project lokal maupun cloud tanpa batas",
+        "Kolaborasi anggota project dengan peran",
+        "AI Plan, Ask, dan Builder saat provider aktif",
+      ],
+    },
+    {
+      plan: pro.plan,
+      summary: "Untuk pemakaian harian yang lebih panjang.",
+      items: [
+        "Semua yang ada di Free",
+        `${count(pro.credits)} kredit/bulan · ${rate(pro)}`,
+        `Bonus ${count(pro.daily)} kredit/hari, direset 00:00 UTC`,
+        `Kredit paket bergulir; ${expiryLabel(pro.expiryMonths)}`,
+      ],
+    },
+    {
+      plan: team.plan,
+      summary: "Untuk pemakaian berat satu akun atau tim kecil.",
+      items: [
+        "Semua yang ada di Pro",
+        `${count(team.credits)} kredit/bulan · ${rate(team)}`,
+        `Bonus ${count(team.daily)} kredit/hari, direset 00:00 UTC`,
+        `Kredit paket bergulir; ${expiryLabel(team.expiryMonths)}`,
+      ],
+    },
+  ];
+}
+
 function toOffer(
   sku: string,
   product: ProductLike,

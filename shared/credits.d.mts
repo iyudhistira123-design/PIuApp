@@ -29,7 +29,6 @@ export interface PlanRow {
   plan: string;
   sku: string | null;
   monthly: number;
-  annual: number;
   /** Credits granted per paid period, or the daily allowance for Free. */
   credits: number;
   /** Daily allowance that refills every day at 00:00 UTC. */

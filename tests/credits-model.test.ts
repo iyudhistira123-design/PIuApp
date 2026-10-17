@@ -35,9 +35,6 @@ test("the server sells exactly the credits the public ladder advertises", () => 
     assert.equal(product.plan, plan.plan);
     assert.equal(product.amount, plan.monthly);
     assert.equal(product.credits, plan.credits);
-    // The landing page's annual figure is a discount on the same monthly price,
-    // never a bigger charge than the monthly one.
-    assert.ok(plan.annual > 0 && plan.annual < plan.monthly);
   }
   for (const topup of TOPUP_LADDER) {
     const product = products[topup.sku];
@@ -156,9 +153,8 @@ test("the credit model matches the database policy in migration 010", () => {
   const services = readFileSync("supabase/003_services.sql", "utf8");
   const interval = /interval '(\d+) days'/.exec(services)?.[1];
   assert.equal(Number(interval), PLAN_PERIOD_DAYS);
-  // Free is free: no price anywhere, not even a discounted annual one.
+  // Free is free: there is no price on it anywhere.
   assert.equal(row("Free").monthly, 0);
-  assert.equal(row("Free").annual, 0);
 });
 
 test("durations come from the real operation costs, in the stated order", () => {

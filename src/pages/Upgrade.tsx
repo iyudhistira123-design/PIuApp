@@ -10,6 +10,7 @@ import {
   expiryLine,
   lastsLabel,
   offerExpiry,
+  planBenefits,
   planFacts,
   planOffers,
   periodLeft,
@@ -85,6 +86,7 @@ export default function Upgrade() {
   const currentPlan = data?.plan?.plan || "Free";
   const plans = planOffers(data?.products, currentPlan);
   const topups = topupOffers(data?.products);
+  const benefits = planBenefits();
   const notice = paymentsNotice(data?.paymentsEnabled, data?.provider);
   const left = periodLeft(data?.plan?.current_period_end);
   const balance = Number(data?.balance);
@@ -118,6 +120,15 @@ export default function Upgrade() {
           : `Menambah ${light(offer)} pemakaian ringan atau ${normal(offer)} pemakaian normal ke saldo berjalan; pada pola intens jatah ini ${intens(offer)}.`}{" "}
         {offerExpiry(offer)}
       </p>
+      {kind === "plan" && (
+        <ul className="plan-benefits">
+          {(
+            benefits.find((entry) => entry.plan === offer.plan)?.items || []
+          ).map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      )}
       <button
         className="button button-dark"
         disabled={!notice.ready || busy || Boolean(pending)}

@@ -80,16 +80,15 @@ export const FREE_PLAN = {
  * Public plan ladder: what each plan costs and how many credits it grants.
  * The server's billing catalogue (server/providers/payments.mjs) is the source
  * of truth for real purchases; tests/credits-model.test.ts fails if the two
- * disagree, and if a bigger package ever becomes pricier per credit.
- * `annual` is the already-discounted monthly figure shown on the landing page,
- * not a separate charge.
+ * disagree, and if a bigger package ever becomes pricier per credit. Only
+ * 30-day plans exist: there is deliberately no annual figure, because the
+ * landing page must not show a price the store cannot charge.
  */
 export const PLAN_LADDER = [
   {
     plan: "Free",
     sku: null,
     monthly: 0,
-    annual: 0,
     credits: FREE_PLAN.credits,
     daily: FREE_PLAN.credits,
     monthlyCap: FREE_PLAN.monthlyCap,
@@ -99,7 +98,6 @@ export const PLAN_LADDER = [
     plan: "Pro",
     sku: "pro",
     monthly: 199000,
-    annual: 159200,
     credits: 1500,
     // A bit above Free, a bit below Team: the daily allowance grows with the
     // plan, while the monthly grant (1.500) stays what the plan sells.
@@ -111,7 +109,6 @@ export const PLAN_LADDER = [
     plan: "Team",
     sku: "team",
     monthly: 499000,
-    annual: 399200,
     credits: 4500,
     daily: 40,
     monthlyCap: null,

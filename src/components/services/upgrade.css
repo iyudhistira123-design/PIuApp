@@ -169,6 +169,26 @@
   line-height: 1.75;
   color: #626b59;
 }
+.plan-benefits {
+  margin: 2px 0 8px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #4b5740;
+}
+.plan-benefits li {
+  position: relative;
+  padding-left: 16px;
+}
+.plan-benefits li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: #6d8148;
+}
 .plan-card .button {
   margin-top: auto;
   align-self: flex-start;

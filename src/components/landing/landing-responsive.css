@@ -220,13 +220,6 @@
 .landing .illustration-code {
   min-width: 0;
 }
-.landing .billing-toggle button {
-  min-height: 44px;
-  font-size: 13px;
-}
-.landing .billing-toggle button span {
-  font-size: 10px;
-}
 .landing .pricing-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
@@ -633,7 +626,6 @@
   :is(
     .eyebrow-label,
     .template-tabs button,
-    .billing-toggle button,
     .footer-top p,
     .footer-top h4,
     .footer-bottom,
@@ -644,9 +636,6 @@
 }
 .landing .footer-top > div > :is(a:not(.logo), button) {
   color: #5e6a54;
-}
-.landing .billing-toggle button span {
-  color: #526237;
 }
 .landing .step-top > span {
   color: #657256;

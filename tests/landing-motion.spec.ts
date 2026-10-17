@@ -87,32 +87,22 @@ test("landing motion: the hero spotlight and progress bar track input", async ({
     .toBeGreaterThan(0);
 });
 
-test("landing motion: billing switch animates the rewritten price", async ({
+test("landing pricing: only the 30-day price the checkout can charge", async ({
   page,
 }) => {
   await page.goto("/");
   await page.locator("#pricing").scrollIntoViewIfNeeded();
-  const pro = page.locator(".pricing-card.featured .price .price-value");
-  await expect(pro).toHaveText("199.000");
-  await page.evaluate(() => {
-    (window as { pops?: string[] }).pops = [];
-    document.addEventListener(
-      "animationstart",
-      (event) => {
-        const target = event.target as HTMLElement;
-        if (!target.classList?.contains("price-value")) return;
-        (window as { pops?: string[] }).pops!.push(
-          (event as AnimationEvent).animationName,
-        );
-      },
-      true,
-    );
-  });
-  await page.getByRole("button", { name: /Tahunan/ }).click();
-  await expect(pro).toHaveText("159.200");
-  await expect
-    .poll(() => page.evaluate(() => (window as { pops?: string[] }).pops))
-    .toContain("landing-pop");
+  const cards = page.locator("#pricing .pricing-card");
+  await expect(cards).toHaveCount(3);
+  await expect(cards.nth(1).locator(".price-value")).toHaveText("199.000");
+  await expect(cards.nth(2).locator(".price-value")).toHaveText("499.000");
+  // There is no annual product in the store, so the cards do not offer one.
+  await expect(page.getByRole("button", { name: /Tahunan/ })).toHaveCount(0);
+  await expect(page.locator(".billing-toggle")).toHaveCount(0);
+  // What each plan includes is written from the same ladder as the price.
+  await expect(cards.nth(1)).toContainText("30 kredit/hari");
+  await expect(cards.nth(2)).toContainText("40 kredit/hari");
+  await expect(cards.nth(2)).toContainText("Rp 111/kredit");
 });
 
 test("landing motion: content stays visible when the reveal layer is absent", async ({

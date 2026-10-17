@@ -618,21 +618,7 @@ html.js-reveal .landing [data-reveal].is-revealed .eyebrow-label > span {
 .landing .pricing-card:hover .button {
   transform: translateY(-1px);
 }
-/* Billing switch and the price it rewrites. */
-.landing .billing-toggle button {
-  transition:
-    background-color 320ms var(--motion-ease),
-    color 320ms ease,
-    box-shadow 320ms ease;
-}
-.landing .billing-toggle button:hover {
-  color: #4d5540;
-}
-.landing .billing-toggle button.active {
-  box-shadow:
-    0 1px 5px #0000000a,
-    inset 0 0 0 1px #e6e9dc;
-}
+/* The first price a visitor sees still pops in. */
 .landing .price > .price-value {
   display: inline-block;
   margin-left: 0;

@@ -43,6 +43,7 @@ import PromptBox from "../components/PromptBox";
 import TemplatePreview from "../components/TemplatePreview";
 import { templates } from "../lib/templates";
 import { useStore } from "../lib/store";
+import { planBenefits } from "../lib/dashboard/plans";
 const faqs = [
   [
     "Apa itu PiwuApp?",
@@ -62,7 +63,7 @@ const faqs = [
   ],
   [
     "Apa yang tersedia pada versi ini?",
-    "Workspace memakai akun terautentikasi, penyimpanan cloud, editor kode, dan preview interaktif. AI, terminal, dan publikasi memerlukan provider aktif. Layanan yang belum siap tidak digantikan oleh simulasi.",
+    "Workspace memakai akun terautentikasi, penyimpanan cloud, editor kode, dan preview interaktif. AI, terminal, dan layanan eksternal memerlukan provider aktif. Kode keluar lewat Export ZIP; PiwuApp tidak menghosting hasil build. Layanan yang belum siap tidak digantikan oleh simulasi.",
   ],
 ];
 const ladder = (name: string) =>
@@ -96,8 +97,18 @@ export default function Landing() {
   const [category, setCategory] = useState("Semua");
   const [faq, setFaq] = useState<number | null>(0);
   const [modal, setModal] = useState("");
-  const [annual, setAnnual] = useState(false);
   const navigate = useNavigate();
+  // Only 30-day plans exist at checkout, so the cards never show an annual
+  // price the store cannot charge.
+  const planCards = planBenefits().map((benefit, index) => ({
+    name: benefit.plan,
+    price: thousands(ladder(benefit.plan).monthly),
+    desc: benefit.summary,
+    features: benefit.items,
+    button: ["Mulai gratis", "Saya tertarik dengan Pro", "Daftar minat Team"][
+      index
+    ],
+  }));
   const store = useStore();
   const hero = useRef<HTMLDivElement>(null);
   useLandingMotion();
@@ -574,67 +585,14 @@ export default function Landing() {
               <span /> RUANG UNTUK BERTUMBUH
             </div>
             <h2>Mulai kecil. Bermimpi besar.</h2>
-            <p>Pilih ruang yang tepat untuk perjalanan Anda.</p>
-            <div className="billing-toggle">
-              <button
-                className={!annual ? "active" : ""}
-                aria-pressed={!annual}
-                onClick={() => setAnnual(false)}
-              >
-                Bulanan
-              </button>
-              <button
-                className={annual ? "active" : ""}
-                aria-pressed={annual}
-                onClick={() => setAnnual(true)}
-              >
-                Tahunan <span>−20%</span>
-              </button>
-            </div>
+            <p>
+              Pilih ruang yang tepat untuk perjalanan Anda. Semua paket memakai
+              builder, template, AI, dan kolaborasi yang sama — yang berbeda
+              adalah harga dan jumlah kreditnya.
+            </p>
           </div>
           <div className="pricing-grid" data-reveal data-stagger>
-            {[
-              {
-                name: "Free",
-                price: thousands(ladder("Free").monthly),
-                desc: "Untuk ide pertama dan rasa penasaran.",
-                features: [
-                  "3 project lokal",
-                  "Template siap pakai",
-                  "Editor kode & live preview",
-                  "Export kode ZIP",
-                ],
-                button: "Mulai gratis",
-              },
-              {
-                name: "Pro",
-                price: thousands(
-                  annual ? ladder("Pro").annual : ladder("Pro").monthly,
-                ),
-                desc: "Untuk yang siap membangun lebih jauh.",
-                features: [
-                  "Semua fitur Free",
-                  "Kredit 1.500/bulan",
-                  "Project tanpa batas",
-                  "Bonus 30 kredit/hari, reset 00:00 UTC",
-                ],
-                button: "Saya tertarik dengan Pro",
-              },
-              {
-                name: "Team",
-                price: thousands(
-                  annual ? ladder("Team").annual : ladder("Team").monthly,
-                ),
-                desc: "Ide besar lebih baik dibangun bersama.",
-                features: [
-                  "Semua fitur Pro",
-                  "Workspace bersama",
-                  "Role & kontrol akses",
-                  "Tagihan terpusat",
-                ],
-                button: "Daftar minat Team",
-              },
-            ].map((p, i) => (
+            {planCards.map((p, i) => (
               <article
                 key={p.name}
                 className={"pricing-card " + (i === 1 ? "featured" : "")}
@@ -647,16 +605,15 @@ export default function Landing() {
                 <h3>{p.name}</h3>
                 <p>{p.desc}</p>
                 <div className="price">
-                  <small>Rp</small>
-                  <span
-                    className="price-value"
-                    key={annual ? "annual" : "monthly"}
-                  >
-                    {p.price}
-                  </span>
-                  <span>
-                    {p.name === "Free" ? "· tanpa tagihan" : "/ bulan"}
-                  </span>
+                  {p.name === "Free" ? (
+                    <span className="price-value">Gratis</span>
+                  ) : (
+                    <>
+                      <small>Rp</small>
+                      <span className="price-value">{p.price}</span>
+                      <span>/ bulan</span>
+                    </>
+                  )}
                 </div>
                 <div className="pricing-credit">
                   <b>{creditHeadline(p.name)}</b>
@@ -689,9 +646,11 @@ export default function Landing() {
             ))}
           </div>
           <p className="pricing-note">
-            Jatah harian direset setiap hari pukul 00:00 UTC dan tidak menumpuk;
-            kredit paket {expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up
-            berlaku {CREDIT_EXPIRY_MONTHS.topup} bulan. Perkiraan durasi di atas
+            Harga di atas berlaku 30 hari. Semua paket membuka builder yang
+            sama: tidak ada fitur yang dikunci per paket. Jatah harian direset
+            setiap hari pukul 00:00 UTC dan tidak menumpuk; kredit paket{" "}
+            {expiryLabel(CREDIT_EXPIRY_MONTHS.plan)}, kredit top-up berlaku{" "}
+            {CREDIT_EXPIRY_MONTHS.topup} bulan. Perkiraan durasi di atas
             dihitung dari biaya nyata per operasi ({costLine()}), jadi angkanya
             aritmetika, bukan janji.
           </p>

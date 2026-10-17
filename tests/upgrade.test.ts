@@ -12,12 +12,13 @@ import {
   serverDailyLine,
   paymentsNotice,
   periodLeft,
+  planBenefits,
   planFacts,
   planOffers,
   rupiah,
   topupOffers,
 } from "../src/lib/dashboard/plans";
-import { CREDIT_EXPIRY_MONTHS } from "../shared/credits.mjs";
+import { CREDIT_EXPIRY_MONTHS, PLAN_LADDER } from "../shared/credits.mjs";
 
 // The exact products the server sells today (server/providers/payments.mjs).
 const products = {
@@ -301,4 +302,41 @@ test("prices are written as rupiah without hidden decimals", () => {
   assert.match(text, /199\.000/);
   assert.equal(text.includes(",00"), false);
   assert.equal(rupiah(Number.NaN), rupiah(0));
+});
+
+test("each plan's benefits state the real credits and nothing the app gates", () => {
+  const benefits = planBenefits();
+  assert.deepEqual(
+    benefits.map((entry) => entry.plan),
+    ["Free", "Pro", "Team"],
+  );
+  const text = benefits
+    .flatMap((entry) => [entry.summary, ...entry.items])
+    .join(" ")
+    .replace(/\u00a0/g, " ");
+  // Credits are printed from PLAN_LADDER, including the rate the checkout uses.
+  for (const plan of PLAN_LADDER) {
+    const row = benefits.find((entry) => entry.plan === plan.plan)!;
+    assert.ok(row.items.length >= 3, plan.plan);
+    if (!plan.monthly) continue;
+    const number = new Intl.NumberFormat("id-ID").format(plan.credits);
+    assert.match(row.items.join(" "), new RegExp(number));
+    assert.match(row.items.join(" "), /kredit\/bulan/);
+    assert.match(row.items.join(" "), new RegExp(`${plan.daily} kredit/hari`));
+  }
+  assert.match(text, /Rp 133\/kredit/);
+  assert.match(text, /Rp 111\/kredit/);
+  assert.match(text, /tanpa kartu kredit/);
+  // The free allowance is already printed in the credit line above the list;
+  // the benefits do not restate it a second time.
+  assert.ok(!text.includes("plafon 600 kredit/bulan"));
+  // No feature is sold as unlocked by a plan: those claims were removed with
+  // the old pricing copy, and this keeps them from creeping back.
+  for (const claim of [
+    "Workspace bersama",
+    "Tagihan terpusat",
+    "3 project lokal",
+    "Role & kontrol akses",
+  ])
+    assert.ok(!text.includes(claim), `klaim tanpa fitur: ${claim}`);
 });
