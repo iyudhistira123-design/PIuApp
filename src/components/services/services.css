@@ -217,3 +217,66 @@
   font-size: 11px;
   letter-spacing: 1.5px;
 }
+.github-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.github-panel > p {
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ide-muted, #5b6b7c);
+}
+.github-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--ide-text, #26313d);
+}
+.github-field input {
+  width: 100%;
+  padding: 8px 9px;
+  border: 1px solid var(--ide-border, #d5dce3);
+  border-radius: 5px;
+  background: var(--ide-input-bg, #fff);
+  color: inherit;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+.github-field small {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 9px;
+  line-height: 1.55;
+  color: var(--ide-muted, #67788a);
+}
+.github-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 8px;
+}
+.github-error {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ide-danger, #b04a4a);
+}
+.github-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--ide-success, #5b856b);
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--ide-text, #26313d);
+}
+.github-result a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ide-accent, #477296);
+  font-weight: 600;
+}

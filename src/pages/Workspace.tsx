@@ -159,6 +159,7 @@ const CanvasPanel = lazy(() => import("../workspace/CanvasPanel"));
 const CodeEditor = lazy(() => import("../workspace/CodeEditor"));
 const ServicePanel = lazy(() => import("../components/services/ServicePanel"));
 const ServiceHub = lazy(() => import("../components/services/ServiceHub"));
+const GitHubPanel = lazy(() => import("../components/services/GitHubPanel"));
 const RecordingPanel = lazy(
   () => import("../components/services/RecordingPanel"),
 );
@@ -3364,44 +3365,13 @@ function WorkspaceContent({ project }: { project: Project }) {
               </>
             )}
             {dialog === "github" && (
-              <>
-                <p>
-                  Koneksi layanan hanya boleh dilakukan dari backend. Tidak ada
-                  kredensial yang disimpan dalam project atau localStorage.
-                </p>
-                {(dialog === "github"
-                  ? ["GitHub"]
-                  : [
-                      "Supabase",
-                      "GitHub",
-                      "Figma",
-                      "Stripe",
-                      "Midtrans / Xendit",
-                    ]
-                ).map((n) => (
-                  <div className="integration-row" key={n}>
-                    <span>
-                      <Plug size={16} />
-                      {n}
-                    </span>
-                    <small>Belum terhubung</small>
-                  </div>
-                ))}
-                <p className="integration-note">
-                  Siapkan kredensial di environment server. OAuth konektor,
-                  sinkronisasi repositori, dan webhook pembayaran memerlukan
-                  implementasi layanan produksi.
-                </p>
-                {dialog === "github" && (
-                  <button
-                    className="button button-dark full-width"
-                    onClick={() => void exportZip()}
-                  >
-                    <Download size={14} />
-                    Export kode untuk repositori Anda
-                  </button>
-                )}
-              </>
+              <Suspense fallback={<p>Memuat…</p>}>
+                <GitHubPanel
+                  files={project.files}
+                  projectName={project.name}
+                  onExport={() => void exportZip()}
+                />
+              </Suspense>
             )}
             {dialog === "packages" && (
               <Suspense fallback={<p>Memuat…</p>}>

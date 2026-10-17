@@ -2,7 +2,18 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): matriks akses fitur per paket (tahap 3)
+## Pembaruan terbaru (17 Oktober 2026): push project ke GitHub (tahap 4)
+
+**378/378 unit/integrasi** dan **118/118 tes browser lengkap** lulus (1 worker, 7,3 menit), `tsc -b` dan `format:check` bersih, build produksi 41,99 detik, `check:bundle` editor **3.202.180 B** / gzip 822.905 B / 39 aset JavaScript / total 13.911.154 B — di bawah anggaran. **Tanpa migration baru.**
+
+- **Dialog Repositori bukan lagi placeholder.** Project bisa di-push ke repositori GitHub yang sudah ada. Dua jalur kredensial: OAuth lewat `supabase.auth.linkIdentity({provider:"github",scopes:"repo"})`, atau token fine-grained yang diketik di dialog.
+- **Token tidak pernah ke server PiwuApp.** Token OAuth hidup di sesi Supabase di browser ini; token pribadi hanya di state komponen dan hilang saat halaman ditutup. Push memanggil `api.github.com` langsung dari browser. Tidak ada token di project, localStorage aplikasi, log, atau database.
+- **Git Data API, bukan satu request per file.** Alur: baca ref → baca commit/tree induk → `POST /git/trees` (isi teks dibuat sekaligus) → `POST /git/commits` → `PATCH` ref. Cabang yang belum ada dibuat dari kepala cabang bawaan; repositori kosong didukung (`parents: []`).
+- **Batas yang dinyatakan**: maksimum 200 file teks dan 4 MB per push; gambar/GLB/ZIP/`.env` dilewati; file yang dihapus di PiwuApp tidak dihapus dari GitHub; hanya satu arah (tanpa pull, PR, webhook, atau pembuatan repositori). Cabang yang berubah saat push dijawab dengan pesan untuk mengulang, bukan ditimpa paksa.
+- **Kesalahan jujur**: 401 (token tidak valid), 403 (izin/batas laju), 404 (repo/cabang tidak ditemukan), 409/422 (cabang berubah), dan kegagalan jaringan dipetakan ke pesan Indonesia; tidak ada klaim sukses saat GitHub menolak.
+- **Verifikasi**: `tests/github.test.ts` (6 tes: parsing repo/cabang, filter file, urutan Git Data API, cabang baru, repo kosong, 401/izin tulis) dan `tests/github-push.spec.ts` (browser: isi token, repo, commit; GitHub palsu memverifikasi payload tree/commit; token tidak muncul di localStorage). `docs/SERVICES_SETUP.md` menambah panduan OAuth/PAT.
+
+## Pembaruan sebelumnya (17 Oktober 2026): matriks akses fitur per paket (tahap 3)
 
 **372/372 unit/integrasi** dan **117/117 tes browser lengkap** lulus (1 worker, 7,8 menit), `tsc -b` dan `format:check` bersih, build produksi 45,71 detik, `check:bundle` editor **3.202.180 B** / gzip 822.902 B / 39 aset JavaScript / total 13.902.767 B — di bawah anggaran. **Tanpa migration baru.**
 
@@ -184,7 +195,7 @@ Rincian/batas bukti: [ADMIN_PRODUCTION_VERIFICATION.md](ADMIN_PRODUCTION_VERIFIC
 | 7. Design         | Pemilihan elemen, edit CSS/teks, device/zoom/focus/multi-preview                                                                            | Bukan AST/source-map editor; teks nested/dinamis terbatas                                                                                                        |
 | 8. Dev tools      | Search/replace, xterm, shell E2B nyata, npm install/uninstall, import snapshot shell                                                        | Non-interaktif; sesi ephemeral; inspector bukan React DevTools/network recorder                                                                                  |
 | 9. Data           | Editor dataset cloud bertipe/revisi/draft/JSON, storage privat, encrypted secrets, RLS/RPC                                                  | Dataset JSONB privat workspace, bukan backend aplikasi; ER/relations, SQL console, user-app auth, image generation, KMS belum dibangun                           |
-| 10. Kolaborasi    | Invite/email/link, roles, komentar cloud, Realtime invalidation. **Deploy website/domain/analytics dihapus 17 Okt 2026** (tabel lama inert) | Provider belum diuji live; GitHub OAuth/push belum diimplementasikan; tidak ada domain piwuapp.app yang diklaim                                                  |
+| 10. Kolaborasi    | Invite/email/link, roles, komentar cloud, Realtime invalidation. **Deploy website/domain/analytics dihapus 17 Okt 2026** (tabel lama inert) | Provider belum diuji live; GitHub push satu arah (tanpa repo/PR/webhook); tidak ada domain piwuapp.app yang diklaim                                              |
 | 11. Kualitas      | Scan statis, Lighthouse asli di sandbox, tes axe pada login, SQL/RLS dan API guards                                                         | Bukan audit keamanan penuh; project CVE scanning/pentest belum ada                                                                                               |
 | 12. Bisnis        | Hosted checkout Midtrans/Xendit, verified callbacks, atomic credits, referral, riwayat akun, matriks akses per paket (bawaan terbuka)       | Prabayar, bukan recurring; gating hanya tiga kapabilitas server; partial/Xendit refund dan anti-fraud lanjutan perlu operator; prompt library masih privat lokal |
 | 13. Lanjutan      | Rekaman snapshot IndexedDB + player/scrubber + expiring shares; free/paid marketplace + entitlement/revenue ledger; URL reference → AI      | Bukan video/screen capture; payout/KYC/dispute/moderasi belum otomatis                                                                                           |
@@ -325,7 +336,7 @@ Verifikasi patch: seluruh 55 tes unit/integrasi lulus dan 9 tes browser terarah 
 - Pratinjau admin dihapus dari jalur aplikasi; akses dan mutasi tetap memerlukan peran server. Semua checks JWT/RLS/kredit/membership tetap berlaku. Gangguan auth upstream dilaporkan 503, bukan dipalsukan sebagai login berhasil.
 - Pemeriksaan kesiapan baca-saja: bounded 3 detik, cache 30 detik, dedup concurrent, auth health dan tiga tabel inti. Tidak memanggil inference, shell, email, atau transaksi; tidak membocorkan secret/data pengguna. `reachable` bukan bukti seluruh migrasi/RLS/provider berfungsi.
 - Uji browser lama dimigrasikan dari login demo/preset ke fixture jaringan Supabase/RPC/SSE yang hanya ada di `tests/`. Ini menguji jalur produksi aplikasi, **bukan** koneksi provider live. Regresi penyimpanan mempertahankan cakupan migrasi data legacy, konflik, Viewer dan pemisahan akun.
-- Belum seluruh 13 tahap selesai: GitHub OAuth/push, backend/auth aplikasi hasil generasi, ER/relations, payouts/KYC/refund automation dan beberapa batas yang tercatat di atas tetap belum diimplementasikan. Menghapus demo tidak mengubah batas tersebut.
+- Belum seluruh 13 tahap selesai: backend/auth aplikasi hasil generasi, ER/relations, payouts/KYC/refund automation dan beberapa batas yang tercatat di atas tetap belum diimplementasikan; GitHub push sudah ada tetapi baru satu arah. Menghapus demo tidak mengubah batas tersebut.
 
 ### Validasi migrasi real-only
 

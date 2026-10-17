@@ -111,7 +111,15 @@ AI menerima maksimal 3 lampiran, masing-masing 4 MB: PNG/JPG/WebP, PDF teks (20 
 - Rekaman berupa snapshot kode dan label aksi, bukan video. Disimpan di IndexedDB, dipisahkan berdasarkan akun/project di UI; bukan enkripsi browser. Timeline memiliki play/pause/scrub/speed dan preview terisolasi.
 - Owner dapat membagikan rekaman setelah konfirmasi review data; tautan read-only 7 hari, dapat dicabut. Kode tetap dapat disalin penerima selama tautan aktif. Maksimal 100 snapshot/4 MB.
 
-## 8. Menjalankan dan acceptance staging
+## 8. GitHub push (opsional)
+
+- Push berjalan dari browser ke `api.github.com`; server PiwuApp tidak menerima atau menyimpan token GitHub.
+- **OAuth**: aktifkan provider GitHub di Supabase (Authentication → Providers), isi Client ID/Secret dari GitHub OAuth App, dan tambahkan origin aplikasi ke redirect allowlist. Cakupan yang diminta `repo` (repo privat + izin tulis). Setelah kembali, `provider_token` tersedia di sesi Supabase di browser.
+- **Tanpa OAuth**: buat fine-grained PAT untuk repositori tujuan dengan izin **Contents: read and write** (classic: `repo`), lalu tempel di dialog **Repositori**. Token hanya disimpan di memori tab dan hilang saat halaman ditutup; jangan menempelkannya di chat/log.
+- Yang dikirim: file teks project (maksimum 200 file / 4 MB per push). Gambar, GLB, ZIP, dan `.env` dilewati; file yang dihapus di PiwuApp tidak dihapus dari GitHub. Repositori harus sudah ada; cabang dibuat bila belum ada.
+- Batas: satu arah (tanpa pull/PR/webhook), tanpa pembuatan repositori, dan setiap push membuat satu commit di cabang yang dipilih.
+
+## 9. Menjalankan dan acceptance staging
 
 ```sh
 npm ci
