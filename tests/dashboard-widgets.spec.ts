@@ -508,3 +508,26 @@ test("a dashboard where every project service fails says it could not check, not
   await expect(waiting).not.toContainText("komentar belum diselesaikan");
   await expect(waiting).toContainText("tidak bisa diperiksa");
 });
+
+test("the dashboard carries a profile tab instead of only a link", async ({
+  page,
+}) => {
+  await loginRealFixture(page);
+  await page.goto("/projects");
+  await page
+    .locator(".dashboard-sidebar")
+    .getByRole("button", { name: "Profil", exact: true })
+    .click();
+  await expect(page).toHaveURL(/tab=profile/);
+  await expect(
+    page.getByRole("heading", { name: "Akun Anda, di satu tempat." }),
+  ).toBeVisible();
+  // The same account forms as /profile, editable inside the dashboard.
+  await expect(page.getByLabel("Nama tampilan")).toHaveValue("Akun Uji");
+  await expect(page.getByLabel("Email pengganti")).toBeVisible();
+  await expect(page.getByLabel("Kata sandi baru")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Simpan nama" })).toBeVisible();
+  // Account numbers come from GET /api/account, not from a second endpoint.
+  await expect(page.getByText("Paket aktif")).toBeVisible();
+  await expect(page.getByText("1.240")).toBeVisible();
+});

@@ -26,6 +26,7 @@ import {
   PanelLeftClose,
   X,
   Download,
+  UserRound,
 } from "lucide-react";
 import { Logo, Modal, EmptyState } from "../components/ui";
 import TemplatePreview from "../components/TemplatePreview";
@@ -52,6 +53,7 @@ import {
   syncNotice,
 } from "../lib/dashboard/attention";
 import type { Project } from "../lib/types";
+import Profile from "./Profile";
 
 /** One dense line per card: what the project holds, not just when it changed. */
 function footprintLine(
@@ -253,6 +255,7 @@ export default function Dashboard() {
             { id: "templates", icon: LayersIcon, label: "Template" },
             { id: "shared", icon: Users, label: "Dibagikan ke saya" },
             { id: "prompts", icon: Bookmark, label: "Prompt saya" },
+            { id: "profile", icon: UserRound, label: "Profil" },
           ].map(({ id, icon: Icon, label, count }) => (
             <button
               className={tab === id ? "active" : ""}
@@ -348,6 +351,7 @@ export default function Dashboard() {
                 templates: "Template",
                 shared: "Dibagikan ke saya",
                 prompts: "Prompt saya",
+                profile: "Profil",
               }[tab] || "Project"}
             </b>
           </div>
@@ -369,7 +373,9 @@ export default function Dashboard() {
                     ? "Lebih baik bersama."
                     : tab === "prompts"
                       ? "Ide bagus, simpan dulu."
-                      : `Mari buat sesuatu${store.user?.name && store.user.name !== "Pembuat" ? ", " + store.user.name.split(" ")[0] : ""}.`}
+                      : tab === "profile"
+                        ? "Akun Anda, di satu tempat."
+                        : `Mari buat sesuatu${store.user?.name && store.user.name !== "Pembuat" ? ", " + store.user.name.split(" ")[0] : ""}.`}
               </h1>
               <p>
                 {tab === "templates"
@@ -378,16 +384,20 @@ export default function Dashboard() {
                     ? "Semua project yang dibagikan tim kepada Anda."
                     : tab === "prompts"
                       ? "Kumpulan prompt pilihan untuk karya Anda berikutnya."
-                      : "Semua ide, eksperimen, dan karya Anda. Dalam satu tempat."}
+                      : tab === "profile"
+                        ? "Nama tampilan, email, kata sandi, paket, dan kredit akun Anda."
+                        : "Semua ide, eksperimen, dan karya Anda. Dalam satu tempat."}
               </p>
             </div>
-            <button
-              className="button button-dark"
-              onClick={() => setDialog(tab === "prompts" ? "prompt" : "new")}
-            >
-              <Plus size={16} />
-              {tab === "prompts" ? "Simpan prompt" : "Project baru"}
-            </button>
+            {tab !== "profile" && (
+              <button
+                className="button button-dark"
+                onClick={() => setDialog(tab === "prompts" ? "prompt" : "new")}
+              >
+                <Plus size={16} />
+                {tab === "prompts" ? "Simpan prompt" : "Project baru"}
+              </button>
+            )}
           </div>
           <CloudSyncBanner />
           {(tab === "projects" || tab === "shared") && (
@@ -697,6 +707,7 @@ export default function Dashboard() {
               </div>
             </>
           )}
+          {tab === "profile" && <Profile embedded />}
           {tab === "prompts" &&
             (store.prompts.length ? (
               <div className="saved-prompt-grid">

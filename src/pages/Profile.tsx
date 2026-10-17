@@ -27,7 +27,12 @@ type Notice = { kind: "ok" | "error"; text: string } | null;
  * verified session — no server route and no new table. When a change needs
  * confirmation (email), the page says so instead of pretending it is done.
  */
-export default function Profile() {
+export default function Profile({
+  embedded = false,
+}: {
+  /** Rendered inside the dashboard: no page header, same forms. */
+  embedded?: boolean;
+} = {}) {
   const user = useStore((s) => s.user);
   const projects = useStore((s) => s.projects.length);
   const connection = useStore((s) => s.connection);
@@ -188,18 +193,27 @@ export default function Profile() {
     error: connection.error || "Sinkronisasi gagal",
   }[connection.phase];
 
+  const Shell = embedded ? "div" : "main";
   return (
-    <main className="service-page profile-page">
-      <header>
-        <Logo />
-        <nav>
-          <Link to="/projects">Project</Link>
-          <Link to="/upgrade">Paket</Link>
-          <Link to="/account">Akun &amp; kredit</Link>
-        </nav>
-      </header>
-      <span className="eyebrow-label">PIWUAPP / PROFIL</span>
-      <h1>Jejak akun Anda.</h1>
+    <Shell
+      className={embedded ? "profile-embedded" : "service-page profile-page"}
+    >
+      {!embedded && (
+        <header>
+          <Logo />
+          <nav>
+            <Link to="/projects">Project</Link>
+            <Link to="/upgrade">Paket</Link>
+            <Link to="/account">Akun &amp; kredit</Link>
+          </nav>
+        </header>
+      )}
+      {!embedded && (
+        <>
+          <span className="eyebrow-label">PIWUAPP / PROFIL</span>
+          <h1>Jejak akun Anda.</h1>
+        </>
+      )}
 
       {!signedIn && (
         <section className="service-panel">
@@ -407,15 +421,17 @@ export default function Profile() {
                 tombol yang berpura-pura melakukannya. Cadangan project bisa
                 dibuat dari dialog Penyimpanan di dashboard.
               </p>
-              <div className="profile-actions">
-                <Link className="button button-outline" to="/projects">
-                  Buka dashboard
-                </Link>
-              </div>
+              {!embedded && (
+                <div className="profile-actions">
+                  <Link className="button button-outline" to="/projects">
+                    Buka dashboard
+                  </Link>
+                </div>
+              )}
             </section>
           </div>
         </section>
       )}
-    </main>
+    </Shell>
   );
 }

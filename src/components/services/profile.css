@@ -137,3 +137,11 @@
 .profile-sync {
   font-size: 13px !important;
 }
+
+/* The same profile, embedded as a dashboard tab: no page shell of its own. */
+.profile-embedded {
+  display: block;
+}
+.profile-embedded .service-panel {
+  gap: 18px;
+}
