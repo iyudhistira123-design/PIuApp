@@ -2,7 +2,20 @@
 
 **PiwuApp memiliki workspace lokal, sinkronisasi cloud, dan jalur integrasi layanan nyata. Belum dinyatakan SaaS siap produksi atau seluruh 13 tahap tuntas.** Environment eksternal belum tersedia untuk uji live. Tombol layanan tidak membuat hasil sukses palsu saat konfigurasi tidak ada.
 
-## Pembaruan terbaru (17 Oktober 2026): benefit paket disamakan dengan yang benar-benar tersedia
+## Pembaruan terbaru (17 Oktober 2026): admin bisa mengatur paket & Studio, dashboard punya tab Profil
+
+**356/356 unit/integrasi** dan **114/114 tes browser lengkap** lulus (1 worker, 7,7 menit), `tsc -b` dan `format:check` bersih, build produksi 45,65 detik, `check:bundle` editor **3.201.506 B** / gzip 822.639 B / 39 aset / total 13.893.932 B — di bawah anggaran. Tanpa migration baru.
+
+Pengaturan situs di panel admin sekarang mencakup keputusan komersial dan operasional yang sebelumnya hanya ada di kode:
+
+- **Harga & kredit paket bisa diedit superadmin.** Pro, Team, dan dua top-up punya kolom harga (Rp) dan kredit; nilai efektif ditampilkan, tombol "Gunakan harga bawaan" mengembalikan tangga `shared/credits.mjs`. Checkout membaca katalog efektif dari `site_configuration` saat membuat pesanan, `/api/account` mengirim katalog yang sama ke `/upgrade`, dan landing memakai `mergePlans()` dari `/api/public/site`. Label top-up mengikuti jumlah kreditnya.
+- **Validasi menjaga akal sehat paket**: Team wajib memberi kredit lebih banyak daripada Pro dan harga per kreditnya tidak boleh lebih mahal; aturan yang sama berlaku untuk top-up besar terhadap top-up kecil. Jatah harian (20/30/40), plafon Free 600, dan masa berlaku lot **tidak bisa diedit** karena migration 010 yang menegakkannya — panel menampilkannya sebagai batas read-only bersama batas foto 12×16 MB dan daftar biaya operasi.
+- **Tanpa migration baru**: migration 005 hanya mengizinkan kunci level atas tertentu di `site_configuration.value`, jadi harga disimpan di `enabled_services.plan_overrides` (objek yang sudah diizinkan). Pembaca menerima bentuk itu dan tetap kompatibel bila kelak dipindah ke kunci sendiri lewat migration.
+- **Sakelar Studio**: `enabled_services.studio` baru, ditegakkan `enforcePlatform` untuk `/api/studio/*` dan `/api/projects/:id/studio/*` (plugin maupun web). Mematikan sakelar menjawab 503 jujur, bukan gagal diam-diam.
+- **Tab Profil di dashboard pengguna**: item navigasi **Profil** membuka formulir akun yang sama dengan `/profile` (nama tampilan, email pengganti, kata sandi, keluar perangkat/semua sesi, paket & kredit, status sinkronisasi) di dalam dashboard, tanpa header halaman ganda. `/profile` tetap tersedia.
+- **Verifikasi**: `tests/site-settings.test.ts` (5 tes: katalog default/override, skema menolak paket yang buruk, sakelar Studio ditegakkan, angka database tidak ikut berubah), `tests/admin.test.ts` menyimpan `plan_overrides` lewat PGlite dan membuktikan RPC 005 menerimanya, `tests/upgrade.test.ts` menguji benefit dari harga admin, `tests/admin-ui.spec.ts` mengisi harga di panel dan memeriksa payload (bukan kunci top-level), `tests/upgrade.spec.ts` membuktikan harga admin sampai ke landing dan `/upgrade`, `tests/dashboard-widgets.spec.ts` menguji tab Profil.
+
+## Pembaruan sebelumnya (17 Oktober 2026): benefit paket disamakan dengan yang benar-benar tersedia
 
 **350/350 unit/integrasi** dan **109/109 tes browser lengkap** lulus (1 worker, 7,2 menit), `tsc -b` dan `format:check` bersih, build produksi 42,95 detik, `check:bundle` editor **3.201.506 B** / gzip 822.641 B / 40 aset / total 13.889.426 B — di bawah anggaran.
 
